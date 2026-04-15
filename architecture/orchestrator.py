@@ -16,6 +16,7 @@ from architecture.events import (
 from architecture.state_machine import UserFlowState, state_machine
 from cache import KeyManager, delete_data, get_data, set_flag
 from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
+from database import get_kyiv_now
 from database import register_user_from_quiz
 from phrases import get_phrase
 from referral import process_referral_logic
@@ -91,6 +92,18 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     user = event.payload["user"]
 
     if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
+        today = get_kyiv_now().strftime("%Y-%m-%d")
+        repeat_key = KeyManager.get_training_repeat_key(event.user_id, today)
+        repeat_count_raw = await get_data(repeat_key)
+        repeat_count = int(str(repeat_count_raw)) if repeat_count_raw is not None else 0
+
+        if repeat_count >= 1:
+            return False
+
+        await set_flag(
+            repeat_key,
+            ex=ActivityService.get_seconds_until_kyiv_midnight(),
+        )
         await _reply_transport(source, get_phrase("stop", nickname=mention(user)), show_alert=isinstance(source, CallbackQuery))
         return False
 
