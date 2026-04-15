@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 
-from architecture.events import EventEnvelope, USER_REGISTERED
+from architecture.events import EventEnvelope, TRAINING_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
 from database import check_user_exists, close_db_session
@@ -18,9 +18,9 @@ from phrases import get_phrase
 from referral import router as ref_router
 from tasks import setup_scheduler
 
-from cache import redis_client, set_data, KeyManager
+from cache import redis_client, set_data, KeyManager, acquire_lock
 from services import validate_quiz
-from ui import get_inline_menu, get_rating_reply_keyboard
+from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
 
 # ==============================================================================
 # ЛОГУВАННЯ
@@ -88,9 +88,25 @@ async def admin_panel(message: types.Message):
 @dp.message(CommandStart())
 async def start_handler(message: types.Message, command: CommandObject):
     user_id = message.from_user.id
-    args = command.args
+    args = (command.args or "").strip()
+    start_payload = args or "plain"
+    start_key = KeyManager.get_start_dedupe_key(user_id, start_payload)
+    if not await acquire_lock(start_key, ex=2):
+        return
 
     if args in {"gym", "street"}:
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=TRAINING_SELECTED,
+                user_id=user_id,
+                payload={
+                    "source": message,
+                    "user": message.from_user,
+                    "action": args.capitalize(),
+                },
+                idempotency_key=f"training-select:{user_id}:{message.message_id}",
+            )
+        )
         return
     
     is_registered = await check_user_exists(user_id)
@@ -104,9 +120,7 @@ async def start_handler(message: types.Message, command: CommandObject):
             "Ти потрапив у TurboTeam. Пройди опитування: 👇"
         )
         
-        kb = types.InlineKeyboardMarkup(inline_keyboard=[[
-            types.InlineKeyboardButton(text="🚀 ПРОЙТИ ВІДБІР", web_app=types.WebAppInfo(url=WEB_APP_URL))
-        ]])
+        kb = get_quiz_reply_keyboard(WEB_APP_URL)
         return await message.answer(welcome_text, reply_markup=kb)
 
     if not args:

@@ -30,10 +30,19 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
                 types.InlineKeyboardButton(text="🚫 Забив болт", callback_data="action_skip"),
             ],
             [
-                types.InlineKeyboardButton(text="🏆 Рейтинг ТОП", callback_data="show_rating"),
                 types.InlineKeyboardButton(text="🚀 Запросити друга 🔥", callback_data="invite_friend"),
             ],
         ]
+    )
+
+
+def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="🚀 ПРОЙТИ ВІДБІР", web_app=types.WebAppInfo(url=web_app_url))]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
     )
 
 

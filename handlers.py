@@ -1,9 +1,9 @@
 import logging
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from architecture.events import REST_SELECTED, SKIP_SELECTED, TRAINING_SELECTED, VIDEO_UPLOADED
+from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS
@@ -12,49 +12,6 @@ from ratings import show_rating_for_user
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-@router.message(CommandStart(deep_link=True))
-async def cmd_start_deep_link(m: Message, command: CommandObject):
-    arg = command.args
-    if arg not in ["gym", "street"]:
-        return
-
-    await flow_event_bus.publish(
-        EventEnvelope(
-            name=TRAINING_SELECTED,
-            user_id=m.from_user.id,
-            payload={
-                "source": m,
-                "user": m.from_user,
-                "action": arg.capitalize(),
-            },
-            idempotency_key=f"training-select:{m.from_user.id}:{m.message_id}",
-        )
-    )
-
-
-@router.callback_query(F.data.in_(["train_gym", "train_street"]))
-async def handle_training_selection(callback: CallbackQuery):
-    action = "Gym" if callback.data == "train_gym" else "Street"
-    await flow_event_bus.publish(
-        EventEnvelope(
-            name=TRAINING_SELECTED,
-            user_id=callback.from_user.id,
-            payload={
-                "source": callback,
-                "user": callback.from_user,
-                "action": action,
-            },
-            idempotency_key=f"training-select:{callback.from_user.id}:{callback.id}",
-        )
-    )
-
-
-@router.callback_query(F.data == "show_rating")
-async def handle_show_rating(callback: CallbackQuery):
-    await show_rating_for_user(callback.message, callback.from_user)
-    await callback.answer()
-
 
 @router.message(F.text == "🏆 Рейтинг ТОП")
 async def handle_show_rating_message(message: Message):

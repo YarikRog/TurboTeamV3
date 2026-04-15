@@ -99,6 +99,10 @@ class KeyManager:
     def get_event_idempotency_key(event_key: str) -> str:
         return f"{KeyManager.PREFIX}:event:{event_key}"
 
+    @staticmethod
+    def get_start_dedupe_key(uid: int, payload: str) -> str:
+        return f"{KeyManager.PREFIX}:start:{uid}:{payload}"
+
 
 # ==============================================================================
 # СТАНДАРТНІ ОПЕРАЦІЇ
