@@ -20,7 +20,7 @@ from database import register_user_from_quiz
 from phrases import get_phrase
 from referral import process_referral_logic
 from services import ActivityService, auto_delete, safe_create_task
-from ui import get_inline_menu
+from ui import get_inline_menu, get_rating_reply_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
             name=f"referral_{user_id}",
         )
 
-    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=get_rating_reply_keyboard())
 
     group_kb = types.InlineKeyboardMarkup(
         inline_keyboard=[[
@@ -80,7 +80,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     await message.bot.send_message(
         REPORTS_GROUP_ID,
         get_phrase("welcome", mention=user_mention) + "\n\n🚀 *Обирай тренування:*",
-        reply_markup=get_inline_menu(),
+        reply_markup=get_inline_menu((await message.bot.get_me()).username),
     )
     return True
 
