@@ -103,6 +103,10 @@ class KeyManager:
     def get_start_dedupe_key(uid: int, payload: str) -> str:
         return f"{KeyManager.PREFIX}:start:{uid}:{payload}"
 
+    @staticmethod
+    def get_training_repeat_key(uid: int, date_str: str) -> str:
+        return f"{KeyManager.PREFIX}:train_repeat:{uid}:{date_str}"
+
 
 # ==============================================================================
 # СТАНДАРТНІ ОПЕРАЦІЇ

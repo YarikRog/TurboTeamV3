@@ -3,7 +3,7 @@ import random
 import asyncio
 import functools
 from typing import Any, Callable, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 from aiogram import types
@@ -330,6 +330,12 @@ class ActivityService:
     def get_kyiv_date_string() -> str:
         """Дата у форматі DD.MM.YYYY для Google Sheets."""
         return get_kyiv_now().strftime("%d.%m.%Y")
+
+    @staticmethod
+    def get_seconds_until_kyiv_midnight() -> int:
+        now = get_kyiv_now()
+        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return max(1, int((next_midnight - now).total_seconds()))
 
     @staticmethod
     @handle_exceptions(default_return=False)

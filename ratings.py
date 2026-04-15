@@ -1,10 +1,9 @@
 import logging
 import random
 import asyncio
-from urllib.parse import quote
 from typing import Optional, Dict, Any
 
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, User
+from aiogram.types import Message, User
 
 from config import ADMIN_IDS
 # Використовуємо уніфікований метод з database.py для стабільності
@@ -70,7 +69,7 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
     # 1. Персональний Rate Limit (захист від спаму кнопкою)
     limit_key = KeyManager.get_rating_limit_key(uid)
     if (await get_data(limit_key)) is not None:
-        msg = await message.answer("⏳ Бро, рейтинг оновлюється раз на 10 сек. Зачекай!")
+        msg = await message.answer("⏳ Бро, рейтинг оновлюється раз на 5 хв. Зачекай!")
         safe_create_task(auto_delete(msg, 5))
         try:
             await message.delete()
@@ -78,7 +77,7 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
             pass
         return None
 
-    await set_flag(limit_key, ex=10)
+    await set_flag(limit_key, ex=300)
 
     # 2. Отримання даних
     data = await get_rating_data(uid)
@@ -114,37 +113,15 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
         logger.error(f"[RATINGS] Text formatting error: {e}", exc_info=True)
         return await message.answer("⚠️ Помилка формування рейтингу.")
 
-    # 4. Реферальна кнопка (Динамічна)
-    kb = None
+    # 4. Відправка та очищення
     try:
-        # Отримуємо актуальний username бота прямо з API
-        bot_info = await message.bot.get_me()
-        bot_username = bot_info.username or "TurboTeamBot"
-        
-        ref_link = f"https://t.me/{bot_username}?start={uid}"
-        invite_text = (
-            f"Бро, залітай у TurboTeam! 🏎️💨\n"
-            f"Рубаємо HP та змагаємося за рейтинги.\n"
-            f"Отримай бонус за посиланням: {ref_link}"
-        )
-        share_url = f"https://t.me/share/url?text={quote(invite_text)}"
-        
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="ЗАПРОСИТИ МОНСТРА 🔗", url=share_url)
-        ]])
-    except Exception as e:
-        logger.warning(f"[RATINGS] KB creation failed: {e}")
-
-    # 5. Відправка та очищення
-    try:
-        sent_msg = await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+        sent_msg = await message.answer(text, parse_mode="Markdown")
 
         # Самознищення повідомлення для чистоти чату (крім адмінів)
         if uid not in ADMIN_IDS:
             safe_create_task(auto_delete(sent_msg, 30))
             try:
-                if message.from_user and message.from_user.id == uid:
-                    await message.delete()
+                await message.delete()
             except:
                 pass
         
