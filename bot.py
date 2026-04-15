@@ -1,0 +1,181 @@
+import asyncio
+import logging
+import os
+import json
+
+import sentry_sdk
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import CommandStart, Command, CommandObject
+from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
+
+from architecture.events import EventEnvelope, USER_REGISTERED
+from architecture.orchestrator import flow_event_bus
+from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
+from database import check_user_exists, close_db_session
+from handlers import router as action_router
+from phrases import get_phrase
+from referral import router as ref_router
+from tasks import setup_scheduler
+
+from cache import redis_client, set_data, KeyManager
+from services import validate_quiz
+from ui import get_inline_menu
+
+# ==============================================================================
+# ЛОГУВАННЯ
+# ==============================================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# ==============================================================================
+# MONITORING (Sentry)
+# ==============================================================================
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+    )
+    logger.info("🛡️ [MONITORING] Sentry ініціалізовано")
+
+# ==============================================================================
+# BOT + STORAGE
+# ==============================================================================
+storage = RedisStorage(
+    redis=redis_client,
+    key_builder=DefaultKeyBuilder(with_destiny=True, prefix="turbo_fsm"),
+)
+
+bot = Bot(
+    token=BOT_TOKEN, 
+    default=DefaultBotProperties(parse_mode="Markdown", link_preview_is_disabled=True)
+)
+dp = Dispatcher(storage=storage)
+
+# ==============================================================================
+# COMMANDS
+# ==============================================================================
+
+@dp.message(Command("rules"))
+async def cmd_rules(message: types.Message):
+    await message.answer(get_phrase("rules_text"))
+
+@dp.message(Command("menu"), F.chat.id == REPORTS_GROUP_ID)
+async def show_menu_in_group(message: types.Message):
+    # Примусово чистимо стару клаву (якщо у когось висіла) і шлемо Inline
+    await message.answer(
+        "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇", 
+        reply_markup=get_inline_menu()
+    )
+    # Це повідомлення-невидимка просто прибере кнопки знизу
+    await message.answer("🧹", reply_markup=types.ReplyKeyboardRemove())
+
+@dp.message(Command("panel"))
+async def admin_panel(message: types.Message):
+    if message.from_user.id in ADMIN_IDS:
+        await message.answer(
+            "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨", 
+            reply_markup=get_inline_menu()
+        )
+
+@dp.message(CommandStart())
+async def start_handler(message: types.Message, command: CommandObject):
+    user_id = message.from_user.id
+    args = command.args
+
+    if args in {"gym", "street"}:
+        return
+    
+    is_registered = await check_user_exists(user_id)
+    
+    if not is_registered:
+        if args and args.isdigit():
+            await set_data(KeyManager.get_ref_key(user_id), args, ex=86400)
+
+        welcome_text = (
+            f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
+            "Ти потрапив у TurboTeam. Пройди опитування: 👇"
+        )
+        
+        kb = types.ReplyKeyboardMarkup(
+            keyboard=[[
+                types.KeyboardButton(
+                    text="🚀 ПРОЙТИ ВІДБІР",
+                    web_app=types.WebAppInfo(url=WEB_APP_URL),
+                )
+            ]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        return await message.answer(welcome_text, reply_markup=kb)
+
+    if not args:
+        return await message.answer(
+            f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥", 
+            reply_markup=get_inline_menu()
+        )
+
+# ==============================================================================
+# WEB APP RECEIVE
+# ==============================================================================
+
+@dp.message(F.web_app_data)
+async def web_app_receive(message: types.Message):
+    user_id = message.from_user.id
+    nickname = message.from_user.username or message.from_user.first_name
+
+    try:
+        data = json.loads(message.web_app_data.data)
+        if not validate_quiz(data):
+            return await message.answer("❌ Дані некоректні.")
+
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=USER_REGISTERED,
+                user_id=user_id,
+                payload={
+                    "message": message,
+                    "nickname": nickname,
+                    "quiz_data": data,
+                },
+                idempotency_key=f"user-registered:{user_id}:{message.message_id}",
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"❌ [WEBAPP ERROR] {e}", exc_info=True)
+        await message.answer("❌ Критична помилка реєстрації.")
+
+# ПІДКЛЮЧЕННЯ
+dp.include_router(ref_router)
+dp.include_router(action_router)
+
+async def on_startup():
+    me = await bot.get_me()
+    await set_data(KeyManager.get_bot_username_key(), me.username)
+    logger.info(f"🚀 Бот @{me.username} онлайн!")
+
+async def on_shutdown():
+    logger.info("🛑 Зупинка бота...")
+    await close_db_session()
+    if redis_client: await redis_client.aclose()
+    await bot.session.close()
+
+async def main():
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+    scheduler = setup_scheduler(bot)
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        scheduler.shutdown()
+
+if __name__ == "__main__":
+    try: asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit): pass
