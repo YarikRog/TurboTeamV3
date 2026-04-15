@@ -67,11 +67,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
             name=f"referral_{user_id}",
         )
 
-    rating_kb = types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="🏆 Рейтинг ТОП")]],
-        resize_keyboard=True,
-    )
-    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=rating_kb)
+    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=types.ReplyKeyboardRemove())
 
     group_kb = types.InlineKeyboardMarkup(
         inline_keyboard=[[
