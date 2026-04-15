@@ -20,7 +20,7 @@ from database import register_user_from_quiz
 from phrases import get_phrase
 from referral import process_referral_logic
 from services import ActivityService, auto_delete, safe_create_task
-from ui import get_inline_menu, get_rating_reply_keyboard
+from ui import get_inline_menu
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,11 @@ async def on_user_registered(event: EventEnvelope) -> bool:
             name=f"referral_{user_id}",
         )
 
-    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=get_rating_reply_keyboard())
+    rating_kb = types.ReplyKeyboardMarkup(
+        keyboard=[[types.KeyboardButton(text="🏆 Рейтинг ТОП")]],
+        resize_keyboard=True,
+    )
+    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=rating_kb)
 
     group_kb = types.InlineKeyboardMarkup(
         inline_keyboard=[[
