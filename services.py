@@ -6,12 +6,14 @@ from typing import Any, Callable, Optional
 from datetime import datetime
 import pytz
 
+from aiogram import types
 from aiogram.types import Message
 
 from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
 from cache import KeyManager, acquire_lock, set_flag, get_data
 from database import get_kyiv_now, add_activity, check_activity_limit, update_user_activity
 from phrases import get_phrase
+from config import GROUP_LINK
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -353,7 +355,15 @@ class ActivityService:
         if not granted:
             return False
 
-        await message.answer(f"✅ {action_type} зафіксовано. +{hp} HP")
+        back_to_group_kb = types.InlineKeyboardMarkup(
+            inline_keyboard=[[
+                types.InlineKeyboardButton(text="😎 Повертайся в банду", url=GROUP_LINK)
+            ]]
+        )
+        await message.answer(
+            f"✅ {action_type} зафіксовано. +{hp} HP",
+            reply_markup=back_to_group_kb,
+        )
 
         try:
             await message.copy_to(REPORTS_GROUP_ID)
