@@ -56,6 +56,11 @@ async def handle_show_rating(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.message(F.text == "🏆 Рейтинг ТОП")
+async def handle_show_rating_message(message: Message):
+    await show_rating_for_user(message, message.from_user)
+
+
 @router.callback_query(F.data == "invite_friend")
 async def handle_invite_friend(callback: CallbackQuery):
     await send_invite_prompt(callback.message, callback.from_user)

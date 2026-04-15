@@ -20,7 +20,7 @@ from tasks import setup_scheduler
 
 from cache import redis_client, set_data, KeyManager
 from services import validate_quiz
-from ui import get_inline_menu
+from ui import get_inline_menu, get_rating_reply_keyboard
 
 # ==============================================================================
 # ЛОГУВАННЯ
@@ -67,10 +67,11 @@ async def cmd_rules(message: types.Message):
 
 @dp.message(Command("menu"), F.chat.id == REPORTS_GROUP_ID)
 async def show_menu_in_group(message: types.Message):
+    bot_username = await bot.get_me()
     # Примусово чистимо стару клаву (якщо у когось висіла) і шлемо Inline
     await message.answer(
         "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇", 
-        reply_markup=get_inline_menu()
+        reply_markup=get_inline_menu(bot_username.username)
     )
     # Це повідомлення-невидимка просто прибере кнопки знизу
     await message.answer("🧹", reply_markup=types.ReplyKeyboardRemove())
@@ -78,9 +79,10 @@ async def show_menu_in_group(message: types.Message):
 @dp.message(Command("panel"))
 async def admin_panel(message: types.Message):
     if message.from_user.id in ADMIN_IDS:
+        me = await bot.get_me()
         await message.answer(
             "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨", 
-            reply_markup=get_inline_menu()
+            reply_markup=get_inline_menu(me.username)
         )
 
 @dp.message(CommandStart())
@@ -102,22 +104,15 @@ async def start_handler(message: types.Message, command: CommandObject):
             "Ти потрапив у TurboTeam. Пройди опитування: 👇"
         )
         
-        kb = types.ReplyKeyboardMarkup(
-            keyboard=[[
-                types.KeyboardButton(
-                    text="🚀 ПРОЙТИ ВІДБІР",
-                    web_app=types.WebAppInfo(url=WEB_APP_URL),
-                )
-            ]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[[
+            types.InlineKeyboardButton(text="🚀 ПРОЙТИ ВІДБІР", web_app=types.WebAppInfo(url=WEB_APP_URL))
+        ]])
         return await message.answer(welcome_text, reply_markup=kb)
 
     if not args:
         return await message.answer(
             f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥", 
-            reply_markup=get_inline_menu()
+            reply_markup=get_rating_reply_keyboard()
         )
 
 # ==============================================================================

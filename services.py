@@ -362,6 +362,6 @@ class ActivityService:
 
         await message.bot.send_message(
             REPORTS_GROUP_ID,
-            get_phrase("report", nickname=f"@{user.username or user.first_name}"),
+            f"{get_phrase('report', nickname=f'@{user.username or user.first_name}')}\n+{hp} HP",
         )
         return True
