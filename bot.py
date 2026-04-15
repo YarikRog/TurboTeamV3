@@ -68,13 +68,11 @@ async def cmd_rules(message: types.Message):
 @dp.message(Command("menu"), F.chat.id == REPORTS_GROUP_ID)
 async def show_menu_in_group(message: types.Message):
     bot_username = await bot.get_me()
-    # Примусово чистимо стару клаву (якщо у когось висіла) і шлемо Inline
     await message.answer(
         "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇", 
         reply_markup=get_inline_menu(bot_username.username)
     )
-    # Це повідомлення-невидимка просто прибере кнопки знизу
-    await message.answer("🧹", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("🏆", reply_markup=get_rating_reply_keyboard())
 
 @dp.message(Command("panel"))
 async def admin_panel(message: types.Message):
@@ -126,7 +124,7 @@ async def start_handler(message: types.Message, command: CommandObject):
     if not args:
         return await message.answer(
             f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥", 
-            reply_markup=get_rating_reply_keyboard()
+            reply_markup=types.ReplyKeyboardRemove()
         )
 
 # ==============================================================================
