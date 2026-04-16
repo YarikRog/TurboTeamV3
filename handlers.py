@@ -44,6 +44,28 @@ async def handle_community_rules(callback: CallbackQuery):
     await callback.answer(rules_text, show_alert=True)
 
 
+@router.callback_query(F.data == "turbo_rules")
+async def handle_turbo_rules(callback: CallbackQuery):
+    text = (
+        "📘 *Правила користування TurboTeam*\n\n"
+        "1. Щоб отримати HP за тренування, кидай тільки свіжий кружечок після вибору Gym або Street.\n\n"
+        "2. Переслані, старі або фейкові відео не зараховуються.\n\n"
+        "3. За день можна зробити Gym і Street окремо, але один і той самий тип тренування двічі не рахується.\n\n"
+        "4. Якщо на сьогодні вже є активність, відпочинок або пропуск вдруге не записуються.\n\n"
+        "5. Не спам кнопками, не кидай фейки й не намагайся накрутити HP.\n\n"
+        "6. Якщо учасники поскаржаться на фейковий звіт, можуть зняти HP і доведеться перездати тренування.\n\n"
+        "7. Спілкуйся нормально: без образ, токсичності, сварок і політики.\n\n"
+        "8. TurboTeam — це про дисципліну, чесність і рух уперед. Тренуйся чесно й кайфуй від прогресу 💪"
+    )
+
+    try:
+        await callback.message.answer(text, parse_mode="Markdown")
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_turbo_rules error: {e}", exc_info=True)
+        await callback.answer("⚠️ Не вдалося відкрити правила. Спробуй ще раз.", show_alert=True)
+
+
 @router.callback_query(F.data.in_(["action_rest", "action_skip"]))
 async def handle_static_actions(callback: CallbackQuery):
     event_name = REST_SELECTED if callback.data == "action_rest" else SKIP_SELECTED
