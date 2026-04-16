@@ -75,9 +75,17 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=types.ReplyKeyboardRemove())
 
     group_kb = types.InlineKeyboardMarkup(
-        inline_keyboard=[[
-            types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
-        ]]
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📘 Правила користування TurboTeam",
+                    callback_data="turbo_rules",
+                ),
+            ],
+        ]
     )
     await message.answer("Тримай перепустку: 👇", reply_markup=group_kb)
 
@@ -95,7 +103,6 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     action = event.payload["action"]
     user = event.payload["user"]
 
-    # Block only duplicate of the same training type
     if not await ActivityService.can_user_log_activity(event.user_id, action):
         today = get_kyiv_now().strftime("%Y-%m-%d")
         repeat_key = KeyManager.get_training_repeat_key(event.user_id, f"{action}:{today}")
@@ -131,7 +138,6 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     source = event.payload["source"]
     user = event.payload["user"]
 
-    # Rest / Skip should be blocked if any daily activity already exists
     if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
         await _reply_transport(
             source,
