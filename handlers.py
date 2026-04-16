@@ -13,6 +13,7 @@ from ratings import show_rating_for_user
 router = Router()
 logger = logging.getLogger(__name__)
 
+
 @router.message(F.text == "🏆 Рейтинг ТОП")
 async def handle_show_rating_message(message: Message):
     await show_rating_for_user(message, message.from_user)
@@ -32,17 +33,24 @@ async def handle_invite_friend(callback: CallbackQuery):
 @router.callback_query(F.data.in_(["action_rest", "action_skip"]))
 async def handle_static_actions(callback: CallbackQuery):
     event_name = REST_SELECTED if callback.data == "action_rest" else SKIP_SELECTED
-    await flow_event_bus.publish(
-        EventEnvelope(
-            name=event_name,
-            user_id=callback.from_user.id,
-            payload={
-                "source": callback,
-                "user": callback.from_user,
-            },
-            idempotency_key=f"{event_name}:{callback.from_user.id}:{callback.id}",
+
+    try:
+        await callback.answer()
+
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=event_name,
+                user_id=callback.from_user.id,
+                payload={
+                    "source": callback,
+                    "user": callback.from_user,
+                },
+                idempotency_key=f"{event_name}:{callback.from_user.id}:{callback.id}",
+            )
         )
-    )
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_static_actions error: {e}", exc_info=True)
+        await callback.message.answer("⚠️ Сталася помилка. Спробуй ще раз.")
 
 
 @router.message(F.video_note)
@@ -61,6 +69,7 @@ async def gateway_video_note(m: Message):
 async def send_panel(m: Message):
     if m.from_user.id not in ADMIN_IDS:
         return
+
     bot = await m.bot.get_me()
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
