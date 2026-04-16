@@ -1,1 +1,602 @@
 
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turbo Team Quiz</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --card: rgba(22, 26, 34, 0.92);
+      --card-2: rgba(33, 39, 50, 0.9);
+      --text: #ffffff;
+      --muted: #b9c0cc;
+      --accent: #ff5a1f;
+      --accent-2: #4cc9f0;
+      --border: rgba(255, 255, 255, 0.08);
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 20%, rgba(255, 90, 31, 0.28), transparent 28%),
+        radial-gradient(circle at 85% 15%, rgba(76, 201, 240, 0.18), transparent 25%),
+        radial-gradient(circle at 50% 90%, rgba(255, 90, 31, 0.12), transparent 30%),
+        linear-gradient(180deg, #0b0d12 0%, #121722 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px 14px 28px;
+      overflow-x: hidden;
+    }
+
+    .bg-icons {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      opacity: 0.12;
+    }
+
+    .bg-icons span {
+      position: absolute;
+      font-size: 34px;
+      animation: floatUp 10s linear infinite;
+    }
+
+    .bg-icons span:nth-child(1) { left: 8%; top: 72%; animation-delay: 0s; }
+    .bg-icons span:nth-child(2) { left: 78%; top: 78%; animation-delay: 1.5s; }
+    .bg-icons span:nth-child(3) { left: 20%; top: 88%; animation-delay: 3s; }
+    .bg-icons span:nth-child(4) { left: 65%; top: 85%; animation-delay: 4.5s; }
+    .bg-icons span:nth-child(5) { left: 45%; top: 82%; animation-delay: 6s; }
+
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(0.9); opacity: 0; }
+      10% { opacity: 1; }
+      100% { transform: translateY(-120vh) scale(1.15); opacity: 0; }
+    }
+
+    .quiz-container {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .top-bar {
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .brand-badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 90, 31, 0.14);
+      border: 1px solid rgba(255, 90, 31, 0.24);
+      color: #ffd3c4;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .progress-wrap {
+      display: none;
+    }
+
+    .progress-wrap.visible {
+      display: block;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.35s ease;
+      box-shadow: 0 0 16px rgba(255, 90, 31, 0.4);
+    }
+
+    .content {
+      padding: 22px 18px 20px;
+    }
+
+    .hero {
+      display: none;
+      animation: fadeSlide 0.5s ease;
+    }
+
+    .hero.active {
+      display: block;
+    }
+
+    .hero-icon {
+      font-size: 56px;
+      text-align: center;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 12px rgba(255, 90, 31, 0.25));
+    }
+
+    .hero-title {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 800;
+      margin: 0 0 10px;
+      line-height: 1.15;
+    }
+
+    .hero-subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0 0 20px;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .hero-stat {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 8px;
+      text-align: center;
+    }
+
+    .hero-stat strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .hero-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .start-btn,
+    .option-btn,
+    .back-btn {
+      width: 100%;
+      border: none;
+      border-radius: 18px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+      font-weight: 800;
+    }
+
+    .start-btn {
+      padding: 16px 18px;
+      background: linear-gradient(135deg, var(--accent), #ff7c4d);
+      color: white;
+      font-size: 16px;
+      box-shadow: 0 12px 30px rgba(255, 90, 31, 0.28);
+    }
+
+    .start-btn:active,
+    .option-btn:active,
+    .back-btn:active {
+      transform: scale(0.98);
+    }
+
+    .step {
+      display: none;
+      animation: fadeSlide 0.45s ease;
+    }
+
+    .step.active {
+      display: block;
+    }
+
+    @keyframes fadeSlide {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .step-kicker {
+      color: var(--accent-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .step-title {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin: 0 0 8px;
+    }
+
+    .step-desc {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      margin: 0 0 18px;
+    }
+
+    .options {
+      display: grid;
+      gap: 12px;
+    }
+
+    .option-btn {
+      text-align: left;
+      padding: 16px 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 15px;
+    }
+
+    .option-btn:hover {
+      box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+      border-color: rgba(255, 90, 31, 0.28);
+    }
+
+    .option-icon {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 90, 31, 0.12);
+      border: 1px solid rgba(255, 90, 31, 0.18);
+      font-size: 20px;
+    }
+
+    .option-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .option-text strong {
+      font-size: 15px;
+    }
+
+    .option-text span {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .footer-row {
+      margin-top: 16px;
+    }
+
+    .back-btn {
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 14px;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 12px 0 4px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .loading.visible {
+      display: block;
+      animation: fadeSlide 0.3s ease;
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      opacity: 0.35;
+      animation: pulse 1s infinite ease-in-out;
+    }
+
+    .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse {
+      0%, 100% { transform: translateY(0); opacity: 0.35; }
+      50% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    @media (max-width: 380px) {
+      .hero-title { font-size: 24px; }
+      .step-title { font-size: 21px; }
+      .option-btn { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-icons">
+    <span>🏋️</span>
+    <span>🏃</span>
+    <span>🚴</span>
+    <span>⚡</span>
+    <span>🏆</span>
+  </div>
+
+  <div class="quiz-container">
+    <div class="top-bar">
+      <div class="brand">
+        <div class="brand-title">TurboTeam</div>
+        <div class="brand-badge">ONBOARDING</div>
+      </div>
+
+      <div id="progressWrap" class="progress-wrap">
+        <div class="progress-meta">
+          <span id="progressText">Крок 1 / 3</span>
+          <span>Швидкий відбір</span>
+        </div>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div id="hero" class="hero active">
+        <div class="hero-icon">⚡</div>
+        <h1 class="hero-title">Ласкаво просимо в TurboTeam</h1>
+        <p class="hero-subtitle">
+          Тут тренування = HP = рейтинг = прогрес.<br />
+          Пройди швидкий відбір і влітай у команду.
+        </p>
+
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <strong>🏋️ Gym</strong>
+            <span>Сила</span>
+          </div>
+          <div class="hero-stat">
+            <strong>🦾 Street</strong>
+            <span>Характер</span>
+          </div>
+          <div class="hero-stat">
+            <strong>🏆 HP</strong>
+            <span>Прогрес</span>
+          </div>
+        </div>
+
+        <button class="start-btn" onclick="startQuiz()">🚀 Почати відбір</button>
+      </div>
+
+      <div id="step1" class="step">
+        <div class="step-kicker">Крок 1</div>
+        <h2 class="step-title">Хто ти в грі?</h2>
+        <p class="step-desc">Обери варіант, щоб ми краще налаштували твій старт.</p>
+
+        <div class="options">
+          <button class="option-btn" onclick="nextStep('gender', 'Чоловік', 2)">
+            <div class="option-icon">👨</div>
+            <div class="option-text">
+              <strong>Чоловік</strong>
+              <span>Силовий старт у TurboTeam</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="nextStep('gender', 'Жінка', 2)">
+            <div class="option-icon">👩</div>
+            <div class="option-text">
+              <strong>Жінка</strong>
+              <span>Гнучкий і сильний шлях</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div id="step2" class="step">
+        <div class="step-kicker">Крок 2</div>
+        <h2 class="step-title">Який у тебе рівень?</h2>
+        <p class="step-desc">Оціни себе чесно — так ми підберемо правильний старт.</p>
+
+        <div class="options">
+          <button class="option-btn" onclick="nextStep('level', 'Новачок', 3)">
+            <div class="option-icon">🌱</div>
+            <div class="option-text">
+              <strong>Новачок</strong>
+              <span>Тільки входжу в режим</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="nextStep('level', 'Середній', 3)">
+            <div class="option-icon">⚡</div>
+            <div class="option-text">
+              <strong>Середній</strong>
+              <span>Вже маю базу і хочу рости</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="nextStep('level', 'Профі', 3)">
+            <div class="option-icon">🔥</div>
+            <div class="option-text">
+              <strong>Профі</strong>
+              <span>Готовий тиснути на максимум</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="footer-row">
+          <button class="back-btn" onclick="goBack(1)">← Назад</button>
+        </div>
+      </div>
+
+      <div id="step3" class="step">
+        <div class="step-kicker">Крок 3</div>
+        <h2 class="step-title">До чого ти йдеш?</h2>
+        <p class="step-desc">Обери головну ціль, яка зараз для тебе найважливіша.</p>
+
+        <div class="options">
+          <button class="option-btn" onclick="finishQuiz('Схуднення')">
+            <div class="option-icon">🏃</div>
+            <div class="option-text">
+              <strong>Схуднення</strong>
+              <span>Стаю легшим і витривалішим</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="finishQuiz('Набір маси')">
+            <div class="option-icon">🏋️</div>
+            <div class="option-text">
+              <strong>Набір маси</strong>
+              <span>Будую силу і форму</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="finishQuiz('Витривалість')">
+            <div class="option-icon">🚴</div>
+            <div class="option-text">
+              <strong>Витривалість</strong>
+              <span>Хочу більше енергії та ресурсу</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="footer-row">
+          <button class="back-btn" onclick="goBack(2)">← Назад</button>
+        </div>
+      </div>
+
+      <div id="loading" class="loading">
+        ⏳ Формуємо твій профіль у TurboTeam...
+        <div class="dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    let quizResults = {};
+    let currentStep = 0;
+
+    const hero = document.getElementById('hero');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const loading = document.getElementById('loading');
+
+    function startQuiz() {
+      hero.classList.remove('active');
+      progressWrap.classList.add('visible');
+      showStep(1);
+    }
+
+    function showStep(stepNumber) {
+      currentStep = stepNumber;
+
+      document.querySelectorAll('.step.active').forEach(el => el.classList.remove('active'));
+
+      const target = document.getElementById('step' + stepNumber);
+      if (target) {
+        target.classList.add('active');
+      }
+
+      const percent = (stepNumber / 3) * 100;
+      progressFill.style.width = percent + '%';
+      progressText.textContent = `Крок ${stepNumber} / 3`;
+    }
+
+    function nextStep(field, value, next) {
+      quizResults[field] = value;
+      showStep(next);
+    }
+
+    function goBack(stepNumber) {
+      showStep(stepNumber);
+    }
+
+    function finishQuiz(goalValue) {
+      quizResults.goal = goalValue;
+      quizResults.action = "submit_quiz";
+
+      document.querySelectorAll('.step.active').forEach(el => el.classList.remove('active'));
+      loading.classList.add('visible');
+      progressFill.style.width = '100%';
+      progressText.textContent = 'Готово';
+
+      setTimeout(() => {
+        tg.sendData(JSON.stringify(quizResults));
+      }, 900);
+    }
+  </script>
+</body>
+</html>
