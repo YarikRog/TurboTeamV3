@@ -203,12 +203,10 @@ async def update_user_activity(
     lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
 
     if not skip_lock:
-        # 🔒 atomic lock (prevents duplicates)
         lock = await acquire_lock(lock_key, ex=86400)
         if not lock:
             return False
 
-    # Payload чітко під твій GAS: Date, Nick, user_id, action_name, hp_change
     payload = {
         "action": "update_hp",
         "date": get_kyiv_now().strftime("%d.%m.%Y"),
@@ -220,7 +218,6 @@ async def update_user_activity(
         "is_check": "true" if is_check else "false",
     }
 
-    # retry with jitter (anti thundering herd)
     delay = RETRY_DELAY
 
     for attempt in range(MAX_RETRIES):
@@ -228,14 +225,12 @@ async def update_user_activity(
             res = await _request(payload)
 
             if isinstance(res, dict):
-                # Перевірка на "Already done" або помилку від GAS
                 if res.get("error") == "already_done" or res.get("msg") == "Already done":
                     return "already_done"
 
                 if res.get("success"):
                     return True
 
-            # fallback retry only on unstable response
             await asyncio.sleep(delay + random.uniform(0, 0.3))
             delay *= 1.6
 
@@ -244,7 +239,6 @@ async def update_user_activity(
             await asyncio.sleep(delay)
             delay *= 1.6
 
-    # rollback lock if failed
     if not skip_lock:
         await delete_data(lock_key)
     return False
@@ -274,21 +268,32 @@ async def check_user_exists(user_id: int) -> bool:
 
 
 async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) -> bool:
-    # ПОРЯДОК ЗГІДНО СКРІНУ ТАБЛИЦІ: Дата(A), Нік(B), Айді(C), Стать(D), Рівень(E), Мета(F)
+    """
+    Safe registration flow:
+    1. Check local/cache + GAS existence first.
+    2. Do not call register endpoint if user already exists.
+    3. Set registration cache only after successful registration.
+    """
+    already_exists = await check_user_exists(user_id)
+    if already_exists:
+        logger.info(f"[DB] user already exists: user_id={user_id}")
+        return False
+
     res = await _request({
         "action": "register_user",
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),     # 1. Дата
-        "nickname": str(nickname),                        # 2. Нік
-        "user_id": str(user_id),                          # 3. Айді
-        "gender": quiz_data.get("gender", "N/A"),        # 4. Стать
-        "level": quiz_data.get("level", "N/A"),          # 5. Рівень
-        "goal": str(quiz_data.get("goal", "N/A"))[:200], # 6. Мета
+        "date": get_kyiv_now().strftime("%d.%m.%Y"),
+        "nickname": str(nickname),
+        "user_id": str(user_id),
+        "gender": quiz_data.get("gender", "N/A"),
+        "level": quiz_data.get("level", "N/A"),
+        "goal": str(quiz_data.get("goal", "N/A"))[:200],
     })
 
     if isinstance(res, dict) and res.get("success"):
         await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
         return True
 
+    logger.warning(f"[DB] registration failed: user_id={user_id}, response={res}")
     return False
 
 
