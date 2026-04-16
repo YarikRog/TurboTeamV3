@@ -179,32 +179,62 @@ class ActivityService:
     @handle_exceptions(default_return=False)
     async def check_today_report(user_id: int, ignore_actions: Optional[list[str]] = None) -> bool:
         """
-        Повертає True якщо юзер вже зробив денну активність.
-        ignore_actions збережено в сигнатурі для сумісності контракту.
+        Повертає True, якщо користувач уже має денну активність за сьогодні.
+
+        Алгоритм:
+        1. Перевіряємо Redis-ключі тільки реальних денних активностей.
+        2. Якщо в Redis нічого не знайдено — робимо fallback у GAS/БД
+           теж тільки по реальних типах активності.
+        3. Якщо хоч одна активність уже є — повертаємо True.
+
+        ignore_actions залишено в сигнатурі для сумісності контракту.
         """
-        ignore_set = {str(item).strip().lower() for item in (ignore_actions or []) if str(item).strip()}
+        ignore_set = {
+            str(item).strip().lower()
+            for item in (ignore_actions or [])
+            if str(item).strip()
+        }
         today = get_kyiv_now().strftime("%Y-%m-%d")
 
-        tracked_actions = [
+        # Тільки реальні денні активності, які блокують повторний денний звіт.
+        daily_actions = [
             "Gym",
             "Street",
             "Rest",
             "Skipped",
-            "Referral Bonus",
-            "Welcome Bonus",
-            "Реєстрація",
-            "Registration",
         ]
 
-        for action_name in tracked_actions:
+        # 1. Швидка перевірка через Redis.
+        for action_name in daily_actions:
             if action_name.strip().lower() in ignore_set:
                 continue
 
             lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
             if (await get_data(lock_key)) is not None:
+                logger.debug(
+                    "[check_today_report] Redis-hit: uid=%s action=%s date=%s",
+                    user_id,
+                    action_name,
+                    today,
+                )
                 return True
 
-        return not await ActivityService.can_user_log_activity(user_id, "system")
+        # 2. Fallback у GAS/БД по реальних типах активності.
+        for action_name in daily_actions:
+            if action_name.strip().lower() in ignore_set:
+                continue
+
+            can_log = await ActivityService.can_user_log_activity(user_id, action_name)
+            if not can_log:
+                logger.debug(
+                    "[check_today_report] GAS-hit: uid=%s action=%s date=%s",
+                    user_id,
+                    action_name,
+                    today,
+                )
+                return True
+
+        return False
 
     @staticmethod
     @handle_exceptions(default_return=0)
