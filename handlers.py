@@ -30,6 +30,20 @@ async def handle_invite_friend(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "community_rules")
+async def handle_community_rules(callback: CallbackQuery):
+    rules_text = (
+        "📘 ПРАВИЛА СПІЛЬНОТИ\n\n"
+        "• Тренування зараховується тільки зі свіжим кружечком.\n"
+        "• Не кидай фейки, старі або переслані відео.\n"
+        "• Не спам кнопками та повідомленнями.\n"
+        "• Поважай інших учасників, без образ і сварок.\n"
+        "• Без політики, срачів і токсичності.\n"
+        "• За фейки та порушення можуть бути скарги і штраф HP."
+    )
+    await callback.answer(rules_text, show_alert=True)
+
+
 @router.callback_query(F.data.in_(["action_rest", "action_skip"]))
 async def handle_static_actions(callback: CallbackQuery):
     event_name = REST_SELECTED if callback.data == "action_rest" else SKIP_SELECTED
