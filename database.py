@@ -5,7 +5,7 @@ import json
 import random
 import pytz
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Union, Dict, Any
 
 from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
@@ -21,6 +21,21 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 def get_kyiv_now() -> datetime:
     return datetime.now(KYIV_TZ)
+
+
+def get_seconds_until_kyiv_midnight() -> int:
+    """
+    Returns TTL in seconds until next midnight in Kyiv timezone.
+    Minimum value is 1 second.
+    """
+    now = get_kyiv_now()
+    next_midnight = (now + timedelta(days=1)).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    return max(1, int((next_midnight - now).total_seconds()))
 
 
 # ==============================================================================
@@ -203,7 +218,7 @@ async def update_user_activity(
     lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
 
     if not skip_lock:
-        lock = await acquire_lock(lock_key, ex=86400)
+        lock = await acquire_lock(lock_key, ex=get_seconds_until_kyiv_midnight())
         if not lock:
             return False
 
