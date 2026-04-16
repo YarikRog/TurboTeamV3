@@ -9,38 +9,33 @@ from config import REDIS_URL
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
-# ЄДИНИЙ REDIS КЛІЄНТ
-# Один клієнт для всього проєкту. Імпортується скрізь звідси.
-# main.py використовує його ж для RedisStorage — нема двох підключень.
+# SINGLE REDIS CLIENT
 # ==============================================================================
 try:
     _url = os.getenv("REDIS_URL") or REDIS_URL
     redis_client: Optional[redis.Redis] = redis.from_url(
         _url,
         decode_responses=True,
-        # Connection pool: max 20 з'єднань
         max_connections=20,
     )
-    logger.info("--- [CACHE] Redis підключено (єдиний клієнт) ---")
+    logger.info("--- [CACHE] Redis connected (single client) ---")
 except Exception as e:
-    logger.critical(f"--- [CACHE CRITICAL] Помилка підключення до Redis: {e} ---")
+    logger.critical(f"--- [CACHE CRITICAL] Redis connection error: {e} ---")
     redis_client = None
 
 
 # ==============================================================================
-# KEY MANAGER — ЄДИНЕ ДЖЕРЕЛО ІСТИНИ ДЛЯ КЛЮЧІВ
-# Правило: ЖОДНОГО сирого f-string для Redis-ключів за межами цього класу.
-# Всі ключі мають PREFIX, щоб не конфліктувати з RedisStorage aiogram.
+# KEY MANAGER
 # ==============================================================================
 class KeyManager:
     PREFIX = "turbo"
 
-    # --- Реєстрація ---
+    # --- Registration ---
     @staticmethod
     def get_reg_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:is_reg:{uid}"
 
-    # --- Реферали ---
+    # --- Referrals ---
     @staticmethod
     def get_ref_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:pending_ref:{uid}"
@@ -53,7 +48,7 @@ class KeyManager:
     def get_ref_processed_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:ref_processed:{uid}"
 
-    # --- Стан (очікування відео) ---
+    # --- State ---
     @staticmethod
     def get_state_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:state:{uid}"
@@ -62,26 +57,30 @@ class KeyManager:
     def get_session_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:session:{uid}"
 
-    # --- Скарги ---
+    # --- Reports / complaints ---
     @staticmethod
     def get_report_key(target_uid: int, v_msg_id: int) -> str:
         return f"{KeyManager.PREFIX}:reports:{target_uid}:{v_msg_id}"
 
-    # --- Ліміти команд (спам-захист) ---
+    @staticmethod
+    def get_report_vote_key(target_uid: int, v_msg_id: int, voter_uid: int) -> str:
+        return f"{KeyManager.PREFIX}:report_vote:{target_uid}:{v_msg_id}:{voter_uid}"
+
+    @staticmethod
+    def get_report_penalty_key(target_uid: int, v_msg_id: int) -> str:
+        return f"{KeyManager.PREFIX}:report_penalty:{target_uid}:{v_msg_id}"
+
+    # --- Limits / anti-spam ---
     @staticmethod
     def get_limit_key(user_id: int, action_type: str, date_str: str) -> str:
         return f"{KeyManager.PREFIX}:limit:{user_id}:{action_type}:{date_str}"
 
-    # --- Distributed lock для активностей (анти-дублікат) ---
+    # --- Distributed lock for activities ---
     @staticmethod
     def get_action_lock_key(uid: int, action_and_date: str) -> str:
-        """
-        Атомарний lock через SET NX.
-        action_and_date = "Gym:2025-01-15"
-        """
         return f"{KeyManager.PREFIX}:lock:{uid}:{action_and_date}"
 
-    # --- Рейтинг ---
+    # --- Rating ---
     @staticmethod
     def get_rating_limit_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:rating_limit:{uid}"
@@ -90,7 +89,7 @@ class KeyManager:
     def get_rating_cache_key() -> str:
         return f"{KeyManager.PREFIX}:global_rating"
 
-    # --- Бот ---
+    # --- Bot ---
     @staticmethod
     def get_bot_username_key() -> str:
         return f"{KeyManager.PREFIX}:bot_username"
@@ -109,16 +108,13 @@ class KeyManager:
 
 
 # ==============================================================================
-# СТАНДАРТНІ ОПЕРАЦІЇ
-# СТАНДАРТ ПРОЄКТУ:
-#   - Прапорці зберігати як value="1"
-#   - Перевіряти через: (await get_data(key)) is not None
+# STANDARD OPERATIONS
 # ==============================================================================
 
 async def set_data(key: str, value: Any, ex: Optional[int] = None) -> bool:
     """
-    Зберігає дані в Redis.
-    Повертає True при успіху, False при помилці.
+    Saves data to Redis.
+    Returns True on success, False on error.
     """
     if redis_client is None:
         return False
@@ -131,14 +127,14 @@ async def set_data(key: str, value: Any, ex: Optional[int] = None) -> bool:
         await redis_client.set(key, val_to_save, ex=ex)
         return True
     except Exception as e:
-        logger.error(f"[CACHE] Помилка запису key={key}: {e}")
+        logger.error(f"[CACHE] Write error key={key}: {e}")
         return False
 
 
 async def get_data(key: str) -> Any:
     """
-    Читає дані з Redis.
-    Повертає None якщо ключ не існує або при помилці.
+    Reads data from Redis.
+    Returns None if key does not exist or on error.
     """
     if redis_client is None:
         return None
@@ -147,46 +143,41 @@ async def get_data(key: str) -> Any:
         if data is None:
             return None
 
-        # Намагаємось десеріалізувати JSON (dict/list)
         try:
             return json.loads(data)
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # Повертаємо як рядок
         return data
 
     except Exception as e:
-        logger.error(f"[CACHE] Помилка читання key={key}: {e}")
+        logger.error(f"[CACHE] Read error key={key}: {e}")
         return None
 
 
 async def delete_data(key: str) -> bool:
-    """Видаляє ключ. Повертає True при успіху."""
+    """Deletes key. Returns True on success."""
     if redis_client is None:
         return False
     try:
         await redis_client.delete(key)
         return True
     except Exception as e:
-        logger.error(f"[CACHE] Помилка видалення key={key}: {e}")
+        logger.error(f"[CACHE] Delete error key={key}: {e}")
         return False
 
 
 async def set_flag(key: str, ex: Optional[int] = None) -> bool:
     """
-    Зручний хелпер для збереження прапорця зі значенням "1".
-    Використовуй замість set_data(key, "1", ex=...) для читабельності.
+    Helper for storing flag value "1".
     """
     return await set_data(key, "1", ex=ex)
 
 
 async def acquire_lock(key: str, ex: int = 86400) -> bool:
     """
-    Атомарна операція SET NX — отримати lock.
-    Повертає True якщо lock отримано (ключа не було).
-    Повертає False якщо lock вже зайнятий (ключ існував).
-    Це єдиний правильний спосіб запобігти race condition.
+    Atomic SET NX lock.
+    Returns True if lock acquired, False if already exists or on error.
     """
     if redis_client is None:
         return False
@@ -194,5 +185,5 @@ async def acquire_lock(key: str, ex: int = 86400) -> bool:
         result = await redis_client.set(key, "1", nx=True, ex=ex)
         return result is True
     except Exception as e:
-        logger.error(f"[CACHE] Помилка acquire_lock key={key}: {e}")
+        logger.error(f"[CACHE] acquire_lock error key={key}: {e}")
         return False
