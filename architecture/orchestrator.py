@@ -1,336 +1,188 @@
-import aiohttp
 import logging
-import asyncio
-import json
-import random
-import pytz
 
-from datetime import datetime
-from typing import Optional, List, Union, Dict, Any
+from aiogram import types
+from aiogram.types import CallbackQuery, Message
 
-from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
-from cache import get_data, set_flag, KeyManager, acquire_lock, delete_data
+from architecture.event_bus import EventBus
+from architecture.events import (
+    EventEnvelope,
+    PENALTY_APPLIED,
+    REST_SELECTED,
+    SKIP_SELECTED,
+    TRAINING_SELECTED,
+    USER_REGISTERED,
+    VIDEO_UPLOADED,
+)
+from architecture.state_machine import UserFlowState, state_machine
+from cache import KeyManager, delete_data, get_data, set_flag
+from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
+from database import get_kyiv_now
+from database import register_user_from_quiz
+from phrases import get_phrase
+from referral import process_referral_logic
+from services import ActivityService, auto_delete, safe_create_task
+from ui import get_inline_menu
 
 logger = logging.getLogger(__name__)
 
-# ==============================================================================
-# TIMEZONE (single source of truth)
-# ==============================================================================
-KYIV_TZ = pytz.timezone("Europe/Kyiv")
+flow_event_bus = EventBus()
 
 
-def get_kyiv_now() -> datetime:
-    return datetime.now(KYIV_TZ)
+def mention(user: types.User) -> str:
+    return f"@{user.username or user.first_name}"
 
 
-# ==============================================================================
-# HTTP LAYER (ULTRA OPTIMIZED SINGLETON)
-# ==============================================================================
-API_SEMAPHORE = asyncio.Semaphore(20)
+async def _reply_transport(source: Message | CallbackQuery, text: str, show_alert: bool = False):
+    if isinstance(source, CallbackQuery):
+        if show_alert:
+            await source.answer(text, show_alert=True)
+            return None
 
-_session: Optional[aiohttp.ClientSession] = None
-_session_lock = asyncio.Lock()
+        sent = await source.message.answer(text)
+        await source.answer()
+        return sent
 
-
-async def get_session() -> aiohttp.ClientSession:
-    """
-    High-load safe singleton session.
-    - avoids race condition
-    - reuses TCP pool
-    - minimal lock contention
-    """
-    global _session
-
-    if _session and not _session.closed:
-        return _session
-
-    async with _session_lock:
-        if _session and not _session.closed:
-            return _session
-
-        connector = aiohttp.TCPConnector(
-            limit=100,
-            limit_per_host=30,
-            ttl_dns_cache=300,
-            enable_cleanup_closed=True,
-        )
-
-        timeout = aiohttp.ClientTimeout(
-            total=25,
-            connect=5,
-            sock_connect=5,
-            sock_read=20,
-        )
-
-        _session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-        )
-
-        logger.info("[DB] HTTP session initialized (PRODUCTION MODE)")
-
-    return _session
+    return await source.answer(text)
 
 
-async def close_db_session() -> None:
-    global _session
+async def on_user_registered(event: EventEnvelope) -> bool:
+    message: Message = event.payload["message"]
+    quiz_data = event.payload["quiz_data"]
+    user_id = event.user_id
+    nickname = event.payload["nickname"]
 
-    async with _session_lock:
-        if _session and not _session.closed:
-            await _session.close()
-            _session = None
-            logger.info("[DB] HTTP session closed")
-
-
-# ==============================================================================
-# INTERNAL CORE REQUEST (ALL TRAFFIC GOES HERE)
-# ==============================================================================
-async def _request(payload: dict, method: str = "POST") -> Any:
-    """
-    Single execution point for all GAS traffic.
-    """
-    session = await get_session()
-
-    async with API_SEMAPHORE:
-        try:
-            if method == "GET":
-                async with session.get(
-                    GOOGLE_SCRIPT_URL,
-                    params=payload,
-                    allow_redirects=True,
-                ) as resp:
-                    return await _handle_response(resp)
-
-            async with session.post(
-                GOOGLE_SCRIPT_URL,
-                json=payload,
-                allow_redirects=True,
-            ) as resp:
-                return await _handle_response(resp)
-        except Exception as e:
-            logger.error(f"[DB] critical request error: {e}")
-            return {"success": False}
-
-
-async def _handle_response(resp: aiohttp.ClientResponse) -> Any:
-    """
-    Safe JSON parsing + fallback protection.
-    """
-    try:
-        text = await resp.text()
-
-        if resp.status != 200:
-            return {"success": False, "status": resp.status}
-
-        try:
-            return json.loads(text)
-        except Exception:
-            logger.error(f"[DB] invalid JSON: {text[:200]}")
-            return {"success": False}
-
-    except Exception as e:
-        logger.error(f"[DB] response error: {e}")
-        return {"success": False}
-
-
-# ==============================================================================
-# PUBLIC API (FAST PATH FIRST)
-# ==============================================================================
-
-async def check_activity_limit(user_id: int, nickname: str, action_name: str) -> bool:
-    """
-    FAST PATH:
-    - Redis cache first
-    - no GAS call if locked
-    """
-
-    key = KeyManager.get_action_lock_key(
-        user_id, f"{action_name}:{get_kyiv_now().date()}"
-    )
-
-    cached = await get_data(key)
-    if cached is not None:
+    success = await register_user_from_quiz(user_id, nickname, quiz_data)
+    if not success:
+        await message.answer("â ï¸ Ð¢Ð¸ Ð²Ð¶Ðµ Ð² Ð±Ð°Ð·Ñ.")
         return False
 
-    res = await _request({
-        "action": "update_hp",
-        "user_id": str(user_id),
-        "nickname": nickname,
-        "action_name": action_name,
-        "hp_change": 0,
-        "is_check": "true",
-    })
+    await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+    await state_machine.register_user(user_id)
 
-    return bool(res.get("success", False))
+    ref_key = KeyManager.get_ref_key(user_id)
+    referrer_id = await get_data(ref_key)
+    if referrer_id:
+        await delete_data(ref_key)
+        safe_create_task(
+            process_referral_logic(user_id, nickname, int(str(referrer_id)), message.bot),
+            name=f"referral_{user_id}",
+        )
 
+    await message.answer("â ÐÐÐ¢ÐÐÐÐ Ð ÐÐÐÐÐÐÐ!", reply_markup=types.ReplyKeyboardRemove())
 
-async def add_activity(
-    user_id: int,
-    nickname: str,
-    action_name: str,
-    hp_change: int,
-    video_id: str = ""
-) -> Union[bool, str]:
-
-    return await update_user_activity(
-        user_id, nickname, action_name, hp_change, video_id, False
+    group_kb = types.InlineKeyboardMarkup(
+        inline_keyboard=[[
+            types.InlineKeyboardButton(text="ÐÐ¥ÐÐ Ð£ ÐÐ Ð£ÐÐ£ ðï¸", url=GROUP_LINK),
+        ]]
     )
+    await message.answer("Ð¢ÑÐ¸Ð¼Ð°Ð¹ Ð¿ÐµÑÐµÐ¿ÑÑÑÐºÑ: ð", reply_markup=group_kb)
+
+    user_mention = mention(message.from_user)
+    await message.bot.send_message(
+        REPORTS_GROUP_ID,
+        get_phrase("welcome", mention=user_mention) + "\n\nð *ÐÐ±Ð¸ÑÐ°Ð¹ ÑÑÐµÐ½ÑÐ²Ð°Ð½Ð½Ñ:*",
+        reply_markup=get_inline_menu((await message.bot.get_me()).username),
+    )
+    return True
 
 
-async def get_user_stats(user_id: int) -> Optional[Dict]:
-    res = await _request({
-        "action": "get_user",
-        "user_id": str(user_id),
-    }, method="GET")
+async def on_training_selected(event: EventEnvelope) -> bool:
+    source = event.payload["source"]
+    action = event.payload["action"]
+    user = event.payload["user"]
 
-    return res if isinstance(res, dict) else None
+    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Ð ÐµÑÑÑÑÐ°ÑÑÑ"]):
+        today = get_kyiv_now().strftime("%Y-%m-%d")
+        repeat_key = KeyManager.get_training_repeat_key(event.user_id, today)
+        repeat_count_raw = await get_data(repeat_key)
+        repeat_count = int(str(repeat_count_raw)) if repeat_count_raw is not None else 0
 
-
-# ==============================================================================
-# CORE WRITE (ZERO LOSS + IDEMPOTENCY LOCK)
-# ==============================================================================
-async def update_user_activity(
-    user_id: int,
-    nickname: str,
-    action_name: str,
-    hp_change: int,
-    video_id: str = "",
-    is_check: bool = False,
-    skip_lock: bool = False,
-) -> Union[bool, str]:
-
-    today = get_kyiv_now().strftime("%Y-%m-%d")
-    lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
-
-    if not skip_lock:
-        lock = await acquire_lock(lock_key, ex=86400)
-        if not lock:
+        if repeat_count >= 1:
             return False
 
-    payload = {
-        "action": "update_hp",
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-        "nickname": str(nickname),
-        "user_id": str(user_id),
-        "action_name": str(action_name),
-        "hp_change": int(hp_change),
-        "video_id": str(video_id),
-        "is_check": "true" if is_check else "false",
-    }
-
-    delay = RETRY_DELAY
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            res = await _request(payload)
-
-            if isinstance(res, dict):
-                if res.get("error") == "already_done" or res.get("msg") == "Already done":
-                    return "already_done"
-
-                if res.get("success"):
-                    return True
-
-            await asyncio.sleep(delay + random.uniform(0, 0.3))
-            delay *= 1.6
-
-        except Exception as e:
-            logger.error(f"[DB] retry error: {e}")
-            await asyncio.sleep(delay)
-            delay *= 1.6
-
-    if not skip_lock:
-        await delete_data(lock_key)
-    return False
-
-
-# ==============================================================================
-# USER SYSTEM
-# ==============================================================================
-async def check_user_exists(user_id: int) -> bool:
-    cache_key = KeyManager.get_reg_key(user_id)
-
-    cached = await get_data(cache_key)
-    if cached is not None:
-        return True
-
-    res = await _request({
-        "action": "check_user",
-        "user_id": str(user_id),
-    }, method="GET")
-
-    exists = bool(res.get("exists", False))
-
-    if exists:
-        await set_flag(cache_key, ex=3600)
-
-    return exists
-
-
-async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) -> bool:
-    """
-    Safe registration flow:
-    1. Check local/cache + GAS existence first.
-    2. Do not call register endpoint if user already exists.
-    3. Set registration cache only after successful registration.
-    """
-    already_exists = await check_user_exists(user_id)
-    if already_exists:
-        logger.info(f"[DB] user already exists: user_id={user_id}")
+        await set_flag(
+            repeat_key,
+            ex=ActivityService.get_seconds_until_kyiv_midnight(),
+        )
+        await _reply_transport(source, get_phrase("stop", nickname=mention(user)), show_alert=isinstance(source, CallbackQuery))
         return False
 
-    res = await _request({
-        "action": "register_user",
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-        "nickname": str(nickname),
-        "user_id": str(user_id),
-        "gender": quiz_data.get("gender", "N/A"),
-        "level": quiz_data.get("level", "N/A"),
-        "goal": str(quiz_data.get("goal", "N/A"))[:200],
-    })
+    started = await state_machine.begin_training(event.user_id, action, ttl=120)
+    if not started:
+        await _reply_transport(source, "â ï¸ ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð°ÐºÑÐ¸Ð²ÑÐ²Ð°ÑÐ¸ ÑÐµÑÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.")
+        return False
 
-    if isinstance(res, dict) and res.get("success"):
-        await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+    msg = await _reply_transport(source, get_phrase("training_start", nickname=mention(user)))
+    if msg is not None:
+        safe_create_task(auto_delete(msg, 15), name=f"auto_delete_start_{event.user_id}")
+    return True
+
+
+async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int, phrase_key: str) -> bool:
+    source = event.payload["source"]
+    user = event.payload["user"]
+
+    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Ð ÐµÑÑÑÑÐ°ÑÑÑ"]):
+        await _reply_transport(source, "Ð¡ÑÐ¾Ð³Ð¾Ð´Ð½Ñ Ð°ÐºÑÐ¸Ð²Ð½ÑÑÑÑ Ð²Ð¶Ðµ Ð±ÑÐ»Ð°! â", show_alert=isinstance(source, CallbackQuery))
+        return False
+
+    ok = await ActivityService.grant_hp(event.user_id, user.full_name, action_name, int(hp))
+    if not ok:
+        await _reply_transport(
+            source,
+            "â ï¸ ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð² ÑÐ°Ð±Ð»Ð¸ÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.",
+            show_alert=isinstance(source, CallbackQuery),
+        )
+        return False
+
+    await state_machine.complete(event.user_id)
+    await _reply_transport(source, get_phrase(phrase_key, nickname=mention(user)))
+    return True
+
+
+async def on_rest_selected(event: EventEnvelope) -> bool:
+    return await _handle_static_action(event, "Rest", HP_REST, "rest")
+
+
+async def on_skip_selected(event: EventEnvelope) -> bool:
+    return await _handle_static_action(event, "Skipped", HP_SKIP, "skip")
+
+
+async def on_video_uploaded(event: EventEnvelope) -> bool:
+    message: Message = event.payload["message"]
+    current_state = await state_machine.get_state(event.user_id)
+    if current_state != UserFlowState.VIDEO_WAITING:
+        await message.answer("â° Ð¡Ð¿Ð¾ÑÐ°ÑÐºÑ Ð²Ð¸Ð±ÐµÑÐ¸ ÑÑÐµÐ½ÑÐ²Ð°Ð½Ð½Ñ Ð² Ð¼ÐµÐ½Ñ!")
+        return False
+
+    if message.forward_from or message.forward_date:
+        await message.answer("â Ð¢ÑÐ»ÑÐºÐ¸ ÑÐ²ÑÐ¶Ñ ÐºÑÑÐ¶ÐµÑÐºÐ¸!")
+        return False
+
+    session_data = await state_machine.get_session(event.user_id)
+    if not session_data:
+        await message.answer("â° Ð¡ÐµÑÑÑ Ð²Ð¸ÑÐµÑÐ¿Ð°Ð½Ð°. ÐÐ¾ÑÐ½Ð¸ Ð·Ð°Ð½Ð¾Ð²Ð¾.")
+        return False
+
+    await state_machine.mark_processing(event.user_id, ttl=30)
+    success = await ActivityService.process_training_full_cycle(message, session_data["action"])
+    if success:
+        await state_machine.complete(event.user_id)
         return True
 
-    logger.warning(f"[DB] registration failed: user_id={user_id}, response={res}")
+    await state_machine.restore_video_waiting(event.user_id, ttl=60)
+    await message.answer("â ï¸ ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð² ÑÐ°Ð±Ð»Ð¸ÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.")
     return False
 
 
-# ==============================================================================
-# ANALYTICS
-# ==============================================================================
-async def get_weekly_top_users():
-    return await _request({"action": "get_weekly_leader"})
+async def on_penalty_applied(event: EventEnvelope) -> bool:
+    await state_machine.penalize(event.user_id)
+    return True
 
 
-async def reset_weekly_stats() -> bool:
-    res = await _request({"action": "reset_weekly_stats"})
-    return bool(res.get("success"))
-
-
-async def penalty_user(user_id: int, points: int) -> bool:
-    res = await _request({
-        "action": "penalty",
-        "user_id": str(user_id),
-        "points": int(points),
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-    })
-    return bool(res.get("success"))
-
-
-async def get_inactive_users() -> List[str]:
-    res = await _request({"action": "get_inactive"}, method="GET")
-    return res.get("success", []) if isinstance(res, dict) else []
-
-
-async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: str) -> bool:
-    res = await _request({
-        "action": "add_referral",
-        "referrer_id": str(referrer_id),
-        "new_user_id": str(new_user_id),
-        "new_user_name": new_user_name,
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-    })
-
-    return bool(res.get("success"))
+flow_event_bus.subscribe(USER_REGISTERED, on_user_registered)
+flow_event_bus.subscribe(TRAINING_SELECTED, on_training_selected)
+flow_event_bus.subscribe(REST_SELECTED, on_rest_selected)
+flow_event_bus.subscribe(SKIP_SELECTED, on_skip_selected)
+flow_event_bus.subscribe(VIDEO_UPLOADED, on_video_uploaded)
+flow_event_bus.subscribe(PENALTY_APPLIED, on_penalty_applied)
