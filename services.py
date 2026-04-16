@@ -10,10 +10,11 @@ from aiogram import types
 from aiogram.types import Message
 
 from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
-from cache import KeyManager, acquire_lock, set_flag, get_data
+from cache import KeyManager, acquire_lock, get_data
 from database import get_kyiv_now, add_activity, check_activity_limit, update_user_activity
 from phrases import get_phrase
 from config import GROUP_LINK
+from reports import build_report_keyboard
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -339,7 +340,7 @@ class ActivityService:
         Full training orchestration:
         1. calculate HP
         2. write activity
-        3. publish report to group
+        3. publish report to group with complaint button
         """
         user = message.from_user
         nickname = user.full_name
@@ -366,8 +367,16 @@ class ActivityService:
             reply_markup=back_to_group_kb,
         )
 
+        report_kb = build_report_keyboard(
+            target_uid=user.id,
+            action_type=action_type,
+        )
+
         try:
-            await message.copy_to(REPORTS_GROUP_ID)
+            await message.copy_to(
+                REPORTS_GROUP_ID,
+                reply_markup=report_kb,
+            )
         except Exception as e:
             logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
