@@ -159,10 +159,14 @@ async def web_app_receive(message: types.Message):
     user_id = message.from_user.id
     nickname = message.from_user.username or message.from_user.first_name
 
+    progress_message = None
+
     try:
         data = json.loads(message.web_app_data.data)
         if not validate_quiz(data):
             return await message.answer("❌ Дані некоректні.")
+
+        progress_message = await message.answer("⏳ Реєструю тебе в TurboTeam...")
 
         await flow_event_bus.publish(
             EventEnvelope(
@@ -177,8 +181,21 @@ async def web_app_receive(message: types.Message):
             )
         )
 
+        if progress_message:
+            try:
+                await progress_message.delete()
+            except Exception:
+                pass
+
     except Exception as e:
         logger.error(f"❌ [WEBAPP ERROR] {e}", exc_info=True)
+
+        if progress_message:
+            try:
+                await progress_message.delete()
+            except Exception:
+                pass
+
         await message.answer("❌ Критична помилка реєстрації.")
 
 # ROUTERS
