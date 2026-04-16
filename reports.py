@@ -1,12 +1,11 @@
 import logging
 
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from architecture.events import EventEnvelope, PENALTY_APPLIED
-from architecture.orchestrator import flow_event_bus
-from cache import KeyManager, acquire_lock, get_data, set_data, set_flag, delete_data
+from cache import KeyManager, acquire_lock, get_data, set_data, delete_data
 from database import get_kyiv_now, penalty_user
 
 router = Router()
@@ -100,6 +99,8 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
     today = get_kyiv_now().strftime("%Y-%m-%d")
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{today}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Street:{today}"))
+
+    from architecture.orchestrator import flow_event_bus
 
     await flow_event_bus.publish(
         EventEnvelope(
