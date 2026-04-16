@@ -19,54 +19,52 @@ logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 # ==============================================================================
-# ПАРАМЕТРИ СТРІКІВ (Можеш винести в config.py)
+# STREAK PARAMETERS
 # ==============================================================================
-STREAK_BONUS_3_DAYS = 50   # Бонус за 3 дні поспіль
-STREAK_BONUS_5_DAYS = 100  # Бонус за 5 днів поспіль
-STREAK_BONUS_7_DAYS = 200  # Бонус за тиждень вогню
+STREAK_BONUS_3_DAYS = 50
+STREAK_BONUS_5_DAYS = 100
+STREAK_BONUS_7_DAYS = 200
 
 # ==============================================================================
-# ВАЛІДАЦІЯ QUIZ-ДАНИХ
+# QUIZ VALIDATION
 # ==============================================================================
 
 def validate_quiz(data: dict) -> bool:
     """
-    Перевіряє дані з WebApp-квізу.
-    Приймає будь-які непорожні рядки — українські або англійські.
+    Validates quiz data from WebApp.
+    Accepts any non-empty strings.
     """
     try:
         logger.debug(f"[VALIDATE] Quiz data: {data}")
 
         gender = data.get("gender")
         if not isinstance(gender, str) or len(gender.strip()) == 0:
-            logger.warning(f"[VALIDATE] Невірний gender: {gender!r}")
+            logger.warning(f"[VALIDATE] Invalid gender: {gender!r}")
             return False
 
         level = data.get("level")
         if not isinstance(level, str) or len(level.strip()) == 0:
-            logger.warning(f"[VALIDATE] Невірний level: {level!r}")
+            logger.warning(f"[VALIDATE] Invalid level: {level!r}")
             return False
 
         goal = data.get("goal")
         if not isinstance(goal, str) or not (0 < len(goal) < 200):
-            logger.warning(f"[VALIDATE] Невірна ціль: {goal!r}")
+            logger.warning(f"[VALIDATE] Invalid goal: {goal!r}")
             return False
 
         return True
     except Exception as e:
-        logger.error(f"[VALIDATE] Критична помилка валідації: {e}", exc_info=True)
+        logger.error(f"[VALIDATE] Critical validation error: {e}", exc_info=True)
         return False
 
 
 # ==============================================================================
-# ДЕКОРАТОРИ
+# DECORATORS
 # ==============================================================================
 
 def handle_exceptions(default_return: Any = None):
     """
-    Декоратор: ловить виключення, логує з traceback, повертає default_return.
-    functools.wraps зберігає ім'я функції в логах (без нього всі функції
-    показуються як 'wrapper', що робить дебаг неможливим).
+    Catches exceptions, logs traceback, returns default_return.
     """
     def decorator(func: Callable):
         @functools.wraps(func)
@@ -75,7 +73,8 @@ def handle_exceptions(default_return: Any = None):
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.error(
-                    f"[SERVICE] Помилка у {func.__name__}: {e}", exc_info=True
+                    f"[SERVICE] Error in {func.__name__}: {e}",
+                    exc_info=True
                 )
                 return default_return
         return wrapper
@@ -83,15 +82,12 @@ def handle_exceptions(default_return: Any = None):
 
 
 # ==============================================================================
-# УТИЛІТИ
+# UTILITIES
 # ==============================================================================
 
 def safe_create_task(coro, name: str = "task") -> asyncio.Task:
     """
-    Створює asyncio.Task з автоматичним логуванням помилок.
-    Замінює голий asyncio.create_task() по всьому проєкту.
-    Без цього виключення в фонових задачах (auto_delete тощо) 
-    зникають мовчки і не потрапляють у Sentry.
+    Creates asyncio.Task with automatic exception logging.
     """
     task = asyncio.create_task(coro, name=name)
 
@@ -101,7 +97,7 @@ def safe_create_task(coro, name: str = "task") -> asyncio.Task:
             exc = t.exception()
             if exc:
                 logger.error(
-                    f"[TASK] Задача {name!r} завершилась з помилкою: {exc}",
+                    f"[TASK] Task {name!r} failed with error: {exc}",
                     exc_info=exc,
                 )
         except (asyncio.CancelledError, asyncio.InvalidStateError):
@@ -113,31 +109,22 @@ def safe_create_task(coro, name: str = "task") -> asyncio.Task:
 
 async def auto_delete(message: Any, delay: int = 5) -> None:
     """
-    Видаляє повідомлення через delay секунд.
-    Помилки (повідомлення вже видалено, немає прав тощо) логуються як DEBUG,
-    бо це очікувана ситуація.
+    Deletes message after delay seconds.
     """
     await asyncio.sleep(delay)
     try:
         await message.delete()
     except Exception as e:
-        logger.debug(f"[AUTO_DELETE] Не вдалось видалити: {e}")
+        logger.debug(f"[AUTO_DELETE] Failed to delete message: {e}")
 
 
 # ==============================================================================
 # ACTIVITY SERVICE
-# Вся бізнес-логіка активностей зосереджена тут.
-# HTTP-запити делеговані до database.py (єдина відповідальність).
 # ==============================================================================
 
 class ActivityService:
     """
-    Сервіс управління активностями користувачів.
-    
-    Ключове рішення — Redis SET NX як distributed lock:
-    - Атомарна операція: перевірка + встановлення за один round-trip
-    - Закриває race condition (TOCTOU) між check і write
-    - Якщо GAS недоступний, Redis-lock все одно захищає від дублікатів
+    User activity service.
     """
 
     ACTION_HP_MAPPING: dict[str, int] = {
@@ -151,27 +138,17 @@ class ActivityService:
     @handle_exceptions(default_return=False)
     async def can_user_log_activity(user_id: int, action_type: str) -> bool:
         """
-        Перевіряє чи може юзер записати активність сьогодні.
-        
-        Логіка:
-        1. Перевіряємо Redis lock (миттєво, без мережі)
-        2. Якщо lock є — відмова (вже робив сьогодні)
-        3. Якщо lock немає — йдемо в GAS для фінальної перевірки
-        
-        Lock НЕ встановлюється тут — він встановлюється в grant_hp()
-        після успішного запису. Це дозволяє retry при помилці GAS.
+        Checks whether user can log activity today.
         """
         today = get_kyiv_now().strftime("%Y-%m-%d")
         lock_key = KeyManager.get_action_lock_key(user_id, f"{action_type}:{today}")
 
-        # Швидка перевірка кешу (без запиту до GAS)
         if (await get_data(lock_key)) is not None:
             logger.info(
-                f"[SERVICE] Cache hit: uid={user_id} вже робив {action_type} сьогодні"
+                f"[SERVICE] Cache hit: uid={user_id} already did {action_type} today"
             )
             return False
 
-        # Перевірка на стороні GAS (на випадок рестарту бота)
         result = await check_activity_limit(user_id, "system", action_type)
         return bool(result)
 
@@ -179,15 +156,7 @@ class ActivityService:
     @handle_exceptions(default_return=False)
     async def check_today_report(user_id: int, ignore_actions: Optional[list[str]] = None) -> bool:
         """
-        Повертає True, якщо користувач уже має денну активність за сьогодні.
-
-        Алгоритм:
-        1. Перевіряємо Redis-ключі тільки реальних денних активностей.
-        2. Якщо в Redis нічого не знайдено — робимо fallback у GAS/БД
-           теж тільки по реальних типах активності.
-        3. Якщо хоч одна активність уже є — повертаємо True.
-
-        ignore_actions залишено в сигнатурі для сумісності контракту.
+        Returns True if user already has a daily activity today.
         """
         ignore_set = {
             str(item).strip().lower()
@@ -196,7 +165,6 @@ class ActivityService:
         }
         today = get_kyiv_now().strftime("%Y-%m-%d")
 
-        # Тільки реальні денні активності, які блокують повторний денний звіт.
         daily_actions = [
             "Gym",
             "Street",
@@ -204,7 +172,6 @@ class ActivityService:
             "Skipped",
         ]
 
-        # 1. Швидка перевірка через Redis.
         for action_name in daily_actions:
             if action_name.strip().lower() in ignore_set:
                 continue
@@ -219,7 +186,6 @@ class ActivityService:
                 )
                 return True
 
-        # 2. Fallback у GAS/БД по реальних типах активності.
         for action_name in daily_actions:
             if action_name.strip().lower() in ignore_set:
                 continue
@@ -240,33 +206,30 @@ class ActivityService:
     @handle_exceptions(default_return=0)
     async def check_and_grant_streak_bonus(user_id: int, nickname: str) -> int:
         """
-        Перевіряє серію днів і нараховує бонус.
-        Повертає суму нарахованого бонусу або 0.
+        Checks streak and grants bonus.
+        Returns granted bonus amount or 0.
         """
-        from database import get_user_stats # Імпорт тут, щоб не було циклічності
-        
+        from database import get_user_stats
+
         stats = await get_user_stats(user_id)
         if not stats:
             return 0
-        
-        # Витягуємо поточний стрік з відповіді GAS (припустимо, GAS його рахує)
-        # Або рахуємо самі на основі дати останнього тренування
+
         streak = int(stats.get("streak", 0))
-        
+
         bonus = 0
         if streak == 3:
             bonus = STREAK_BONUS_3_DAYS
         elif streak == 5:
             bonus = STREAK_BONUS_5_DAYS
-        elif streak >= 7 and streak % 7 == 0: # Кожен 7-й день
+        elif streak >= 7 and streak % 7 == 0:
             bonus = STREAK_BONUS_7_DAYS
-            
+
         if bonus > 0:
-            # Пишемо в базу окремим рядком через існуючу add_activity
             action_label = f"🔥 Streak Bonus ({streak} days)"
             await add_activity(user_id, nickname, action_label, bonus)
-            logger.info(f"[STREAK] Нараховано бонус +{bonus} HP для {nickname} за {streak} днів!")
-            
+            logger.info(f"[STREAK] Bonus +{bonus} HP granted to {nickname} for {streak} days")
+
         return bonus
 
     @staticmethod
@@ -279,27 +242,22 @@ class ActivityService:
         video_id: str = "",
     ) -> bool:
         """
-        Нараховує HP юзеру з atomic lock для запобігання дублікатів.
-        
-        Використовує SET NX (acquire_lock):
-        - Якщо lock отримано → пишемо в GAS
-        - Якщо lock вже є → відмова без запиту до GAS
-        
-        Це закриває race condition: навіть якщо два запити прийдуть
-        одночасно, тільки один отримає lock.
+        Grants HP to user with atomic Redis lock.
+        Daily lock expires at Kyiv midnight, not after 24 hours.
         """
         today = get_kyiv_now().strftime("%Y-%m-%d")
         lock_key = KeyManager.get_action_lock_key(user_id, f"{action_type}:{today}")
 
-        # Атомарний lock — основний захист від дублікатів
-        lock_acquired = await acquire_lock(lock_key, ex=86400)
+        lock_acquired = await acquire_lock(
+            lock_key,
+            ex=ActivityService.get_seconds_until_kyiv_midnight(),
+        )
         if not lock_acquired:
             logger.info(
-                f"[SERVICE] Lock зайнятий: uid={user_id} action={action_type} — дубль відхилено"
+                f"[SERVICE] Lock busy: uid={user_id} action={action_type} duplicate rejected"
             )
             return False
 
-        # Lock отримано — пишемо в GAS
         result = await update_user_activity(
             user_id,
             nickname,
@@ -311,29 +269,27 @@ class ActivityService:
         )
 
         if result == "already_done" or result is False:
-            # GAS відхилив — знімаємо lock щоб не блокувати юзера назавжди
             from cache import delete_data
             await delete_data(lock_key)
             logger.warning(
-                f"[SERVICE] GAS відхилив запис uid={user_id}, lock знято"
+                f"[SERVICE] GAS rejected write uid={user_id}, lock removed"
             )
             return False
 
-        # --- НОВИЙ БЛОК: СТРІКИ ---
-        # Якщо це було тренування (Gym/Street), запускаємо перевірку бонусу
         if action_type in ["Gym", "Street"]:
-            # Створюємо фонову задачу, щоб не змушувати юзера чекати відповіді бази
             safe_create_task(
                 ActivityService.check_and_grant_streak_bonus(user_id, nickname),
                 name=f"streak_bonus_{user_id}"
             )
 
-        logger.info(f"[SERVICE] HP GRANTED: uid={user_id} +{hp} HP за {action_type}")
+        logger.info(f"[SERVICE] HP GRANTED: uid={user_id} +{hp} HP for {action_type}")
         return True
 
     @staticmethod
     def calculate_training_hp(action_type: str = "Gym") -> int:
-        """Розраховує HP для тренування: база + рандомний бонус."""
+        """
+        Calculates HP for training: base + random bonus.
+        """
         try:
             base = int(HP_GYM) if action_type == "Gym" else int(HP_STREET)
             bonus = random.randint(int(RANDOM_HP_RANGE[0]), int(RANDOM_HP_RANGE[1]))
@@ -349,32 +305,41 @@ class ActivityService:
 
     @staticmethod
     def get_action_hp(action_type: str) -> int:
-        """Повертає фіксовані HP для відпочинку/пропуску."""
+        """
+        Returns fixed HP for rest/skip actions.
+        """
         for key, value in ActivityService.ACTION_HP_MAPPING.items():
             if key in action_type:
                 return int(value)
-        logger.warning(f"[SERVICE] Невідомий тип дії: {action_type!r}, повертаємо 0")
+        logger.warning(f"[SERVICE] Unknown action type: {action_type!r}, returning 0")
         return 0
 
     @staticmethod
     def get_kyiv_date_string() -> str:
-        """Дата у форматі DD.MM.YYYY для Google Sheets."""
+        """
+        Date in DD.MM.YYYY format for Google Sheets.
+        """
         return get_kyiv_now().strftime("%d.%m.%Y")
 
     @staticmethod
     def get_seconds_until_kyiv_midnight() -> int:
         now = get_kyiv_now()
-        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        )
         return max(1, int((next_midnight - now).total_seconds()))
 
     @staticmethod
     @handle_exceptions(default_return=False)
     async def process_training_full_cycle(message: Message, action_type: str) -> bool:
         """
-        Оркестрація тренування без зміни бізнес-логіки нарахування:
-        1. рахуємо HP
-        2. пишемо активність
-        3. публікуємо звіт у групу
+        Full training orchestration:
+        1. calculate HP
+        2. write activity
+        3. publish report to group
         """
         user = message.from_user
         nickname = user.full_name
@@ -404,7 +369,7 @@ class ActivityService:
         try:
             await message.copy_to(REPORTS_GROUP_ID)
         except Exception as e:
-            logger.warning("[SERVICE] Не вдалося скопіювати відео в групу: %s", e)
+            logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
         await message.bot.send_message(
             REPORTS_GROUP_ID,
