@@ -95,9 +95,10 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     action = event.payload["action"]
     user = event.payload["user"]
 
-    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
+    # Block only duplicate of the same training type
+    if not await ActivityService.can_user_log_activity(event.user_id, action):
         today = get_kyiv_now().strftime("%Y-%m-%d")
-        repeat_key = KeyManager.get_training_repeat_key(event.user_id, today)
+        repeat_key = KeyManager.get_training_repeat_key(event.user_id, f"{action}:{today}")
         repeat_count_raw = await get_data(repeat_key)
         repeat_count = int(str(repeat_count_raw)) if repeat_count_raw is not None else 0
 
@@ -110,7 +111,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         )
         await _reply_transport(
             source,
-            get_phrase("stop", nickname=mention(user)),
+            f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра.",
             show_alert=isinstance(source, CallbackQuery),
         )
         return False
@@ -130,11 +131,12 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     source = event.payload["source"]
     user = event.payload["user"]
 
+    # Rest / Skip should be blocked if any daily activity already exists
     if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
         await _reply_transport(
             source,
-            "Сьогодні активність вже була! ✋",
-            show_alert=isinstance(source, CallbackQuery),
+            "⚠️ На сьогодні активність уже зафіксована. Відпочинок або пропуск вдруге не записуються.",
+            show_alert=True,
         )
         return False
 
