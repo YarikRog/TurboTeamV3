@@ -2,7 +2,7 @@ from aiogram import types
 
 
 def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMarkup:
-    """Головне меню TurboTeam - тільки inline кнопки."""
+    """Main TurboTeam inline menu."""
     gym_button: types.InlineKeyboardButton
     street_button: types.InlineKeyboardButton
 
@@ -31,6 +31,12 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
             ],
             [
                 types.InlineKeyboardButton(text="🚀 Запросити друга 🔥", callback_data="invite_friend"),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📘 ПРАВИЛА СПІЛЬНОТИ",
+                    callback_data="community_rules",
+                ),
             ],
         ]
     )
