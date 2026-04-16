@@ -16,6 +16,7 @@ from database import check_user_exists, close_db_session
 from handlers import router as action_router
 from phrases import get_phrase
 from referral import router as ref_router
+from reports import router as reports_router
 from tasks import setup_scheduler
 
 from cache import redis_client, set_data, KeyManager, acquire_lock
@@ -181,6 +182,7 @@ async def web_app_receive(message: types.Message):
         await message.answer("❌ Критична помилка реєстрації.")
 
 # ROUTERS
+dp.include_router(reports_router)
 dp.include_router(ref_router)
 dp.include_router(action_router)
 
