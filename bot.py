@@ -23,7 +23,7 @@ from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
 
 # ==============================================================================
-# ЛОГУВАННЯ
+# LOGGING
 # ==============================================================================
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +41,7 @@ if SENTRY_DSN:
         traces_sample_rate=0.1,
         profiles_sample_rate=0.1,
     )
-    logger.info("🛡️ [MONITORING] Sentry ініціалізовано")
+    logger.info("🛡️ [MONITORING] Sentry initialized")
 
 # ==============================================================================
 # BOT + STORAGE
@@ -52,7 +52,7 @@ storage = RedisStorage(
 )
 
 bot = Bot(
-    token=BOT_TOKEN, 
+    token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode="Markdown", link_preview_is_disabled=True)
 )
 dp = Dispatcher(storage=storage)
@@ -65,23 +65,26 @@ dp = Dispatcher(storage=storage)
 async def cmd_rules(message: types.Message):
     await message.answer(get_phrase("rules_text"))
 
+
 @dp.message(Command("menu"), F.chat.id == REPORTS_GROUP_ID)
 async def show_menu_in_group(message: types.Message):
     bot_username = await bot.get_me()
     await message.answer(
-        "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇", 
+        "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇",
         reply_markup=get_inline_menu(bot_username.username)
     )
     await message.answer("🏆", reply_markup=get_rating_reply_keyboard())
+
 
 @dp.message(Command("panel"))
 async def admin_panel(message: types.Message):
     if message.from_user.id in ADMIN_IDS:
         me = await bot.get_me()
         await message.answer(
-            "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨", 
+            "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨",
             reply_markup=get_inline_menu(me.username)
         )
+
 
 @dp.message(CommandStart())
 async def start_handler(message: types.Message, command: CommandObject):
@@ -89,6 +92,7 @@ async def start_handler(message: types.Message, command: CommandObject):
     args = (command.args or "").strip()
     start_payload = args or "plain"
     start_key = KeyManager.get_start_dedupe_key(user_id, start_payload)
+
     if not await acquire_lock(start_key, ex=2):
         return
 
@@ -106,26 +110,44 @@ async def start_handler(message: types.Message, command: CommandObject):
             )
         )
         return
-    
-    is_registered = await check_user_exists(user_id)
-    
-    if not is_registered:
-        if args and args.isdigit():
-            await set_data(KeyManager.get_ref_key(user_id), args, ex=86400)
 
-        welcome_text = (
-            f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
-            "Ти потрапив у TurboTeam. Пройди опитування: 👇"
-        )
-        
-        kb = get_quiz_reply_keyboard(WEB_APP_URL)
-        return await message.answer(welcome_text, reply_markup=kb)
+    progress_message = await message.answer("⏳ Перевіряю твої дані, зачекай кілька секунд...")
 
-    if not args:
-        return await message.answer(
-            f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥", 
-            reply_markup=types.ReplyKeyboardRemove()
-        )
+    try:
+        is_registered = await check_user_exists(user_id)
+
+        if not is_registered:
+            if args and args.isdigit():
+                referrer_id = int(args)
+                if referrer_id != user_id:
+                    await set_data(KeyManager.get_ref_key(user_id), str(referrer_id), ex=86400)
+                else:
+                    logger.info("[START] Self-referral blocked for user_id=%s", user_id)
+
+            welcome_text = (
+                f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
+                "Ти потрапив у TurboTeam. Пройди опитування: 👇"
+            )
+
+            kb = get_quiz_reply_keyboard(WEB_APP_URL)
+            await progress_message.delete()
+            return await message.answer(welcome_text, reply_markup=kb)
+
+        await progress_message.delete()
+
+        if not args:
+            return await message.answer(
+                f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥",
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+
+    except Exception as e:
+        logger.error(f"[START] start_handler error: {e}", exc_info=True)
+        try:
+            await progress_message.delete()
+        except Exception:
+            pass
+        await message.answer("⚠️ Сталася помилка під час перевірки. Спробуй ще раз.")
 
 # ==============================================================================
 # WEB APP RECEIVE
@@ -158,20 +180,24 @@ async def web_app_receive(message: types.Message):
         logger.error(f"❌ [WEBAPP ERROR] {e}", exc_info=True)
         await message.answer("❌ Критична помилка реєстрації.")
 
-# ПІДКЛЮЧЕННЯ
+# ROUTERS
 dp.include_router(ref_router)
 dp.include_router(action_router)
+
 
 async def on_startup():
     me = await bot.get_me()
     await set_data(KeyManager.get_bot_username_key(), me.username)
     logger.info(f"🚀 Бот @{me.username} онлайн!")
 
+
 async def on_shutdown():
     logger.info("🛑 Зупинка бота...")
     await close_db_session()
-    if redis_client: await redis_client.aclose()
+    if redis_client:
+        await redis_client.aclose()
     await bot.session.close()
+
 
 async def main():
     dp.startup.register(on_startup)
@@ -183,6 +209,9 @@ async def main():
     finally:
         scheduler.shutdown()
 
+
 if __name__ == "__main__":
-    try: asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit): pass
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
