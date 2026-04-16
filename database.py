@@ -284,16 +284,9 @@ async def check_user_exists(user_id: int) -> bool:
 
 async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) -> bool:
     """
-    Safe registration flow:
-    1. Check local/cache + GAS existence first.
-    2. Do not call register endpoint if user already exists.
-    3. Set registration cache only after successful registration.
+    Registration without duplicate pre-check.
+    Existence is already checked in orchestrator before this call.
     """
-    already_exists = await check_user_exists(user_id)
-    if already_exists:
-        logger.info(f"[DB] user already exists: user_id={user_id}")
-        return False
-
     res = await _request({
         "action": "register_user",
         "date": get_kyiv_now().strftime("%d.%m.%Y"),
