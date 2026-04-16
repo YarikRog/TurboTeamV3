@@ -16,8 +16,7 @@ from architecture.events import (
 from architecture.state_machine import UserFlowState, state_machine
 from cache import KeyManager, delete_data, get_data, set_flag
 from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
-from database import get_kyiv_now
-from database import register_user_from_quiz
+from database import get_kyiv_now, register_user_from_quiz, check_user_exists
 from phrases import get_phrase
 from referral import process_referral_logic
 from services import ActivityService, auto_delete, safe_create_task
@@ -51,9 +50,14 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     user_id = event.user_id
     nickname = event.payload["nickname"]
 
+    already_exists = await check_user_exists(user_id)
+    if already_exists:
+        await message.answer("⚠️ Ти вже в базі.")
+        return False
+
     success = await register_user_from_quiz(user_id, nickname, quiz_data)
     if not success:
-        await message.answer("â ï¸ Ð¢Ð¸ Ð²Ð¶Ðµ Ð² Ð±Ð°Ð·Ñ.")
+        await message.answer("⚠️ Не вдалося завершити реєстрацію. Спробуй ще раз.")
         return False
 
     await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
@@ -68,19 +72,19 @@ async def on_user_registered(event: EventEnvelope) -> bool:
             name=f"referral_{user_id}",
         )
 
-    await message.answer("â ÐÐÐ¢ÐÐÐÐ Ð ÐÐÐÐÐÐÐ!", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=types.ReplyKeyboardRemove())
 
     group_kb = types.InlineKeyboardMarkup(
         inline_keyboard=[[
-            types.InlineKeyboardButton(text="ÐÐ¥ÐÐ Ð£ ÐÐ Ð£ÐÐ£ ðï¸", url=GROUP_LINK),
+            types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
         ]]
     )
-    await message.answer("Ð¢ÑÐ¸Ð¼Ð°Ð¹ Ð¿ÐµÑÐµÐ¿ÑÑÑÐºÑ: ð", reply_markup=group_kb)
+    await message.answer("Тримай перепустку: 👇", reply_markup=group_kb)
 
     user_mention = mention(message.from_user)
     await message.bot.send_message(
         REPORTS_GROUP_ID,
-        get_phrase("welcome", mention=user_mention) + "\n\nð *ÐÐ±Ð¸ÑÐ°Ð¹ ÑÑÐµÐ½ÑÐ²Ð°Ð½Ð½Ñ:*",
+        get_phrase("welcome", mention=user_mention) + "\n\n🚀 *Обирай тренування:*",
         reply_markup=get_inline_menu((await message.bot.get_me()).username),
     )
     return True
@@ -91,7 +95,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     action = event.payload["action"]
     user = event.payload["user"]
 
-    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Ð ÐµÑÑÑÑÐ°ÑÑÑ"]):
+    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
         today = get_kyiv_now().strftime("%Y-%m-%d")
         repeat_key = KeyManager.get_training_repeat_key(event.user_id, today)
         repeat_count_raw = await get_data(repeat_key)
@@ -104,12 +108,16 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             repeat_key,
             ex=ActivityService.get_seconds_until_kyiv_midnight(),
         )
-        await _reply_transport(source, get_phrase("stop", nickname=mention(user)), show_alert=isinstance(source, CallbackQuery))
+        await _reply_transport(
+            source,
+            get_phrase("stop", nickname=mention(user)),
+            show_alert=isinstance(source, CallbackQuery),
+        )
         return False
 
     started = await state_machine.begin_training(event.user_id, action, ttl=120)
     if not started:
-        await _reply_transport(source, "â ï¸ ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð°ÐºÑÐ¸Ð²ÑÐ²Ð°ÑÐ¸ ÑÐµÑÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.")
+        await _reply_transport(source, "⚠️ Не вдалося активувати сесію. Спробуй ще раз.")
         return False
 
     msg = await _reply_transport(source, get_phrase("training_start", nickname=mention(user)))
@@ -122,15 +130,19 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     source = event.payload["source"]
     user = event.payload["user"]
 
-    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Ð ÐµÑÑÑÑÐ°ÑÑÑ"]):
-        await _reply_transport(source, "Ð¡ÑÐ¾Ð³Ð¾Ð´Ð½Ñ Ð°ÐºÑÐ¸Ð²Ð½ÑÑÑÑ Ð²Ð¶Ðµ Ð±ÑÐ»Ð°! â", show_alert=isinstance(source, CallbackQuery))
+    if await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"]):
+        await _reply_transport(
+            source,
+            "Сьогодні активність вже була! ✋",
+            show_alert=isinstance(source, CallbackQuery),
+        )
         return False
 
     ok = await ActivityService.grant_hp(event.user_id, user.full_name, action_name, int(hp))
     if not ok:
         await _reply_transport(
             source,
-            "â ï¸ ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð² ÑÐ°Ð±Ð»Ð¸ÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.",
+            "⚠️ Помилка запису в таблицю. Спробуй ще раз.",
             show_alert=isinstance(source, CallbackQuery),
         )
         return False
@@ -152,16 +164,16 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     message: Message = event.payload["message"]
     current_state = await state_machine.get_state(event.user_id)
     if current_state != UserFlowState.VIDEO_WAITING:
-        await message.answer("â° Ð¡Ð¿Ð¾ÑÐ°ÑÐºÑ Ð²Ð¸Ð±ÐµÑÐ¸ ÑÑÐµÐ½ÑÐ²Ð°Ð½Ð½Ñ Ð² Ð¼ÐµÐ½Ñ!")
+        await message.answer("⏰ Спочатку вибери тренування в меню!")
         return False
 
     if message.forward_from or message.forward_date:
-        await message.answer("â Ð¢ÑÐ»ÑÐºÐ¸ ÑÐ²ÑÐ¶Ñ ÐºÑÑÐ¶ÐµÑÐºÐ¸!")
+        await message.answer("❌ Тільки свіжі кружечки!")
         return False
 
     session_data = await state_machine.get_session(event.user_id)
     if not session_data:
-        await message.answer("â° Ð¡ÐµÑÑÑ Ð²Ð¸ÑÐµÑÐ¿Ð°Ð½Ð°. ÐÐ¾ÑÐ½Ð¸ Ð·Ð°Ð½Ð¾Ð²Ð¾.")
+        await message.answer("⏰ Сесія вичерпана. Почни заново.")
         return False
 
     await state_machine.mark_processing(event.user_id, ttl=30)
@@ -171,7 +183,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
         return True
 
     await state_machine.restore_video_waiting(event.user_id, ttl=60)
-    await message.answer("â ï¸ ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð·Ð°Ð¿Ð¸ÑÑ Ð² ÑÐ°Ð±Ð»Ð¸ÑÑ. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.")
+    await message.answer("⚠️ Помилка запису в таблицю. Спробуй ще раз.")
     return False
 
 
