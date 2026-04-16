@@ -6,23 +6,23 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, User
 
 from config import HP_REF_BATA, HP_REF_NEWBIE, REPORTS_GROUP_ID
-from cache import get_data, set_data, set_flag, KeyManager
+from cache import get_data, set_data, set_flag, delete_data, KeyManager
 from services import ActivityService, safe_create_task
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-REF_COOLDOWN = 60  # секунд між повторними натисканнями кнопки "Запросити"
+REF_COOLDOWN = 60  # seconds between repeated clicks on "Invite a friend"
 
 
 # ==============================================================================
-# ХЕЛПЕР: ЮЗЕРНеЙМ БОТА
+# HELPER: BOT USERNAME
 # ==============================================================================
 
 async def get_bot_username(bot: Bot) -> str:
     """
-    Повертає юзернейм бота з Redis кешу.
-    Fallback: запит до Telegram API (кешується на 1 годину).
+    Returns bot username from Redis cache.
+    Fallback: Telegram API request, then cache for 1 hour.
     """
     cache_key = KeyManager.get_bot_username_key()
     cached = await get_data(cache_key)
@@ -35,16 +35,15 @@ async def get_bot_username(bot: Bot) -> str:
 
 
 # ==============================================================================
-# HANDLER: КНОПКА "ЗАПРОСИТИ ДРУГА"
+# HANDLER: "INVITE A FRIEND" BUTTON
 # ==============================================================================
 
 async def send_invite_prompt(message: Message, actor: User, delete_origin: bool = False):
     uid = actor.id
 
-    # Антиспам через KeyManager (консистентний ключ з префіксом)
     spam_key = KeyManager.get_ref_cooldown_key(uid)
     if (await get_data(spam_key)) is not None:
-        return  # Тихий ігнор — не засмічуємо чат
+        return
 
     await set_flag(spam_key, ex=REF_COOLDOWN)
 
@@ -90,7 +89,7 @@ async def invite_friend_handler(message: Message):
 
 
 # ==============================================================================
-# ЛОГІКА РЕФЕРАЛА
+# REFERRAL LOGIC
 # ==============================================================================
 
 async def process_referral_logic(
@@ -100,23 +99,25 @@ async def process_referral_logic(
     bot: Bot,
 ) -> None:
     """
-    Нараховує HP обом сторонам і надсилає сповіщення.
-    
-    Антидублікат через KeyManager.get_ref_processed_key() —
-    ключ живе 86400 секунд (1 день), що унеможливлює повторне нарахування
-    навіть при рестарті бота.
+    Grants referral HP to both users and sends notifications.
+
+    Protection logic:
+    - dedupe key prevents duplicate processing
+    - if flow fails before completion, dedupe key is rolled back
     """
-    # ВИПРАВЛЕНО: використовуємо KeyManager замість сирого f-string
     anti_spam_key = KeyManager.get_ref_processed_key(new_user_id)
     if (await get_data(anti_spam_key)) is not None:
-        logger.info(f"[REFERRAL] Дублікат реферала для uid={new_user_id} — ігнорується")
+        logger.info(f"[REFERRAL] Duplicate referral for uid={new_user_id} ignored")
         return
 
-    # ВИПРАВЛЕНО: зберігаємо "1" а не True
-    await set_flag(anti_spam_key, ex=86400)
+    lock_set = await set_flag(anti_spam_key, ex=86400)
+    if not lock_set:
+        logger.warning(f"[REFERRAL] Failed to set referral lock for uid={new_user_id}")
+        return
+
+    completed = False
 
     try:
-        # Визначаємо ім'я реферера (безпечно)
         ref_name = f"ID:{referrer_id}"
         try:
             member = await bot.get_chat_member(REPORTS_GROUP_ID, referrer_id)
@@ -128,11 +129,12 @@ async def process_referral_logic(
         except Exception as e:
             logger.debug(f"[REFERRAL] get_chat_member failed: {e}")
 
-        # Нарахування HP через ActivityService (без прямих імпортів database)
         referrer_granted = await ActivityService.grant_hp(
             referrer_id, ref_name, "Referral Bonus", HP_REF_BATA
         )
+
         await asyncio.sleep(0.5)
+
         newbie_granted = await ActivityService.grant_hp(
             new_user_id, new_nickname, "Welcome Bonus", HP_REF_NEWBIE
         )
@@ -147,7 +149,6 @@ async def process_referral_logic(
             )
             return
 
-        # Сповіщення в групу
         await bot.send_message(
             chat_id=REPORTS_GROUP_ID,
             text=(
@@ -158,7 +159,6 @@ async def process_referral_logic(
             parse_mode="Markdown",
         )
 
-        # Сповіщення реферера (фонова задача — не блокуємо основний флоу)
         async def _notify_referrer():
             try:
                 await bot.send_message(
@@ -169,10 +169,18 @@ async def process_referral_logic(
                     ),
                 )
             except Exception as e:
-                # Очікувана помилка: юзер заблокував бота
-                logger.debug(f"[REFERRAL] Не вдалось сповістити uid={referrer_id}: {e}")
+                logger.debug(f"[REFERRAL] Failed to notify uid={referrer_id}: {e}")
 
         safe_create_task(_notify_referrer(), name=f"notify_referrer_{referrer_id}")
+        completed = True
 
     except Exception as e:
         logger.error(f"[REFERRAL] process_referral_logic error: {e}", exc_info=True)
+
+    finally:
+        if not completed:
+            rollback_ok = await delete_data(anti_spam_key)
+            if rollback_ok:
+                logger.info(f"[REFERRAL] Rollback referral lock for uid={new_user_id}")
+            else:
+                logger.warning(f"[REFERRAL] Failed to rollback referral lock for uid={new_user_id}")
