@@ -7,6 +7,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, U
 
 from config import HP_REF_BATA, HP_REF_NEWBIE, REPORTS_GROUP_ID
 from cache import get_data, set_data, set_flag, delete_data, KeyManager
+from database import add_referral_bonus
 from services import ActivityService, safe_create_task
 
 router = Router()
@@ -99,7 +100,8 @@ async def process_referral_logic(
     bot: Bot,
 ) -> None:
     """
-    Grants referral HP to both users and sends notifications.
+    Grants referral HP to both users, writes referral record to GAS,
+    and sends notifications.
 
     Protection logic:
     - dedupe key prevents duplicate processing
@@ -148,6 +150,18 @@ async def process_referral_logic(
                 referrer_id,
             )
             return
+
+        referral_log_written = await add_referral_bonus(
+            referrer_id=referrer_id,
+            new_user_id=new_user_id,
+            new_user_name=new_nickname,
+        )
+        if not referral_log_written:
+            logger.warning(
+                "[REFERRAL] Referral sheet write failed new_user_id=%s referrer_id=%s",
+                new_user_id,
+                referrer_id,
+            )
 
         await bot.send_message(
             chat_id=REPORTS_GROUP_ID,
