@@ -102,10 +102,6 @@ async def on_user_registered(event: EventEnvelope) -> bool:
         )
         logger.info("[REG] referral task scheduled user_id=%s took %sms", user_id, _ms(t))
 
-    t = time.perf_counter()
-    await message.answer("✅ ВІТАЄМО В КОМАНДІ!", reply_markup=types.ReplyKeyboardRemove())
-    logger.info("[REG] welcome answer user_id=%s took %sms", user_id, _ms(t))
-
     group_kb = types.InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -120,9 +116,22 @@ async def on_user_registered(event: EventEnvelope) -> bool:
         ]
     )
 
+    onboarding_text = (
+        "Вітаємо в команді 🔥\n\n"
+        "Щоб заробляти HP, обирай Gym або Street у Turbo-панелі й надсилай "
+        "відео-кружечок у бот 🤳\n\n"
+        "Це потрібно як підтвердження, що ти справді тренувався 💪\n\n"
+        "Якщо сьогодні відпочинок — просто натисни «Відпочинок» 😌\n\n"
+        "Без спаму — у нас Turbo-контроль 😎\n\n"
+        "Тримай перепустку в групу 👇"
+    )
+
     t = time.perf_counter()
-    await message.answer("Тримай перепустку: 👇", reply_markup=group_kb)
-    logger.info("[REG] pass answer user_id=%s took %sms", user_id, _ms(t))
+    await message.answer(
+        onboarding_text,
+        reply_markup=group_kb,
+    )
+    logger.info("[REG] onboarding answer user_id=%s took %sms", user_id, _ms(t))
 
     user_mention = mention(message.from_user)
 
@@ -270,8 +279,15 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         )
         return False
 
+    training_instruction = (
+        f"Ти обрав {action} 💪\n\n"
+        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 2 хвилин 🤳\n\n"
+        "Кружечок потрібен як підтвердження, що ти реально тренувався 🔥\n\n"
+        "Після цього тренування зарахується, і ти отримаєш HP ⚡️"
+    )
+
     t = time.perf_counter()
-    msg = await _reply_transport(source, get_phrase("training_start", nickname=mention(user)))
+    msg = await _reply_transport(source, training_instruction)
     logger.info(
         "[TRAIN] training_start reply user_id=%s action=%s took %sms",
         event.user_id,
@@ -407,7 +423,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
-    await state_machine.mark_processing(event.user_id, ttl=30)
+    await state_machine.mark_processing(event.user_id, ttl=60)
     logger.info("[VIDEO] mark_processing user_id=%s took %sms", event.user_id, _ms(t))
 
     t = time.perf_counter()
