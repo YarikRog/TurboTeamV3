@@ -15,7 +15,7 @@ from architecture.events import (
     VIDEO_UPLOADED,
 )
 from architecture.state_machine import UserFlowState, state_machine
-from cache import KeyManager, delete_data, get_data, set_flag
+from cache import KeyManager, delete_data, get_data, set_flag, set_data
 from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
 from database import get_kyiv_now, register_user_from_quiz, check_user_exists
 from phrases import get_phrase
@@ -160,9 +160,9 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
     if not can_log:
         today = get_kyiv_now().strftime("%Y-%m-%d")
+        repeat_key = KeyManager.get_training_repeat_key(event.user_id, f"{action}:{today}")
 
         t = time.perf_counter()
-        repeat_key = KeyManager.get_training_repeat_key(event.user_id, f"{action}:{today}")
         repeat_count_raw = await get_data(repeat_key)
         logger.info(
             "[TRAIN] get repeat key user_id=%s action=%s took %sms",
@@ -172,25 +172,19 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         )
 
         repeat_count = int(str(repeat_count_raw)) if repeat_count_raw is not None else 0
-
-        if repeat_count >= 1:
-            logger.info(
-                "[TRAIN] duplicate suppressed silently user_id=%s action=%s total=%sms",
-                event.user_id,
-                action,
-                _ms(total_started),
-            )
-            return False
+        next_count = repeat_count + 1
 
         t = time.perf_counter()
-        await set_flag(
+        await set_data(
             repeat_key,
+            next_count,
             ex=ActivityService.get_seconds_until_kyiv_midnight(),
         )
         logger.info(
-            "[TRAIN] set repeat key user_id=%s action=%s took %sms",
+            "[TRAIN] set repeat counter user_id=%s action=%s count=%s took %sms",
             event.user_id,
             action,
+            next_count,
             _ms(t),
         )
 
@@ -200,23 +194,61 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             ]]
         )
 
-        t = time.perf_counter()
-        msg = await source.message.answer(
-            f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра.",
-            reply_markup=back_to_group_kb,
-        )
-        await source.answer()
+        async def _send_with_button(text: str):
+            if isinstance(source, CallbackQuery):
+                msg = await source.message.answer(text, reply_markup=back_to_group_kb)
+                await source.answer()
+                return msg
+
+            return await source.answer(text, reply_markup=back_to_group_kb)
+
+        if next_count == 1:
+            t = time.perf_counter()
+            msg = await _send_with_button(
+                f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра."
+            )
+            logger.info(
+                "[TRAIN] duplicate first warning user_id=%s action=%s took %sms total=%sms",
+                event.user_id,
+                action,
+                _ms(t),
+                _ms(total_started),
+            )
+
+            if msg is not None:
+                safe_create_task(
+                    auto_delete(msg, 60),
+                    name=f"auto_delete_train_duplicate_{event.user_id}_{action}",
+                )
+            return False
+
+        if next_count == 2:
+            t = time.perf_counter()
+            msg = await _send_with_button(get_phrase("spam", nickname=mention(user)))
+            logger.info(
+                "[TRAIN] duplicate spam warning user_id=%s action=%s took %sms total=%sms",
+                event.user_id,
+                action,
+                _ms(t),
+                _ms(total_started),
+            )
+
+            if msg is not None:
+                safe_create_task(
+                    auto_delete(msg, 60),
+                    name=f"auto_delete_train_spam_{event.user_id}_{action}",
+                )
+            return False
+
+        if isinstance(source, CallbackQuery):
+            await source.answer("На сьогодні досить ⛔️\nТи вже тренувався 🔥", show_alert=True)
+
         logger.info(
-            "[TRAIN] duplicate reply user_id=%s action=%s took %sms total=%sms",
+            "[TRAIN] duplicate hard-block user_id=%s action=%s total=%sms",
             event.user_id,
             action,
-            _ms(t),
             _ms(total_started),
         )
-
-        if msg is not None:
-            safe_create_task(auto_delete(msg, 60), name=f"auto_delete_train_duplicate_{event.user_id}_{action}")
-
         return False
 
     t = time.perf_counter()
