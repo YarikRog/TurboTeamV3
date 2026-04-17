@@ -71,7 +71,6 @@ async def handle_static_actions(callback: CallbackQuery):
     event_name = REST_SELECTED if callback.data == "action_rest" else SKIP_SELECTED
 
     try:
-        await callback.answer()
 
         await flow_event_bus.publish(
             EventEnvelope(
