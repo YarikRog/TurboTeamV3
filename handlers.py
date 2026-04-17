@@ -34,12 +34,11 @@ async def handle_invite_friend(callback: CallbackQuery):
 async def handle_community_rules(callback: CallbackQuery):
     rules_text = (
         "📘 Правила TurboTeam\n\n"
-        "• Кидай тільки свіжі кружечки\n"
-        "• Не заливай фейки й старі відео\n"
-        "• Не спам у чаті та по кнопках\n"
-        "• Спілкуйся нормально, без токсичності\n"
-        "• Без політики та сварок\n"
-        "• За порушення можуть зняти HP"
+        "• Тільки свіжі кружечки\n"
+        "• Без фейків\n"
+        "• Без спаму\n"
+        "• Без токсичності\n"
+        "• За порушення знімаємо HP"
     )
     await callback.answer(rules_text, show_alert=True)
 
