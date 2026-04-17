@@ -194,12 +194,18 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             _ms(t),
         )
 
-        t = time.perf_counter()
-        await _reply_transport(
-            source,
-            f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра.",
-            show_alert=isinstance(source, CallbackQuery),
+        back_to_group_kb = types.InlineKeyboardMarkup(
+            inline_keyboard=[[
+                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK)
+            ]]
         )
+
+        t = time.perf_counter()
+        msg = await source.message.answer(
+            f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра.",
+            reply_markup=back_to_group_kb,
+        )
+        await source.answer()
         logger.info(
             "[TRAIN] duplicate reply user_id=%s action=%s took %sms total=%sms",
             event.user_id,
@@ -207,6 +213,10 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             _ms(t),
             _ms(total_started),
         )
+
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 60), name=f"auto_delete_train_duplicate_{event.user_id}_{action}")
+
         return False
 
     t = time.perf_counter()
