@@ -22,6 +22,7 @@ from tasks import setup_scheduler
 from cache import redis_client, set_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
+from supabase_db import get_supabase
 
 # ==============================================================================
 # LOGGING
@@ -85,6 +86,21 @@ async def admin_panel(message: types.Message):
             "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨",
             reply_markup=get_inline_menu(me.username)
         )
+
+
+@dp.message(Command("sbtest"))
+async def supabase_test(message: types.Message):
+    try:
+        sb = get_supabase()
+        response = sb.table("users").select("id", count="exact").limit(1).execute()
+        await message.answer(
+            f"✅ Supabase підключений\n"
+            f"Таблиця users доступна\n"
+            f"Кількість записів: {response.count or 0}"
+        )
+    except Exception as e:
+        logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
+        await message.answer(f"❌ Supabase test failed:\n{e}")
 
 
 @dp.message(CommandStart())
