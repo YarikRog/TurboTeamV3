@@ -104,8 +104,8 @@ async def supabase_test(message: types.Message):
             f"Кількість записів: {response.count or 0}"
         )
     except Exception as e:
-        logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
-        await message.answer(f"❌ Supabase test failed:\n{e}")
+    logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
+    await message.answer("❌ Supabase add activity failed. Дивись логи.")
 
 
 @dp.message(Command("sbadd"))
