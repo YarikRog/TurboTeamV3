@@ -7,3 +7,4 @@ pytz
 apscheduler
 Pillow
 sentry-sdk
+supabase
