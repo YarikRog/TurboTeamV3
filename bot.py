@@ -27,6 +27,7 @@ from supabase_db import (
     get_user_by_telegram_id,
     create_user,
     add_activity,
+    add_referral,
 )
 
 # ==============================================================================
@@ -161,6 +162,41 @@ async def supabase_add_activity(message: types.Message):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
         await message.answer("❌ Supabase add activity failed. Дивись логи.")
+
+
+@dp.message(Command("sbaddref"))
+async def supabase_add_ref(message: types.Message, command: CommandObject):
+    try:
+        args = (command.args or "").strip()
+        if not args.isdigit():
+            await message.answer("❌ Використання: /sbaddref TELEGRAM_USER_ID_РЕФЕРЕРА")
+            return
+
+        new_user = await get_user_by_telegram_id(message.from_user.id)
+        if not new_user:
+            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
+            return
+
+        referrer_telegram_id = int(args)
+        referrer_user = await get_user_by_telegram_id(referrer_telegram_id)
+        if not referrer_user:
+            await message.answer("❌ Реферера з таким Telegram ID немає в Supabase")
+            return
+
+        if referrer_user["id"] == new_user["id"]:
+            await message.answer("❌ Не можна створити реферал самому собі")
+            return
+
+        await add_referral(
+            referrer_user_id=referrer_user["id"],
+            new_user_id=new_user["id"],
+            points=150,
+        )
+
+        await message.answer("✅ Реферал додано в Supabase")
+    except Exception as e:
+        logger.error(f"[SUPABASE] /sbaddref error: {e}", exc_info=True)
+        await message.answer("❌ Supabase add referral failed. Дивись логи.")
 
 
 @dp.message(CommandStart())
