@@ -110,6 +110,12 @@ async def start_handler(message: types.Message, command: CommandObject):
                 idempotency_key=f"training-select:{user_id}:{message.message_id}",
             )
         )
+
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.debug(f"[START] Failed to delete /start message: {e}")
+
         return
 
     progress_message = await message.answer("⏳ Перевіряю твої дані, зачекай кілька секунд...")
