@@ -268,7 +268,7 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
         t = time.perf_counter()
         await _reply_transport(
             source,
-            "⚠️ На сьогодні активність уже зафіксована. Відпочинок або пропуск вдруге не записуються.",
+            "💪 На сьогодні вже досить. Ти вже зафіксував свою активність.",
             show_alert=True,
         )
         logger.info(
@@ -313,7 +313,7 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     )
 
     t = time.perf_counter()
-    await _reply_transport(source, get_phrase(phrase_key, nickname=mention(user)))
+    msg = await _reply_transport(source, get_phrase(phrase_key, nickname=mention(user)))
     logger.info(
         "[STATIC] success reply user_id=%s action=%s took %sms total=%sms",
         event.user_id,
@@ -321,6 +321,10 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
         _ms(t),
         _ms(total_started),
     )
+
+    if msg is not None:
+        safe_create_task(auto_delete(msg, 15), name=f"auto_delete_static_{event.user_id}_{action_name}")
+
     return True
 
 
