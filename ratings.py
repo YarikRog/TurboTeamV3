@@ -1,6 +1,5 @@
 import logging
 import random
-import asyncio
 from typing import Optional, Dict, Any
 
 from aiogram.types import Message, User
@@ -56,7 +55,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 
 async def show_rating_for_user(message: Message, actor: User) -> Optional[Message]:
     """
-    Формує та виводить рейтинг з кількістю рефералів та самознищенням.
+    Формує та виводить рейтинг з рефералами під кожним гравцем і самознищенням.
     """
     uid = actor.id
 
@@ -82,7 +81,6 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
         top_list = data.get("top", [])
         user_rank = data.get("user_rank", "?")
         user_hp = data.get("user_hp", 0)
-        referrals_count = data.get("referrals_count", 0)
 
         text = "🏆 *РЕЙТИНГ ТИЖНЯ*\n\n"
 
@@ -96,12 +94,16 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
             else:
                 icon = f"{i + 1}."
 
-            text += f"{icon} {player['nick']} — {player['hp']} HP\n"
+            nick = player.get("nick", "Unknown")
+            hp = player.get("hp", 0)
+            refs = player.get("referrals_count", 0)
+
+            text += f"{icon} {nick} — {hp} HP\n"
+            text += f"   Рефералів: {refs}\n\n"
 
         text += (
-            f"\n----------------\n"
-            f"Твоє місце: *{user_rank}* | Твої HP: *{user_hp}*\n"
-            f"Рефералів: *{referrals_count}*"
+            "----------------\n"
+            f"Твоє місце: *{user_rank}* | Твої HP: *{user_hp}*"
         )
 
     except Exception as e:
