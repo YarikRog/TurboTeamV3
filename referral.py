@@ -52,9 +52,8 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
     referral_link = f"https://t.me/{bot_username}?start={uid}"
 
     share_text = (
-        f"Бро, вривайся в TurboTeam! 🏎️\n"
-        f"Тренуйся, заробляй HP та забирай топ 🔥\n\n"
-        f"Твій інвайт: {referral_link}"
+        "Запрошую тебе в TurboTeam 🏎️\n"
+        "Тут можна тренуватись, заробляти HP і ловити азарт від прогресу 🔥"
     )
     share_url = (
         f"https://t.me/share/url?"
@@ -63,7 +62,7 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[[
-            InlineKeyboardButton(text="ВІДПРАВИТИ ДРУГУ 🔗", url=share_url)
+            InlineKeyboardButton(text="Натискай сюди 👈", url=share_url)
         ]]
     )
 
@@ -75,10 +74,10 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
 
     await message.answer(
         f"🚀 **ЧАС РОЗШИРЮВАТИ КОМАНДУ!**\n\n"
-        f"За кожного кента, який вривається:\n"
+        f"За кожного нового учасника:\n"
         f"🏆 Тобі: **+{HP_REF_BATA} HP**\n"
-        f"💪 Другу: **+{HP_REF_NEWBIE} HP**\n\n"
-        "Тисни кнопку нижче, щоб відправити інвайт 👇",
+        f"💪 Новачку: **+{HP_REF_NEWBIE} HP**\n\n"
+        "Тисни кнопку нижче, щоб відправити запрошення 👇",
         reply_markup=kb,
         parse_mode="Markdown",
     )
@@ -168,7 +167,7 @@ async def process_referral_logic(
             text=(
                 f"🏎️ **TURBO-ПОПОВНЕННЯ!**\n\n"
                 f"Новий гравець @{new_nickname} (+{HP_REF_NEWBIE} HP)\n"
-                f"Прийшов за запитом від: **{ref_name}** (+{HP_REF_BATA} HP) 🔥"
+                f"Прийшов за запрошенням від: **{ref_name}** (+{HP_REF_BATA} HP) 🔥"
             ),
             parse_mode="Markdown",
         )
@@ -178,8 +177,9 @@ async def process_referral_logic(
                 await bot.send_message(
                     chat_id=referrer_id,
                     text=(
-                        f"🔥 Твій кент @{new_nickname} зайшов!\n"
-                        f"+{HP_REF_BATA} HP тобі вже нарахований 💪"
+                        f"🔥 Твоє запрошення спрацювало!\n"
+                        f"@{new_nickname} приєднався до TurboTeam,\n"
+                        f"а тобі вже нараховано +{HP_REF_BATA} HP 💪"
                     ),
                 )
             except Exception as e:
