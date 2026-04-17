@@ -30,18 +30,12 @@ from supabase_db import (
     add_referral,
 )
 
-# ==============================================================================
-# LOGGING
-# ==============================================================================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ==============================================================================
-# MONITORING (Sentry)
-# ==============================================================================
 SENTRY_DSN = os.getenv("SENTRY_DSN")
 if SENTRY_DSN:
     sentry_sdk.init(
@@ -51,9 +45,6 @@ if SENTRY_DSN:
     )
     logger.info("🛡️ [MONITORING] Sentry initialized")
 
-# ==============================================================================
-# BOT + STORAGE
-# ==============================================================================
 storage = RedisStorage(
     redis=redis_client,
     key_builder=DefaultKeyBuilder(with_destiny=True, prefix="turbo_fsm"),
@@ -65,9 +56,6 @@ bot = Bot(
 )
 dp = Dispatcher(storage=storage)
 
-# ==============================================================================
-# COMMANDS
-# ==============================================================================
 
 @dp.message(Command("rules"))
 async def cmd_rules(message: types.Message):
@@ -169,7 +157,7 @@ async def supabase_add_ref(message: types.Message, command: CommandObject):
     try:
         args = (command.args or "").strip()
         if not args.isdigit():
-            await message.answer("❌ Використання: /sbaddref TELEGRAM_USER_ID_РЕФЕРЕРА")
+            await message.answer("❌ Використання: /sbaddref 1118823479")
             return
 
         new_user = await get_user_by_telegram_id(message.from_user.id)
@@ -268,9 +256,6 @@ async def start_handler(message: types.Message, command: CommandObject):
             pass
         await message.answer("⚠️ Сталася помилка під час перевірки. Спробуй ще раз.")
 
-# ==============================================================================
-# WEB APP RECEIVE
-# ==============================================================================
 
 @dp.message(F.web_app_data)
 async def web_app_receive(message: types.Message):
@@ -316,7 +301,7 @@ async def web_app_receive(message: types.Message):
 
         await message.answer("❌ Критична помилка реєстрації.")
 
-# ROUTERS
+
 dp.include_router(reports_router)
 dp.include_router(ref_router)
 dp.include_router(action_router)
