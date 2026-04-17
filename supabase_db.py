@@ -115,6 +115,19 @@ async def get_user_activities(user_id: str, limit: int = 50) -> List[Dict[str, A
     return response.data or []
 
 
+async def get_user_activities_count(user_id: str) -> int:
+    sb = get_supabase()
+
+    response = (
+        sb.table("activities")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    return response.count or 0
+
+
 # ==============================================================================
 # REFERRALS
 # ==============================================================================
