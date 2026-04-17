@@ -22,7 +22,12 @@ from tasks import setup_scheduler
 from cache import redis_client, set_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
-from supabase_db import get_supabase, get_user_by_telegram_id, create_user
+from supabase_db import (
+    get_supabase,
+    get_user_by_telegram_id,
+    create_user,
+    add_activity,
+)
 
 # ==============================================================================
 # LOGGING
@@ -132,6 +137,35 @@ async def supabase_add_user(message: types.Message):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbadd error: {e}", exc_info=True)
         await message.answer(f"❌ Supabase add user failed:\n{e}")
+
+
+@dp.message(Command("sbaddactivity"))
+async def supabase_add_activity(message: types.Message):
+    try:
+        telegram_user_id = message.from_user.id
+        existing_user = await get_user_by_telegram_id(telegram_user_id)
+
+        if not existing_user:
+            await message.answer("❌ Юзера немає в Supabase. Спочатку виконай /sbadd")
+            return
+
+        activity = await add_activity(
+            user_id=existing_user["id"],
+            action_name="Gym",
+            hp_change=100,
+            video_status="✅",
+            video_id="sbtest-video",
+        )
+
+        await message.answer(
+            "✅ Активність додано в Supabase\n"
+            f"user_id: {activity.get('user_id')}\n"
+            f"action_name: {activity.get('action_name')}\n"
+            f"hp_change: {activity.get('hp_change')}"
+        )
+    except Exception as e:
+        logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
+        await message.answer(f"❌ Supabase add activity failed:\n{e}")
 
 
 @dp.message(CommandStart())
