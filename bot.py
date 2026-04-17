@@ -22,7 +22,7 @@ from tasks import setup_scheduler
 from cache import redis_client, set_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
-from supabase_db import get_supabase
+from supabase_db import get_supabase, get_user_by_telegram_id, create_user
 
 # ==============================================================================
 # LOGGING
@@ -101,6 +101,37 @@ async def supabase_test(message: types.Message):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
         await message.answer(f"❌ Supabase test failed:\n{e}")
+
+
+@dp.message(Command("sbadd"))
+async def supabase_add_user(message: types.Message):
+    try:
+        telegram_user_id = message.from_user.id
+        nickname = message.from_user.username or message.from_user.first_name
+
+        existing_user = await get_user_by_telegram_id(telegram_user_id)
+        if existing_user:
+            await message.answer(
+                "ℹ️ Юзер уже є в Supabase\n"
+                f"nickname: {existing_user.get('nickname')}\n"
+                f"telegram_user_id: {existing_user.get('telegram_user_id')}"
+            )
+            return
+
+        new_user = await create_user(
+            telegram_user_id=telegram_user_id,
+            nickname=nickname,
+        )
+
+        await message.answer(
+            "✅ Юзера створено в Supabase\n"
+            f"id: {new_user.get('id')}\n"
+            f"nickname: {new_user.get('nickname')}\n"
+            f"telegram_user_id: {new_user.get('telegram_user_id')}"
+        )
+    except Exception as e:
+        logger.error(f"[SUPABASE] /sbadd error: {e}", exc_info=True)
+        await message.answer(f"❌ Supabase add user failed:\n{e}")
 
 
 @dp.message(CommandStart())
