@@ -36,13 +36,14 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 
     try:
         result = await _request(payload, method="POST")
+        logger.info(f"[RATINGS] GAS raw response for uid={user_id}: {result}")
 
         if isinstance(result, dict) and "top" in result:
             ttl = random.randint(60, 120)
             await set_data(cache_key, result, ex=ttl)
             return result
 
-        logger.warning(f"[RATINGS] Invalid GAS response for uid={user_id}")
+        logger.warning(f"[RATINGS] Invalid GAS response for uid={user_id}: {result}")
     except Exception as e:
         logger.error(f"[RATINGS] Request failed for uid={user_id}: {e}")
 
