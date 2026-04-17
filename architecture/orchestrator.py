@@ -21,7 +21,6 @@ from database import get_kyiv_now, register_user_from_quiz, check_user_exists
 from phrases import get_phrase
 from referral import process_referral_logic
 from services import ActivityService, auto_delete, safe_create_task
-from ui import get_inline_menu
 
 logger = logging.getLogger(__name__)
 
@@ -135,15 +134,18 @@ async def on_user_registered(event: EventEnvelope) -> bool:
 
     user_mention = mention(message.from_user)
 
-    t = time.perf_counter()
-    bot_me = await message.bot.get_me()
-    logger.info("[REG] bot.get_me user_id=%s took %sms", user_id, _ms(t))
+    group_welcome_text = (
+        get_phrase("welcome", mention=user_mention)
+        + "\n\n"
+        + "Освоюйся в TurboTeam 👀\n"
+        + "Усі дії, Turbo-панель і правила — у закріплених повідомленнях групи 👆"
+    )
 
     t = time.perf_counter()
     await message.bot.send_message(
         REPORTS_GROUP_ID,
-        get_phrase("welcome", mention=user_mention) + "\n\n🚀 *Обирай тренування:*",
-        reply_markup=get_inline_menu(bot_me.username),
+        group_welcome_text,
+        parse_mode="Markdown",
     )
     logger.info("[REG] group welcome send user_id=%s took %sms", user_id, _ms(t))
 
