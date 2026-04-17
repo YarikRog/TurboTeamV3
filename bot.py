@@ -104,8 +104,8 @@ async def supabase_test(message: types.Message):
             f"Кількість записів: {response.count or 0}"
         )
     except Exception as e:
-    logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
-    await message.answer("❌ Supabase add activity failed. Дивись логи.")
+        logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
+        await message.answer("❌ Supabase test failed. Дивись логи.")
 
 
 @dp.message(Command("sbadd"))
@@ -136,7 +136,7 @@ async def supabase_add_user(message: types.Message):
         )
     except Exception as e:
         logger.error(f"[SUPABASE] /sbadd error: {e}", exc_info=True)
-        await message.answer(f"❌ Supabase add user failed:\n{e}")
+        await message.answer("❌ Supabase add user failed. Дивись логи.")
 
 
 @dp.message(Command("sbaddactivity"))
@@ -165,7 +165,7 @@ async def supabase_add_activity(message: types.Message):
         )
     except Exception as e:
         logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
-        await message.answer(f"❌ Supabase add activity failed:\n{e}")
+        await message.answer("❌ Supabase add activity failed. Дивись логи.")
 
 
 @dp.message(CommandStart())
