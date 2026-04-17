@@ -28,6 +28,8 @@ from supabase_db import (
     create_user,
     add_activity,
     add_referral,
+    get_referrals_count,
+    get_user_activities_count,
 )
 
 logging.basicConfig(
@@ -185,6 +187,31 @@ async def supabase_add_ref(message: types.Message, command: CommandObject):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbaddref error: {e}", exc_info=True)
         await message.answer("❌ Supabase add referral failed. Дивись логи.")
+
+
+@dp.message(Command("sbme"))
+async def supabase_me(message: types.Message):
+    try:
+        telegram_user_id = message.from_user.id
+        user = await get_user_by_telegram_id(telegram_user_id)
+
+        if not user:
+            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
+            return
+
+        activities_count = await get_user_activities_count(user["id"])
+        referrals_count = await get_referrals_count(user["id"])
+
+        await message.answer(
+            "🧠 Дані з Supabase\n"
+            f"nickname: {user.get('nickname')}\n"
+            f"telegram_user_id: {user.get('telegram_user_id')}\n"
+            f"activities: {activities_count}\n"
+            f"referrals: {referrals_count}"
+        )
+    except Exception as e:
+        logger.error(f"[SUPABASE] /sbme error: {e}", exc_info=True)
+        await message.answer("❌ Supabase read failed. Дивись логи.")
 
 
 @dp.message(CommandStart())
