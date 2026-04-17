@@ -149,7 +149,7 @@ async def supabase_add_activity(message: types.Message):
             await message.answer("❌ Юзера немає в Supabase. Спочатку виконай /sbadd")
             return
 
-        activity = await add_activity(
+        await add_activity(
             user_id=existing_user["id"],
             action_name="Gym",
             hp_change=100,
@@ -157,12 +157,7 @@ async def supabase_add_activity(message: types.Message):
             video_id="sbtest-video",
         )
 
-        await message.answer(
-            "✅ Активність додано в Supabase\n"
-            f"user_id: {activity.get('user_id')}\n"
-            f"action_name: {activity.get('action_name')}\n"
-            f"hp_change: {activity.get('hp_change')}"
-        )
+        await message.answer("✅ Активність додано в Supabase")
     except Exception as e:
         logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
         await message.answer("❌ Supabase add activity failed. Дивись логи.")
