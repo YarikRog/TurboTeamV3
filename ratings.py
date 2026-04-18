@@ -187,8 +187,9 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
     try:
         sent_msg = await message.answer(text, parse_mode="Markdown")
 
+        safe_create_task(auto_delete(sent_msg, 30))
+
         if uid not in ADMIN_IDS:
-            safe_create_task(auto_delete(sent_msg, 30))
             try:
                 await message.delete()
             except Exception:
