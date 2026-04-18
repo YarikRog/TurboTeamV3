@@ -30,9 +30,6 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
                 types.InlineKeyboardButton(text="🚫 Забив болт", callback_data="action_skip"),
             ],
             [
-                types.InlineKeyboardButton(text="🚀 Запросити друга 🔥", callback_data="invite_friend"),
-            ],
-            [
                 types.InlineKeyboardButton(
                     text="📘 ПРАВИЛА СПІЛЬНОТИ",
                     callback_data="community_rules",
@@ -54,6 +51,14 @@ def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
 
 def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="🏆 Рейтинг ТОП")]],
+        keyboard=[
+            [
+                types.KeyboardButton(text="🏆 Рейтинг ТОП"),
+                types.KeyboardButton(text="👤 Мій профіль"),
+            ],
+            [
+                types.KeyboardButton(text="🚀 Запросити друга 🔥"),
+            ],
+        ],
         resize_keyboard=True,
     )
