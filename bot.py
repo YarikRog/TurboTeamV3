@@ -67,8 +67,11 @@ async def cmd_rules(message: types.Message):
     await message.answer(get_phrase("rules_text"))
 
 
-@dp.message(Command("menu"), F.chat.id == REPORTS_GROUP_ID)
+@dp.message(Command("menu"))
 async def show_menu_in_group(message: types.Message):
+    if message.chat.id != REPORTS_GROUP_ID:
+        return
+
     bot_username = await bot.get_me()
     await message.answer(
         "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇",
@@ -298,6 +301,7 @@ async def wipe_user(message: types.Message, command: CommandObject):
             KeyManager.get_reg_key(telegram_user_id),
             KeyManager.get_ref_key(telegram_user_id),
             KeyManager.get_ref_cooldown_key(telegram_user_id),
+            KeyManager.get_ref_warn_key(telegram_user_id),
             KeyManager.get_ref_processed_key(telegram_user_id),
             KeyManager.get_state_key(telegram_user_id),
             KeyManager.get_session_key(telegram_user_id),
