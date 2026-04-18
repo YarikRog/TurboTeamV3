@@ -24,6 +24,11 @@ async def handle_show_rating_command(message: Message):
     await show_rating_for_user(message, message.from_user)
 
 
+@router.message(F.text == "👤 Мій профіль")
+async def handle_my_profile(message: Message):
+    await message.answer("👤 Профіль скоро буде готовий. Наступний крок — підв’язуємо статистику.")
+
+
 @router.callback_query(F.data == "invite_friend")
 async def handle_invite_friend(callback: CallbackQuery):
     await send_invite_prompt(callback.message, callback.from_user)
