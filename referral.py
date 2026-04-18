@@ -7,7 +7,10 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, U
 
 from config import HP_REF_BATA, HP_REF_NEWBIE, REPORTS_GROUP_ID
 from cache import get_data, set_data, set_flag, delete_data, KeyManager
-from database import add_referral_bonus
+from supabase_db import (
+    get_user_by_telegram_id,
+    add_referral as supabase_add_referral,
+)
 from services import ActivityService, safe_create_task
 
 router = Router()
@@ -33,6 +36,52 @@ async def get_bot_username(bot: Bot) -> str:
     me = await bot.get_me()
     await set_data(cache_key, me.username, ex=3600)
     return me.username
+
+
+# ==============================================================================
+# SUPABASE REFERRAL WRITE
+# ==============================================================================
+
+async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: str) -> bool:
+    """
+    Writes referral record to Supabase referrals table.
+
+    new_user_name is kept in signature to avoid changing existing logic/calls.
+    """
+    try:
+        referrer_row = await get_user_by_telegram_id(referrer_id)
+        new_user_row = await get_user_by_telegram_id(new_user_id)
+
+        if not referrer_row:
+            logger.warning(f"[REFERRAL] Referrer not found in Supabase: telegram_user_id={referrer_id}")
+            return False
+
+        if not new_user_row:
+            logger.warning(f"[REFERRAL] New user not found in Supabase: telegram_user_id={new_user_id}")
+            return False
+
+        referrer_user_uuid = referrer_row.get("id")
+        new_user_uuid = new_user_row.get("id")
+
+        if not referrer_user_uuid or not new_user_uuid:
+            logger.warning(
+                "[REFERRAL] Missing Supabase UUIDs: referrer_id=%s new_user_id=%s",
+                referrer_id,
+                new_user_id,
+            )
+            return False
+
+        await supabase_add_referral(
+            referrer_user_id=str(referrer_user_uuid),
+            new_user_id=str(new_user_uuid),
+            points=HP_REF_BATA,
+        )
+
+        return True
+
+    except Exception as e:
+        logger.error(f"[REFERRAL] Supabase referral write failed: {e}", exc_info=True)
+        return False
 
 
 # ==============================================================================
@@ -99,7 +148,7 @@ async def process_referral_logic(
     bot: Bot,
 ) -> None:
     """
-    Grants referral HP to both users, writes referral record to GAS,
+    Grants referral HP to both users, writes referral record to Supabase,
     and sends notifications.
 
     Protection logic:
