@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from architecture.events import EventEnvelope, PENALTY_APPLIED
 from cache import KeyManager, acquire_lock, get_data, set_data, delete_data
-from database import get_kyiv_now, penalty_user
+from database import get_kyiv_now, update_user_activity
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -90,8 +90,16 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
         await callback.answer("⚠️ Штраф за це відео вже обробляється.", show_alert=True)
         return
 
-    ok = await penalty_user(target_uid, REPORT_PENALTY_HP)
-    if not ok:
+    ok = await update_user_activity(
+        user_id=target_uid,
+        nickname="system",
+        action_name="Community Penalty",
+        hp_change=-REPORT_PENALTY_HP,
+        video_id=f"report:{report_msg_id}",
+        is_check=False,
+        skip_lock=False,
+    )
+    if not ok or ok == "already_done":
         await delete_data(penalty_key)
         await callback.answer("⚠️ Не вдалося застосувати штраф. Спробуй ще раз.", show_alert=True)
         return
