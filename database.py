@@ -10,6 +10,11 @@ from typing import Optional, List, Union, Dict, Any
 
 from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
 from cache import get_data, set_flag, KeyManager, acquire_lock, delete_data
+from supabase_db import (
+    get_user_by_telegram_id,
+    add_activity as supabase_add_activity,
+    get_user_activities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +41,89 @@ def get_seconds_until_kyiv_midnight() -> int:
         microsecond=0,
     )
     return max(1, int((next_midnight - now).total_seconds()))
+
+
+def _parse_activity_created_at(value: Any) -> Optional[datetime]:
+    """
+    Safely parses Supabase created_at value into timezone-aware datetime.
+    Supports ISO strings with trailing Z.
+    """
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+
+    return dt.astimezone(KYIV_TZ)
+
+
+async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Resolves Telegram user id -> Supabase users row.
+    """
+    try:
+        return await get_user_by_telegram_id(user_id)
+    except Exception as e:
+        logger.error(f"[DB] failed to load Supabase user: user_id={user_id}, error={e}")
+        return None
+
+
+async def _has_activity_today(
+    user_id: int,
+    action_name: str,
+    video_id: str = "",
+) -> bool:
+    """
+    Checks whether this activity already exists today in Kyiv timezone.
+    """
+    user_row = await _get_supabase_user_row(user_id)
+    if not user_row:
+        return False
+
+    supabase_user_id = user_row.get("id")
+    if not supabase_user_id:
+        logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
+        return False
+
+    try:
+        activities = await get_user_activities(str(supabase_user_id), limit=200)
+    except Exception as e:
+        logger.error(f"[DB] failed to read activities: user_id={user_id}, error={e}")
+        return False
+
+    today = get_kyiv_now().date()
+    normalized_video_id = str(video_id or "").strip()
+
+    for activity in activities:
+        if str(activity.get("action_name", "")) != str(action_name):
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at or created_at.date() != today:
+            continue
+
+        existing_video_id = str(activity.get("video_id") or "").strip()
+
+        # If video_id is provided, compare it too.
+        # If not provided, action_name + today's date is enough (same behavior as current lock key).
+        if normalized_video_id:
+            if existing_video_id == normalized_video_id:
+                return True
+            continue
+
+        return True
+
+    return False
 
 
 # ==============================================================================
@@ -156,7 +244,9 @@ async def check_activity_limit(user_id: int, nickname: str, action_name: str) ->
     """
     FAST PATH:
     - Redis cache first
-    - no GAS call if locked
+    - no DB call if locked
+
+    Returns True if activity can be added, False if already exists today.
     """
 
     key = KeyManager.get_action_lock_key(
@@ -167,16 +257,8 @@ async def check_activity_limit(user_id: int, nickname: str, action_name: str) ->
     if cached is not None:
         return False
 
-    res = await _request({
-        "action": "update_hp",
-        "user_id": str(user_id),
-        "nickname": nickname,
-        "action_name": action_name,
-        "hp_change": 0,
-        "is_check": "true",
-    })
-
-    return bool(res.get("success", False))
+    already_exists = await _has_activity_today(user_id, action_name)
+    return not already_exists
 
 
 async def add_activity(
@@ -222,36 +304,45 @@ async def update_user_activity(
         if not lock:
             return False
 
-    payload = {
-        "action": "update_hp",
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-        "nickname": str(nickname),
-        "user_id": str(user_id),
-        "action_name": str(action_name),
-        "hp_change": int(hp_change),
-        "video_id": str(video_id),
-        "is_check": "true" if is_check else "false",
-    }
-
     delay = RETRY_DELAY
 
     for attempt in range(MAX_RETRIES):
         try:
-            res = await _request(payload)
+            if is_check:
+                already_exists = await _has_activity_today(user_id, action_name, video_id)
+                return not already_exists
 
-            if isinstance(res, dict):
-                if res.get("error") == "already_done" or res.get("msg") == "Already done":
-                    return "already_done"
+            already_exists = await _has_activity_today(user_id, action_name, video_id)
+            if already_exists:
+                return "already_done"
 
-                if res.get("success"):
-                    return True
+            user_row = await _get_supabase_user_row(user_id)
+            if not user_row:
+                logger.warning(f"[DB] user not found in Supabase: telegram_user_id={user_id}")
+                await asyncio.sleep(delay + random.uniform(0, 0.3))
+                delay *= 1.6
+                continue
 
-            await asyncio.sleep(delay + random.uniform(0, 0.3))
-            delay *= 1.6
+            supabase_user_id = user_row.get("id")
+            if not supabase_user_id:
+                logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
+                await asyncio.sleep(delay + random.uniform(0, 0.3))
+                delay *= 1.6
+                continue
+
+            await supabase_add_activity(
+                user_id=str(supabase_user_id),
+                action_name=str(action_name),
+                hp_change=int(hp_change),
+                video_status="✅",
+                video_id=str(video_id) if video_id else None,
+            )
+
+            return True
 
         except Exception as e:
             logger.error(f"[DB] retry error: {e}")
-            await asyncio.sleep(delay)
+            await asyncio.sleep(delay + random.uniform(0, 0.3))
             delay *= 1.6
 
     if not skip_lock:
