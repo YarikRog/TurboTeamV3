@@ -1,15 +1,40 @@
 import logging
 import random
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from aiogram.types import Message, User
 
 from config import ADMIN_IDS
-from database import _request
 from cache import get_data, set_data, set_flag, KeyManager
 from services import safe_create_task, auto_delete
+from supabase_db import (
+    get_user_by_telegram_id,
+    get_user_activities,
+    get_referrals_count,
+    get_supabase,
+)
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_all_users() -> List[Dict[str, Any]]:
+    sb = get_supabase()
+    response = sb.table("users").select("*").execute()
+    return response.data or []
+
+
+async def _get_user_hp(user_uuid: str) -> int:
+    activities = await get_user_activities(user_uuid, limit=1000)
+    total = 0
+
+    for activity in activities:
+        try:
+            total += int(activity.get("hp_change", 0) or 0)
+        except Exception:
+            continue
+
+    return total
+
 
 # ==============================================================================
 # ОТРИМАННЯ ДАНИХ РЕЙТИНГУ (ULTRA SAFE)
@@ -18,7 +43,7 @@ logger = logging.getLogger(__name__)
 async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Отримує рейтингові дані з багаторівневим захистом.
-    Redis cache (60-120s) -> GAS via database._request.
+    Redis cache (60-120s) -> Supabase.
     """
     cache_key = KeyManager.get_rating_cache_key()
 
@@ -29,23 +54,52 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"[RATINGS] Redis read error: {e}")
 
-    payload = {
-        "action": "get_rating",
-        "user_id": str(user_id)
-    }
-
     try:
-        result = await _request(payload, method="POST")
-        logger.info(f"[RATINGS] GAS raw response for uid={user_id}: {result}")
+        users = await _get_all_users()
+        ranking_rows = []
 
-        if isinstance(result, dict) and "top" in result:
-            ttl = random.randint(60, 120)
-            await set_data(cache_key, result, ex=ttl)
-            return result
+        for user in users:
+            user_uuid = user.get("id")
+            if not user_uuid:
+                continue
 
-        logger.warning(f"[RATINGS] Invalid GAS response for uid={user_id}: {result}")
+            hp = await _get_user_hp(str(user_uuid))
+            referrals_count = await get_referrals_count(str(user_uuid))
+
+            nickname = user.get("nickname") or f"ID:{user.get('telegram_user_id', 'unknown')}"
+
+            ranking_rows.append({
+                "telegram_user_id": user.get("telegram_user_id"),
+                "nick": nickname,
+                "hp": hp,
+                "referrals_count": referrals_count,
+            })
+
+        ranking_rows.sort(key=lambda x: (-int(x.get("hp", 0)), str(x.get("nick", ""))))
+
+        top_list = ranking_rows[:10]
+
+        user_rank = "?"
+        user_hp = 0
+
+        for idx, player in enumerate(ranking_rows, start=1):
+            if int(player.get("telegram_user_id", 0) or 0) == int(user_id):
+                user_rank = idx
+                user_hp = int(player.get("hp", 0) or 0)
+                break
+
+        result = {
+            "top": top_list,
+            "user_rank": user_rank,
+            "user_hp": user_hp,
+        }
+
+        ttl = random.randint(60, 120)
+        await set_data(cache_key, result, ex=ttl)
+        return result
+
     except Exception as e:
-        logger.error(f"[RATINGS] Request failed for uid={user_id}: {e}")
+        logger.error(f"[RATINGS] Supabase rating build failed for uid={user_id}: {e}", exc_info=True)
 
     return None
 
