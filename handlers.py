@@ -10,6 +10,7 @@ from config import ADMIN_IDS
 from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
+from services import safe_create_task, auto_delete
 from supabase_db import get_user_by_telegram_id, get_user_activities, get_referrals_count
 
 router = Router()
@@ -35,12 +36,14 @@ async def handle_my_profile(message: Message):
         user_row = await get_user_by_telegram_id(telegram_user_id)
 
         if not stats or not user_row:
-            await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            safe_create_task(auto_delete(sent_msg, 30))
             return
 
         user_uuid = user_row.get("id")
         if not user_uuid:
-            await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            safe_create_task(auto_delete(sent_msg, 30))
             return
 
         activities = await get_user_activities(str(user_uuid), limit=1000)
@@ -81,11 +84,13 @@ async def handle_my_profile(message: Message):
             f"🚀 Реферали: *{referrals_count}*"
         )
 
-        await message.answer(text, parse_mode="Markdown")
+        sent_msg = await message.answer(text, parse_mode="Markdown")
+        safe_create_task(auto_delete(sent_msg, 30))
 
     except Exception as e:
         logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
-        await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
+        sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
+        safe_create_task(auto_delete(sent_msg, 30))
 
 
 @router.callback_query(F.data == "invite_friend")
