@@ -26,7 +26,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 PROFILE_COOLDOWN = 7200
-PROFILE_MESSAGE_TTL = 60
+PROFILE_MESSAGE_TTL = 120
 
 
 TRAINING_STATUS_LEVELS = [
@@ -82,13 +82,18 @@ async def handle_my_profile(message: Message):
     profile_warn_key = KeyManager.get_profile_warn_key(telegram_user_id)
 
     try:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
         if (await get_data(profile_limit_key)) is not None:
             if (await get_data(profile_warn_key)) is None:
                 await set_flag(profile_warn_key, ex=PROFILE_COOLDOWN)
                 sent_msg = await message.answer(
                     "⏳ Бро, профіль можна відкривати раз на 2 години. Спробуй пізніше."
                 )
-                safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
+                safe_create_task(auto_delete(sent_msg, 1))
             return
 
         stats = await get_user_stats(telegram_user_id)
@@ -96,13 +101,13 @@ async def handle_my_profile(message: Message):
 
         if not stats or not user_row:
             sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
+            safe_create_task(auto_delete(sent_msg, 1))
             return
 
         user_uuid = user_row.get("id")
         if not user_uuid:
             sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
+            safe_create_task(auto_delete(sent_msg, 1))
             return
 
         activities = await get_user_activities(str(user_uuid), limit=1000)
@@ -176,7 +181,7 @@ async def handle_my_profile(message: Message):
         logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
         await delete_data(profile_limit_key)
         sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
-        safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
+        safe_create_task(auto_delete(sent_msg, 1))
 
 
 @router.message(F.text == "🚀 Запросити друга 🔥")
