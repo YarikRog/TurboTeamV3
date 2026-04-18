@@ -7,8 +7,10 @@ from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS
+from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
+from supabase_db import get_user_by_telegram_id, get_user_activities, get_referrals_count
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -26,7 +28,64 @@ async def handle_show_rating_command(message: Message):
 
 @router.message(F.text == "👤 Мій профіль")
 async def handle_my_profile(message: Message):
-    await message.answer("👤 Профіль скоро буде готовий. Наступний крок — підв’язуємо статистику.")
+    try:
+        telegram_user_id = message.from_user.id
+
+        stats = await get_user_stats(telegram_user_id)
+        user_row = await get_user_by_telegram_id(telegram_user_id)
+
+        if not stats or not user_row:
+            await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            return
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
+            return
+
+        activities = await get_user_activities(str(user_uuid), limit=1000)
+        referrals_count = await get_referrals_count(str(user_uuid))
+
+        gym_count = 0
+        street_count = 0
+        rest_count = 0
+        skip_count = 0
+
+        for activity in activities:
+            action_name = str(activity.get("action_name", ""))
+
+            if action_name == "Gym":
+                gym_count += 1
+            elif action_name == "Street":
+                street_count += 1
+            elif action_name == "Rest":
+                rest_count += 1
+            elif action_name == "Skipped":
+                skip_count += 1
+
+        nickname = user_row.get("nickname") or message.from_user.first_name
+        hp_total = int(stats.get("hp_total", 0) or 0)
+        streak = int(stats.get("streak", 0) or 0)
+        activities_count = int(stats.get("activities_count", 0) or 0)
+
+        text = (
+            f"👤 *МІЙ ПРОФІЛЬ*\n\n"
+            f"🏷️ Нік: *{nickname}*\n"
+            f"⚡ Загальний HP: *{hp_total}*\n"
+            f"🔥 Streak: *{streak}*\n"
+            f"📊 Усього активностей: *{activities_count}*\n\n"
+            f"🏋️ Gym: *{gym_count}*\n"
+            f"🦾 Street: *{street_count}*\n"
+            f"🧘 Rest: *{rest_count}*\n"
+            f"🚫 Skip: *{skip_count}*\n\n"
+            f"🚀 Реферали: *{referrals_count}*"
+        )
+
+        await message.answer(text, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
+        await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
 
 
 @router.callback_query(F.data == "invite_friend")
