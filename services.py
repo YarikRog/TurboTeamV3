@@ -4,6 +4,7 @@ import asyncio
 import functools
 from typing import Any, Callable, Optional
 from datetime import datetime, timedelta
+from html import escape
 import pytz
 
 from aiogram import types
@@ -432,11 +433,12 @@ class ActivityService:
 
         achievement_title = await ActivityService.maybe_grant_training_achievement(user.id)
         if achievement_title:
+            achievement_title_html = escape(str(achievement_title))
             await message.answer(
-                f"🏅 *НОВЕ ДОСЯГНЕННЯ!*\n\n"
-                f"*{achievement_title}*\n"
+                f"🏅 <b>НОВЕ ДОСЯГНЕННЯ!</b>\n\n"
+                f"<b>{achievement_title_html}</b>\n"
                 f"Ти відкрив нову віху в TurboTeam 🔥",
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
 
         report_kb = build_report_keyboard(
