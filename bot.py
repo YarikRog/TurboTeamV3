@@ -270,9 +270,20 @@ async def start_handler(message: types.Message, command: CommandObject):
         await progress_message.delete()
 
         if not args:
+            group_return_kb = types.InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        types.InlineKeyboardButton(
+                            text="ВХІД У ГРУПУ 🏎️",
+                            url=GROUP_LINK,
+                        )
+                    ]
+                ]
+            )
+
             return await message.answer(
                 f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥",
-                reply_markup=types.ReplyKeyboardRemove()
+                reply_markup=group_return_kb
             )
 
     except Exception as e:
