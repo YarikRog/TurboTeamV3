@@ -15,6 +15,12 @@ from database import get_kyiv_now, add_activity, check_activity_limit, update_us
 from phrases import get_phrase
 from config import GROUP_LINK
 from reports import build_report_keyboard
+from supabase_db import (
+    get_user_by_telegram_id,
+    get_user_activities,
+    has_user_achievement,
+    add_user_achievement,
+)
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -25,6 +31,22 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 STREAK_BONUS_3_DAYS = 50
 STREAK_BONUS_5_DAYS = 100
 STREAK_BONUS_7_DAYS = 200
+
+# ==============================================================================
+# ACHIEVEMENTS (TRAINING ONLY, V1)
+# ==============================================================================
+TRAINING_ACHIEVEMENTS = [
+    (1, "training_1", "Перший крок"),
+    (5, "training_5", "Розігрів"),
+    (10, "training_10", "Перша десятка"),
+    (25, "training_25", "У ритмі"),
+    (50, "training_50", "Півсотні"),
+    (100, "training_100", "Сотка"),
+    (200, "training_200", "Машина"),
+    (500, "training_500", "Монстр"),
+    (1000, "training_1000", "Легенда TurboTeam"),
+]
+
 
 # ==============================================================================
 # QUIZ VALIDATION
@@ -134,6 +156,47 @@ class ActivityService:
         "Відпочинок": int(HP_REST),
         "Забив болт": int(HP_SKIP),
     }
+
+    @staticmethod
+    async def maybe_grant_training_achievement(user_id: int) -> Optional[str]:
+        """
+        Grants a training achievement if the user has reached a new training milestone.
+        Returns achievement title if granted, otherwise None.
+        """
+        user_row = await get_user_by_telegram_id(user_id)
+        if not user_row:
+            return None
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            return None
+
+        activities = await get_user_activities(str(user_uuid), limit=1000)
+
+        training_count = 0
+        for activity in activities:
+            action_name = str(activity.get("action_name", ""))
+            if action_name in {"Gym", "Street"}:
+                training_count += 1
+
+        granted_title: Optional[str] = None
+
+        for threshold, achievement_code, achievement_title in TRAINING_ACHIEVEMENTS:
+            if training_count < threshold:
+                continue
+
+            already_has = await has_user_achievement(str(user_uuid), achievement_code)
+            if already_has:
+                continue
+
+            await add_user_achievement(
+                user_id=str(user_uuid),
+                achievement_code=achievement_code,
+                achievement_title=achievement_title,
+            )
+            granted_title = achievement_title
+
+        return granted_title
 
     @staticmethod
     @handle_exceptions(default_return=False)
@@ -366,6 +429,15 @@ class ActivityService:
             f"✅ {action_type} зафіксовано. +{hp} HP",
             reply_markup=back_to_group_kb,
         )
+
+        achievement_title = await ActivityService.maybe_grant_training_achievement(user.id)
+        if achievement_title:
+            await message.answer(
+                f"🏅 *НОВЕ ДОСЯГНЕННЯ!*\n\n"
+                f"*{achievement_title}*\n"
+                f"Ти відкрив нову віху в TurboTeam 🔥",
+                parse_mode="Markdown",
+            )
 
         report_kb = build_report_keyboard(
             target_uid=user.id,
