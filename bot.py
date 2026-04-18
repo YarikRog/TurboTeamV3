@@ -12,14 +12,14 @@ from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from architecture.events import EventEnvelope, TRAINING_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
-from database import check_user_exists, close_db_session
+from database import check_user_exists, close_db_session, get_kyiv_now
 from handlers import router as action_router
 from phrases import get_phrase
 from referral import router as ref_router
 from reports import router as reports_router
 from tasks import setup_scheduler
 
-from cache import redis_client, set_data, KeyManager, acquire_lock
+from cache import redis_client, set_data, delete_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
 from supabase_db import (
@@ -215,6 +215,115 @@ async def supabase_me(message: types.Message):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbme error: {e}", exc_info=True)
         await message.answer("❌ Supabase read failed. Дивись логи.")
+
+
+@dp.message(Command("wipeuser"))
+async def wipe_user(message: types.Message, command: CommandObject):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        args = (command.args or "").strip()
+        if not args:
+            await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
+            return
+
+        sb = get_supabase()
+
+        target_user = None
+
+        if args.isdigit():
+            target_user = await get_user_by_telegram_id(int(args))
+        elif args.startswith("@"):
+            username = args[1:].strip()
+            response = (
+                sb.table("users")
+                .select("*")
+                .eq("nickname", username)
+                .limit(1)
+                .execute()
+            )
+            if response.data:
+                target_user = response.data[0]
+        else:
+            await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
+            return
+
+        if not target_user:
+            await message.answer("❌ Юзера не знайдено.")
+            return
+
+        telegram_user_id = int(target_user.get("telegram_user_id"))
+        user_uuid = str(target_user.get("id"))
+        nickname = target_user.get("nickname") or f"ID:{telegram_user_id}"
+
+        (
+            sb.table("user_achievements")
+            .delete()
+            .eq("user_id", user_uuid)
+            .execute()
+        )
+
+        (
+            sb.table("activities")
+            .delete()
+            .eq("user_id", user_uuid)
+            .execute()
+        )
+
+        (
+            sb.table("referrals")
+            .delete()
+            .eq("new_user_id", user_uuid)
+            .execute()
+        )
+
+        (
+            sb.table("referrals")
+            .delete()
+            .eq("referrer_user_id", user_uuid)
+            .execute()
+        )
+
+        (
+            sb.table("users")
+            .delete()
+            .eq("id", user_uuid)
+            .execute()
+        )
+
+        today = get_kyiv_now().strftime("%Y-%m-%d")
+
+        redis_keys = [
+            KeyManager.get_reg_key(telegram_user_id),
+            KeyManager.get_ref_key(telegram_user_id),
+            KeyManager.get_ref_cooldown_key(telegram_user_id),
+            KeyManager.get_ref_processed_key(telegram_user_id),
+            KeyManager.get_state_key(telegram_user_id),
+            KeyManager.get_session_key(telegram_user_id),
+            KeyManager.get_profile_limit_key(telegram_user_id),
+            KeyManager.get_profile_warn_key(telegram_user_id),
+            KeyManager.get_rating_limit_key(telegram_user_id),
+            KeyManager.get_training_repeat_key(telegram_user_id, f"Gym:{today}"),
+            KeyManager.get_training_repeat_key(telegram_user_id, f"Street:{today}"),
+            KeyManager.get_action_lock_key(telegram_user_id, f"Gym:{today}"),
+            KeyManager.get_action_lock_key(telegram_user_id, f"Street:{today}"),
+            KeyManager.get_action_lock_key(telegram_user_id, f"Rest:{today}"),
+            KeyManager.get_action_lock_key(telegram_user_id, f"Skipped:{today}"),
+        ]
+
+        for key in redis_keys:
+            await delete_data(key)
+
+        await message.answer(
+            f"✅ Юзера видалено повністю\n"
+            f"nickname: {nickname}\n"
+            f"telegram_user_id: {telegram_user_id}"
+        )
+
+    except Exception as e:
+        logger.error(f"[ADMIN] /wipeuser error: {e}", exc_info=True)
+        await message.answer("❌ Не вдалося видалити юзера. Дивись логи.")
 
 
 @dp.message(CommandStart())
