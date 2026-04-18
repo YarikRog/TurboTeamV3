@@ -268,17 +268,17 @@ class ActivityService:
         return False
 
     @staticmethod
-    @handle_exceptions(default_return=0)
-    async def check_and_grant_streak_bonus(user_id: int, nickname: str) -> int:
+    @handle_exceptions(default_return=(0, 0))
+    async def check_and_grant_streak_bonus(user_id: int, nickname: str) -> tuple[int, int]:
         """
         Checks streak and grants bonus.
-        Returns granted bonus amount or 0.
+        Returns (bonus, streak).
         """
         from database import get_user_stats
 
         stats = await get_user_stats(user_id)
         if not stats:
-            return 0
+            return 0, 0
 
         streak = int(stats.get("streak", 0))
 
@@ -295,19 +295,20 @@ class ActivityService:
             await add_activity(user_id, nickname, action_label, bonus)
             logger.info(f"[STREAK] Bonus +{bonus} HP granted to {nickname} for {streak} days")
 
-        return bonus
+        return bonus, streak
 
     @staticmethod
-    @handle_exceptions(default_return=False)
+    @handle_exceptions(default_return=(False, 0, 0))
     async def grant_hp(
         user_id: int,
         nickname: str,
         action_type: str,
         hp: int,
         video_id: str = "",
-    ) -> bool:
+    ) -> tuple[bool, int, int]:
         """
         Grants HP to user with atomic Redis lock.
+        Returns (success, streak_bonus, streak_days).
         Daily lock expires at Kyiv midnight, not after 24 hours.
         """
         today = get_kyiv_now().strftime("%Y-%m-%d")
@@ -321,7 +322,7 @@ class ActivityService:
             logger.info(
                 f"[SERVICE] Lock busy: uid={user_id} action={action_type} duplicate rejected"
             )
-            return False
+            return False, 0, 0
 
         result = await update_user_activity(
             user_id,
@@ -339,16 +340,16 @@ class ActivityService:
             logger.warning(
                 f"[SERVICE] GAS rejected write uid={user_id}, lock removed"
             )
-            return False
+            return False, 0, 0
+
+        streak_bonus = 0
+        streak_days = 0
 
         if action_type in ["Gym", "Street"]:
-            safe_create_task(
-                ActivityService.check_and_grant_streak_bonus(user_id, nickname),
-                name=f"streak_bonus_{user_id}"
-            )
+            streak_bonus, streak_days = await ActivityService.check_and_grant_streak_bonus(user_id, nickname)
 
         logger.info(f"[SERVICE] HP GRANTED: uid={user_id} +{hp} HP for {action_type}")
-        return True
+        return True, streak_bonus, streak_days
 
     @staticmethod
     def calculate_training_hp(action_type: str = "Gym") -> int:
@@ -411,7 +412,7 @@ class ActivityService:
         hp = ActivityService.calculate_training_hp(action_type)
         video_id = message.video_note.file_id if message.video_note else ""
 
-        granted = await ActivityService.grant_hp(
+        granted, streak_bonus, streak_days = await ActivityService.grant_hp(
             user.id,
             nickname,
             action_type,
@@ -430,6 +431,14 @@ class ActivityService:
             f"✅ {action_type} зафіксовано. +{hp} HP",
             reply_markup=back_to_group_kb,
         )
+
+        if streak_bonus > 0:
+            await message.answer(
+                f"🔥 <b>STREAK BONUS!</b>\n"
+                f"Серія: {streak_days} дні\n"
+                f"+{streak_bonus} HP",
+                parse_mode="HTML",
+            )
 
         achievement_title = await ActivityService.maybe_grant_training_achievement(user.id)
         if achievement_title:
