@@ -46,6 +46,18 @@ async def get_user_by_telegram_id(telegram_user_id: int) -> Optional[Dict[str, A
     return None
 
 
+async def get_all_users() -> List[Dict[str, Any]]:
+    sb = get_supabase()
+
+    response = (
+        sb.table("users")
+        .select("*")
+        .execute()
+    )
+
+    return response.data or []
+
+
 async def create_user(
     telegram_user_id: int,
     nickname: str,
@@ -107,6 +119,48 @@ async def get_user_activities(user_id: str, limit: int = 50) -> List[Dict[str, A
         sb.table("activities")
         .select("*")
         .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return response.data or []
+
+
+async def get_user_activities_in_period(
+    user_id: str,
+    created_at_from: str,
+    created_at_to: str,
+    limit: int = 1000,
+) -> List[Dict[str, Any]]:
+    sb = get_supabase()
+
+    response = (
+        sb.table("activities")
+        .select("*")
+        .eq("user_id", user_id)
+        .gte("created_at", created_at_from)
+        .lt("created_at", created_at_to)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return response.data or []
+
+
+async def get_all_activities_in_period(
+    created_at_from: str,
+    created_at_to: str,
+    limit: int = 5000,
+) -> List[Dict[str, Any]]:
+    sb = get_supabase()
+
+    response = (
+        sb.table("activities")
+        .select("*")
+        .gte("created_at", created_at_from)
+        .lt("created_at", created_at_to)
         .order("created_at", desc=True)
         .limit(limit)
         .execute()
