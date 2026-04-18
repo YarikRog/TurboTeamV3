@@ -180,6 +180,11 @@ async def handle_my_profile(message: Message):
         safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
 
+@router.message(F.text == "🚀 Запросити друга 🔥")
+async def handle_invite_friend_message(message: Message):
+    await send_invite_prompt(message, message.from_user, delete_origin=True)
+
+
 @router.callback_query(F.data == "invite_friend")
 async def handle_invite_friend(callback: CallbackQuery):
     await send_invite_prompt(callback.message, callback.from_user)
