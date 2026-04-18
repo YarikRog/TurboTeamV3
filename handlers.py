@@ -9,7 +9,7 @@ from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS
-from cache import get_data, set_flag, KeyManager
+from cache import get_data, set_flag, delete_data, KeyManager
 from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
@@ -77,12 +77,11 @@ async def handle_show_rating_command(message: Message):
 
 @router.message(F.text == "👤 Мій профіль")
 async def handle_my_profile(message: Message):
+    telegram_user_id = message.from_user.id
+    profile_limit_key = KeyManager.get_profile_limit_key(telegram_user_id)
+    profile_warn_key = KeyManager.get_profile_warn_key(telegram_user_id)
+
     try:
-        telegram_user_id = message.from_user.id
-
-        profile_limit_key = KeyManager.get_profile_limit_key(telegram_user_id)
-        profile_warn_key = KeyManager.get_profile_warn_key(telegram_user_id)
-
         if (await get_data(profile_limit_key)) is not None:
             if (await get_data(profile_warn_key)) is None:
                 await set_flag(profile_warn_key, ex=PROFILE_COOLDOWN)
@@ -91,8 +90,6 @@ async def handle_my_profile(message: Message):
                 )
                 safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
             return
-
-        await set_flag(profile_limit_key, ex=PROFILE_COOLDOWN)
 
         stats = await get_user_stats(telegram_user_id)
         user_row = await get_user_by_telegram_id(telegram_user_id)
@@ -172,10 +169,12 @@ async def handle_my_profile(message: Message):
         )
 
         sent_msg = await message.answer(text, parse_mode="HTML")
+        await set_flag(profile_limit_key, ex=PROFILE_COOLDOWN)
         safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
     except Exception as e:
         logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
+        await delete_data(profile_limit_key)
         sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
         safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
