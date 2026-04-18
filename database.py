@@ -79,6 +79,35 @@ async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
+    """
+    Counts consecutive training days (Gym/Street) backward from today in Kyiv timezone.
+    Multiple trainings on the same day count as one streak day.
+    """
+    training_actions = {"Gym", "Street"}
+    training_dates = set()
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", ""))
+        if action_name not in training_actions:
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        training_dates.add(created_at.date())
+
+    streak = 0
+    cursor = get_kyiv_now().date()
+
+    while cursor in training_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return streak
+
+
 async def _has_activity_today(
     user_id: int,
     action_name: str,
@@ -276,12 +305,39 @@ async def add_activity(
 
 
 async def get_user_stats(user_id: int) -> Optional[Dict]:
-    res = await _request({
-        "action": "get_user",
-        "user_id": str(user_id),
-    }, method="GET")
+    user_row = await _get_supabase_user_row(user_id)
+    if not user_row:
+        return None
 
-    return res if isinstance(res, dict) else None
+    supabase_user_id = user_row.get("id")
+    if not supabase_user_id:
+        logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
+        return None
+
+    try:
+        activities = await get_user_activities(str(supabase_user_id), limit=1000)
+    except Exception as e:
+        logger.error(f"[DB] failed to get user activities for stats: user_id={user_id}, error={e}")
+        return None
+
+    hp_total = 0
+    for activity in activities:
+        try:
+            hp_total += int(activity.get("hp_change", 0) or 0)
+        except Exception:
+            continue
+
+    stats = {
+        "user_id": str(supabase_user_id),
+        "telegram_user_id": user_row.get("telegram_user_id"),
+        "nickname": user_row.get("nickname", ""),
+        "hp": hp_total,
+        "hp_total": hp_total,
+        "activities_count": len(activities),
+        "streak": _calculate_training_streak(activities),
+    }
+
+    return stats
 
 
 # ==============================================================================
