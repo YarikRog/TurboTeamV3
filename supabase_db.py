@@ -218,3 +218,88 @@ async def get_referrals_count(referrer_user_id: str) -> int:
     )
 
     return response.count or 0
+
+
+# ==============================================================================
+# ACHIEVEMENTS
+# ==============================================================================
+
+async def add_user_achievement(
+    user_id: str,
+    achievement_code: str,
+    achievement_title: str,
+) -> Dict[str, Any]:
+    sb = get_supabase()
+
+    payload = {
+        "user_id": user_id,
+        "achievement_code": achievement_code,
+        "achievement_title": achievement_title,
+    }
+
+    response = sb.table("user_achievements").insert(payload).execute()
+
+    if not response.data:
+        raise RuntimeError("Failed to add user achievement in Supabase")
+
+    return response.data[0]
+
+
+async def get_user_achievements(user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    sb = get_supabase()
+
+    response = (
+        sb.table("user_achievements")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return response.data or []
+
+
+async def has_user_achievement(user_id: str, achievement_code: str) -> bool:
+    sb = get_supabase()
+
+    response = (
+        sb.table("user_achievements")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("achievement_code", achievement_code)
+        .limit(1)
+        .execute()
+    )
+
+    return bool(response.data)
+
+
+async def get_user_achievements_count(user_id: str) -> int:
+    sb = get_supabase()
+
+    response = (
+        sb.table("user_achievements")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    return response.count or 0
+
+
+async def get_last_user_achievement(user_id: str) -> Optional[Dict[str, Any]]:
+    sb = get_supabase()
+
+    response = (
+        sb.table("user_achievements")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+    return None
