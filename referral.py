@@ -11,12 +11,13 @@ from supabase_db import (
     get_user_by_telegram_id,
     add_referral as supabase_add_referral,
 )
-from services import ActivityService, safe_create_task
+from services import ActivityService, safe_create_task, auto_delete
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-REF_COOLDOWN = 60  # seconds between repeated clicks on "Invite a friend"
+REF_COOLDOWN = 600
+REF_MESSAGE_TTL = 60
 
 
 # ==============================================================================
@@ -91,11 +92,19 @@ async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: 
 async def send_invite_prompt(message: Message, actor: User, delete_origin: bool = False):
     uid = actor.id
 
-    spam_key = KeyManager.get_ref_cooldown_key(uid)
-    if (await get_data(spam_key)) is not None:
+    cooldown_key = KeyManager.get_ref_cooldown_key(uid)
+    warn_key = KeyManager.get_ref_warn_key(uid)
+
+    if (await get_data(cooldown_key)) is not None:
+        if (await get_data(warn_key)) is None:
+            await set_flag(warn_key, ex=REF_COOLDOWN)
+            sent_msg = await message.answer(
+                "⏳ Бро, запрошення друга можна відкривати раз на 10 хв. Спробуй пізніше."
+            )
+            safe_create_task(auto_delete(sent_msg, REF_MESSAGE_TTL))
         return
 
-    await set_flag(spam_key, ex=REF_COOLDOWN)
+    await set_flag(cooldown_key, ex=REF_COOLDOWN)
 
     bot_username = await get_bot_username(message.bot)
     referral_link = f"https://t.me/{bot_username}?start={uid}"
@@ -121,7 +130,7 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
         except Exception as e:
             logger.debug(f"[REFERRAL] message.delete failed: {e}")
 
-    await message.answer(
+    sent_msg = await message.answer(
         f"🚀 **ЧАС РОЗШИРЮВАТИ КОМАНДУ!**\n\n"
         f"За кожного нового учасника:\n"
         f"🏆 Тобі: **+{HP_REF_BATA} HP**\n"
@@ -130,6 +139,7 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
         reply_markup=kb,
         parse_mode="Markdown",
     )
+    safe_create_task(auto_delete(sent_msg, REF_MESSAGE_TTL))
 
 
 @router.message(F.text == "🚀 Запросити друга 🔥")
