@@ -1,4 +1,6 @@
 import logging
+from html import escape
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -145,26 +147,31 @@ async def handle_my_profile(message: Message):
         streak = int(stats.get("streak", 0) or 0)
         activities_count = int(stats.get("activities_count", 0) or 0)
 
+        nickname_html = escape(str(nickname))
+        status_title_html = escape(str(status_title))
+        last_achievement_title_html = escape(str(last_achievement_title))
+        next_goal_text_html = escape(str(next_goal_text))
+
         text = (
-            f"👤 *МІЙ ПРОФІЛЬ*\n\n"
-            f"🏷️ Нік: *{nickname}*\n"
-            f"🎖️ Статус: *{status_title}*\n"
-            f"⚡ Загальний HP: *{hp_total}*\n"
-            f"🔥 Streak: *{streak}*\n\n"
-            f"📊 *АКТИВНІСТЬ*\n"
-            f"🏋️ Gym: *{gym_count}*\n"
-            f"🦾 Street: *{street_count}*\n"
-            f"🧘 Rest: *{rest_count}*\n"
-            f"🚫 Skip: *{skip_count}*\n"
-            f"📌 Усього дій: *{activities_count}*\n"
-            f"🚀 Реферали: *{referrals_count}*\n\n"
-            f"🏅 *ПРОГРЕС*\n"
-            f"🏆 Досягнень: *{achievements_count}*\n"
-            f"🕓 Останнє: *{last_achievement_title}*\n"
-            f"🎯 Наступна ціль: *{next_goal_text}*"
+            f"👤 <b>МІЙ ПРОФІЛЬ</b>\n\n"
+            f"🏷️ Нік: <b>{nickname_html}</b>\n"
+            f"🎖️ Статус: <b>{status_title_html}</b>\n"
+            f"⚡ Загальний HP: <b>{hp_total}</b>\n"
+            f"🔥 Streak: <b>{streak}</b>\n\n"
+            f"📊 <b>АКТИВНІСТЬ</b>\n"
+            f"🏋️ Gym: <b>{gym_count}</b>\n"
+            f"🦾 Street: <b>{street_count}</b>\n"
+            f"🧘 Rest: <b>{rest_count}</b>\n"
+            f"🚫 Skip: <b>{skip_count}</b>\n"
+            f"📌 Усього дій: <b>{activities_count}</b>\n"
+            f"🚀 Реферали: <b>{referrals_count}</b>\n\n"
+            f"🏅 <b>ПРОГРЕС</b>\n"
+            f"🏆 Досягнень: <b>{achievements_count}</b>\n"
+            f"🕓 Останнє: <b>{last_achievement_title_html}</b>\n"
+            f"🎯 Наступна ціль: <b>{next_goal_text_html}</b>"
         )
 
-        sent_msg = await message.answer(text, parse_mode="Markdown")
+        sent_msg = await message.answer(text, parse_mode="HTML")
         safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
     except Exception as e:
@@ -219,7 +226,6 @@ async def handle_static_actions(callback: CallbackQuery):
     event_name = REST_SELECTED if callback.data == "action_rest" else SKIP_SELECTED
 
     try:
-
         await flow_event_bus.publish(
             EventEnvelope(
                 name=event_name,
