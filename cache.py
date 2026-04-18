@@ -89,6 +89,15 @@ class KeyManager:
     def get_rating_cache_key() -> str:
         return f"{KeyManager.PREFIX}:global_rating"
 
+    # --- Profile ---
+    @staticmethod
+    def get_profile_limit_key(uid: int) -> str:
+        return f"{KeyManager.PREFIX}:profile_limit:{uid}"
+
+    @staticmethod
+    def get_profile_warn_key(uid: int) -> str:
+        return f"{KeyManager.PREFIX}:profile_warn:{uid}"
+
     # --- Bot ---
     @staticmethod
     def get_bot_username_key() -> str:
