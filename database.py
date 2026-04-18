@@ -12,6 +12,7 @@ from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
 from cache import get_data, set_flag, KeyManager, acquire_lock, delete_data
 from supabase_db import (
     get_user_by_telegram_id,
+    create_user,
     add_activity as supabase_add_activity,
     get_user_activities,
 )
@@ -360,12 +361,8 @@ async def check_user_exists(user_id: int) -> bool:
     if cached is not None:
         return True
 
-    res = await _request({
-        "action": "check_user",
-        "user_id": str(user_id),
-    }, method="GET")
-
-    exists = bool(res.get("exists", False))
+    user_row = await _get_supabase_user_row(user_id)
+    exists = user_row is not None
 
     if exists:
         await set_flag(cache_key, ex=3600)
@@ -378,22 +375,26 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
     Registration without duplicate pre-check.
     Existence is already checked in orchestrator before this call.
     """
-    res = await _request({
-        "action": "register_user",
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-        "nickname": str(nickname),
-        "user_id": str(user_id),
-        "gender": quiz_data.get("gender", "N/A"),
-        "level": quiz_data.get("level", "N/A"),
-        "goal": str(quiz_data.get("goal", "N/A"))[:200],
-    })
+    try:
+        existing_user = await _get_supabase_user_row(user_id)
+        if existing_user:
+            await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+            return True
 
-    if isinstance(res, dict) and res.get("success"):
+        await create_user(
+            telegram_user_id=user_id,
+            nickname=str(nickname),
+            gender=quiz_data.get("gender", "N/A"),
+            level=quiz_data.get("level", "N/A"),
+            goal=str(quiz_data.get("goal", "N/A"))[:200],
+        )
+
         await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
         return True
 
-    logger.warning(f"[DB] registration failed: user_id={user_id}, response={res}")
-    return False
+    except Exception as e:
+        logger.warning(f"[DB] registration failed: user_id={user_id}, error={e}")
+        return False
 
 
 # ==============================================================================
