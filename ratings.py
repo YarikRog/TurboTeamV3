@@ -133,14 +133,15 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
     """
     uid = actor.id
 
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
     limit_key = KeyManager.get_rating_limit_key(uid)
     if (await get_data(limit_key)) is not None:
         msg = await message.answer("⏳ Бро, рейтинг оновлюється раз на 5 хв. Зачекай!")
         safe_create_task(auto_delete(msg, 5))
-        try:
-            await message.delete()
-        except Exception:
-            pass
         return None
 
     await set_flag(limit_key, ex=300)
@@ -186,15 +187,7 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
 
     try:
         sent_msg = await message.answer(text, parse_mode="Markdown")
-
         safe_create_task(auto_delete(sent_msg, 30))
-
-        if uid not in ADMIN_IDS:
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
         return sent_msg
 
     except Exception as e:
