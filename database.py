@@ -15,6 +15,10 @@ from supabase_db import (
     create_user,
     add_activity as supabase_add_activity,
     get_user_activities,
+    get_all_users,
+    get_user_activities_in_period,
+    get_referrals_count,
+    add_referral as supabase_add_referral,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,23 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
         dt = pytz.UTC.localize(dt)
 
     return dt.astimezone(KYIV_TZ)
+
+
+def _get_current_week_period() -> tuple[str, str]:
+    """
+    Returns current week boundaries in ISO format.
+    Week starts on Monday, timezone = Kyiv.
+    """
+    now = get_kyiv_now()
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    week_end = week_start + timedelta(days=7)
+
+    return week_start.isoformat(), week_end.isoformat()
 
 
 async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
@@ -144,8 +165,6 @@ async def _has_activity_today(
 
         existing_video_id = str(activity.get("video_id") or "").strip()
 
-        # If video_id is provided, compare it too.
-        # If not provided, action_name + today's date is enough (same behavior as current lock key).
         if normalized_video_id:
             if existing_video_id == normalized_video_id:
                 return True
@@ -220,7 +239,7 @@ async def close_db_session() -> None:
 # ==============================================================================
 async def _request(payload: dict, method: str = "POST") -> Any:
     """
-    Single execution point for all GAS traffic.
+    Legacy GAS request layer. Kept temporarily for compatibility.
     """
     session = await get_session()
 
@@ -271,14 +290,6 @@ async def _handle_response(resp: aiohttp.ClientResponse) -> Any:
 # ==============================================================================
 
 async def check_activity_limit(user_id: int, nickname: str, action_name: str) -> bool:
-    """
-    FAST PATH:
-    - Redis cache first
-    - no DB call if locked
-
-    Returns True if activity can be added, False if already exists today.
-    """
-
     key = KeyManager.get_action_lock_key(
         user_id, f"{action_name}:{get_kyiv_now().date()}"
     )
@@ -298,7 +309,6 @@ async def add_activity(
     hp_change: int,
     video_id: str = ""
 ) -> Union[bool, str]:
-
     return await update_user_activity(
         user_id, nickname, action_name, hp_change, video_id, False
     )
@@ -457,36 +467,127 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
 # ANALYTICS
 # ==============================================================================
 async def get_weekly_top_users():
-    return await _request({"action": "get_weekly_leader"})
+    try:
+        period_start, period_end = _get_current_week_period()
+        users = await get_all_users()
+        ranking_rows = []
+
+        for user in users:
+            user_uuid = user.get("id")
+            if not user_uuid:
+                continue
+
+            activities = await get_user_activities_in_period(
+                str(user_uuid),
+                created_at_from=period_start,
+                created_at_to=period_end,
+                limit=1000,
+            )
+
+            hp_total = 0
+            for activity in activities:
+                try:
+                    hp_total += int(activity.get("hp_change", 0) or 0)
+                except Exception:
+                    continue
+
+            referrals_count = await get_referrals_count(str(user_uuid))
+
+            ranking_rows.append({
+                "nick": user.get("nickname") or f"ID:{user.get('telegram_user_id', 'unknown')}",
+                "hp": hp_total,
+                "referrals_count": referrals_count,
+                "telegram_user_id": user.get("telegram_user_id"),
+            })
+
+        ranking_rows.sort(key=lambda x: (-int(x.get("hp", 0)), str(x.get("nick", ""))))
+        return ranking_rows[:10]
+
+    except Exception as e:
+        logger.error(f"[DB] failed to build weekly top users: {e}", exc_info=True)
+        return []
 
 
 async def reset_weekly_stats() -> bool:
-    res = await _request({"action": "reset_weekly_stats"})
-    return bool(res.get("success"))
+    """
+    Supabase weekly rating is calculated by date range,
+    so no explicit reset is required anymore.
+    """
+    return True
 
 
 async def penalty_user(user_id: int, points: int) -> bool:
-    res = await _request({
-        "action": "penalty",
-        "user_id": str(user_id),
-        "points": int(points),
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-    })
-    return bool(res.get("success"))
+    result = await update_user_activity(
+        user_id=user_id,
+        nickname="system",
+        action_name="Penalty",
+        hp_change=-abs(int(points)),
+        video_id="manual_penalty",
+        is_check=False,
+        skip_lock=False,
+    )
+    return result is True
 
 
 async def get_inactive_users() -> List[str]:
-    res = await _request({"action": "get_inactive"}, method="GET")
-    return res.get("success", []) if isinstance(res, dict) else []
+    try:
+        users = await get_all_users()
+        today = get_kyiv_now().date()
+        inactive_users = []
+
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+            nickname = user.get("nickname") or str(telegram_user_id)
+
+            if not telegram_user_id or not user_uuid:
+                continue
+
+            activities = await get_user_activities(str(user_uuid), limit=50)
+
+            has_today_activity = False
+            for activity in activities:
+                created_at = _parse_activity_created_at(activity.get("created_at"))
+                if created_at and created_at.date() == today:
+                    has_today_activity = True
+                    break
+
+            if not has_today_activity:
+                inactive_users.append(str(nickname))
+
+        return inactive_users
+
+    except Exception as e:
+        logger.error(f"[DB] failed to get inactive users: {e}", exc_info=True)
+        return []
 
 
 async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: str) -> bool:
-    res = await _request({
-        "action": "add_referral",
-        "referrer_id": str(referrer_id),
-        "new_user_id": str(new_user_id),
-        "new_user_name": new_user_name,
-        "date": get_kyiv_now().strftime("%d.%m.%Y"),
-    })
+    try:
+        referrer_row = await _get_supabase_user_row(referrer_id)
+        new_user_row = await _get_supabase_user_row(new_user_id)
 
-    return bool(res.get("success"))
+        if not referrer_row or not new_user_row:
+            logger.warning(
+                f"[DB] referral write failed: referrer={referrer_id} new_user={new_user_id}"
+            )
+            return False
+
+        referrer_user_uuid = referrer_row.get("id")
+        new_user_uuid = new_user_row.get("id")
+
+        if not referrer_user_uuid or not new_user_uuid:
+            logger.warning(
+                f"[DB] referral UUID missing: referrer={referrer_id} new_user={new_user_id}"
+            )
+            return False
+
+        await supabase_add_referral(
+            referrer_user_id=str(referrer_user_uuid),
+            new_user_id=str(new_user_uuid),
+        )
+        return True
+
+    except Exception as e:
+        logger.error(f"[DB] failed to add referral bonus: {e}", exc_info=True)
+        return False
