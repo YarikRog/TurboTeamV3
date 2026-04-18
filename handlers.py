@@ -11,10 +11,52 @@ from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
 from services import safe_create_task, auto_delete
-from supabase_db import get_user_by_telegram_id, get_user_activities, get_referrals_count
+from supabase_db import (
+    get_user_by_telegram_id,
+    get_user_activities,
+    get_referrals_count,
+    get_user_achievements_count,
+    get_last_user_achievement,
+)
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+TRAINING_STATUS_LEVELS = [
+    (1, "Новачок"),
+    (5, "Вкатався"),
+    (10, "Боєць"),
+    (25, "Стабільний"),
+    (50, "Мотор"),
+    (100, "Турбо"),
+    (200, "Машина"),
+    (350, "Термінатор"),
+    (500, "Монстр"),
+    (1000, "Легенда TurboTeam"),
+]
+
+TRAINING_GOALS = [1, 5, 10, 25, 50, 100, 200, 500, 1000]
+
+
+def get_training_status(training_count: int) -> str:
+    status = "Без статусу"
+
+    for threshold, title in TRAINING_STATUS_LEVELS:
+        if training_count >= threshold:
+            status = title
+        else:
+            break
+
+    return status
+
+
+def get_next_training_goal(training_count: int) -> tuple[int | None, str]:
+    for goal in TRAINING_GOALS:
+        if training_count < goal:
+            return goal, f"{training_count}/{goal}"
+
+    return None, "MAX"
 
 
 @router.message(F.text == "🏆 Рейтинг ТОП")
@@ -48,6 +90,8 @@ async def handle_my_profile(message: Message):
 
         activities = await get_user_activities(str(user_uuid), limit=1000)
         referrals_count = await get_referrals_count(str(user_uuid))
+        achievements_count = await get_user_achievements_count(str(user_uuid))
+        last_achievement = await get_last_user_achievement(str(user_uuid))
 
         gym_count = 0
         street_count = 0
@@ -66,6 +110,18 @@ async def handle_my_profile(message: Message):
             elif action_name == "Skipped":
                 skip_count += 1
 
+        training_count = gym_count + street_count
+        status_title = get_training_status(training_count)
+        next_goal, next_goal_progress = get_next_training_goal(training_count)
+
+        last_achievement_title = "Поки немає"
+        if last_achievement:
+            last_achievement_title = str(last_achievement.get("achievement_title") or "Поки немає")
+
+        next_goal_text = "MAX"
+        if next_goal is not None:
+            next_goal_text = f"{next_goal} тренувань ({next_goal_progress})"
+
         nickname = user_row.get("nickname") or message.from_user.first_name
         hp_total = int(stats.get("hp_total", 0) or 0)
         streak = int(stats.get("streak", 0) or 0)
@@ -81,7 +137,11 @@ async def handle_my_profile(message: Message):
             f"🦾 Street: *{street_count}*\n"
             f"🧘 Rest: *{rest_count}*\n"
             f"🚫 Skip: *{skip_count}*\n\n"
-            f"🚀 Реферали: *{referrals_count}*"
+            f"🚀 Реферали: *{referrals_count}*\n"
+            f"🎖️ Статус: *{status_title}*\n"
+            f"🏅 Досягнень: *{achievements_count}*\n"
+            f"🕓 Останнє досягнення: *{last_achievement_title}*\n"
+            f"🎯 Наступна ціль: *{next_goal_text}*"
         )
 
         sent_msg = await message.answer(text, parse_mode="Markdown")
