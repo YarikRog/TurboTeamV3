@@ -1,32 +1,50 @@
 import logging
 import random
 from typing import Optional, Dict, Any, List
+from datetime import timedelta
 
+import pytz
 from aiogram.types import Message, User
 
 from config import ADMIN_IDS
 from cache import get_data, set_data, set_flag, KeyManager
 from services import safe_create_task, auto_delete
 from supabase_db import (
-    get_user_by_telegram_id,
-    get_user_activities,
+    get_all_users,
+    get_user_activities_in_period,
     get_referrals_count,
-    get_supabase,
 )
 
 logger = logging.getLogger(__name__)
+KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 
-async def _get_all_users() -> List[Dict[str, Any]]:
-    sb = get_supabase()
-    response = sb.table("users").select("*").execute()
-    return response.data or []
+def _get_current_week_period() -> tuple[str, str]:
+    """
+    Returns current week boundaries in ISO format.
+    Week starts on Monday, timezone = Kyiv.
+    """
+    now = pytz.UTC.localize(__import__("datetime").datetime.utcnow()).astimezone(KYIV_TZ)
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    week_end = week_start + timedelta(days=7)
+
+    return week_start.isoformat(), week_end.isoformat()
 
 
-async def _get_user_hp(user_uuid: str) -> int:
-    activities = await get_user_activities(user_uuid, limit=1000)
+async def _get_user_week_hp(user_uuid: str, period_start: str, period_end: str) -> int:
+    activities = await get_user_activities_in_period(
+        user_uuid,
+        created_at_from=period_start,
+        created_at_to=period_end,
+        limit=1000,
+    )
+
     total = 0
-
     for activity in activities:
         try:
             total += int(activity.get("hp_change", 0) or 0)
@@ -43,7 +61,7 @@ async def _get_user_hp(user_uuid: str) -> int:
 async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Отримує рейтингові дані з багаторівневим захистом.
-    Redis cache (60-120s) -> Supabase.
+    Redis cache (60-120s) -> Supabase weekly rating.
     """
     cache_key = KeyManager.get_rating_cache_key()
 
@@ -55,7 +73,8 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
         logger.error(f"[RATINGS] Redis read error: {e}")
 
     try:
-        users = await _get_all_users()
+        period_start, period_end = _get_current_week_period()
+        users = await get_all_users()
         ranking_rows = []
 
         for user in users:
@@ -63,7 +82,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
             if not user_uuid:
                 continue
 
-            hp = await _get_user_hp(str(user_uuid))
+            hp = await _get_user_week_hp(str(user_uuid), period_start, period_end)
             referrals_count = await get_referrals_count(str(user_uuid))
 
             nickname = user.get("nickname") or f"ID:{user.get('telegram_user_id', 'unknown')}"
@@ -99,7 +118,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
         return result
 
     except Exception as e:
-        logger.error(f"[RATINGS] Supabase rating build failed for uid={user_id}: {e}", exc_info=True)
+        logger.error(f"[RATINGS] Supabase weekly rating build failed for uid={user_id}: {e}", exc_info=True)
 
     return None
 
