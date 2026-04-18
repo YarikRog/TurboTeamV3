@@ -7,6 +7,7 @@ from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS
+from cache import get_data, set_flag, KeyManager
 from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
@@ -21,6 +22,9 @@ from supabase_db import (
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+PROFILE_COOLDOWN = 7200
+PROFILE_MESSAGE_TTL = 60
 
 
 TRAINING_STATUS_LEVELS = [
@@ -74,18 +78,32 @@ async def handle_my_profile(message: Message):
     try:
         telegram_user_id = message.from_user.id
 
+        profile_limit_key = KeyManager.get_profile_limit_key(telegram_user_id)
+        profile_warn_key = KeyManager.get_profile_warn_key(telegram_user_id)
+
+        if (await get_data(profile_limit_key)) is not None:
+            if (await get_data(profile_warn_key)) is None:
+                await set_flag(profile_warn_key, ex=PROFILE_COOLDOWN)
+                sent_msg = await message.answer(
+                    "⏳ Бро, профіль можна відкривати раз на 2 години. Спробуй пізніше."
+                )
+                safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
+            return
+
+        await set_flag(profile_limit_key, ex=PROFILE_COOLDOWN)
+
         stats = await get_user_stats(telegram_user_id)
         user_row = await get_user_by_telegram_id(telegram_user_id)
 
         if not stats or not user_row:
             sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, 30))
+            safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
             return
 
         user_uuid = user_row.get("id")
         if not user_uuid:
             sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, 30))
+            safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
             return
 
         activities = await get_user_activities(str(user_uuid), limit=1000)
@@ -130,27 +148,29 @@ async def handle_my_profile(message: Message):
         text = (
             f"👤 *МІЙ ПРОФІЛЬ*\n\n"
             f"🏷️ Нік: *{nickname}*\n"
+            f"🎖️ Статус: *{status_title}*\n"
             f"⚡ Загальний HP: *{hp_total}*\n"
-            f"🔥 Streak: *{streak}*\n"
-            f"📊 Усього активностей: *{activities_count}*\n\n"
+            f"🔥 Streak: *{streak}*\n\n"
+            f"📊 *АКТИВНІСТЬ*\n"
             f"🏋️ Gym: *{gym_count}*\n"
             f"🦾 Street: *{street_count}*\n"
             f"🧘 Rest: *{rest_count}*\n"
-            f"🚫 Skip: *{skip_count}*\n\n"
-            f"🚀 Реферали: *{referrals_count}*\n"
-            f"🎖️ Статус: *{status_title}*\n"
-            f"🏅 Досягнень: *{achievements_count}*\n"
-            f"🕓 Останнє досягнення: *{last_achievement_title}*\n"
+            f"🚫 Skip: *{skip_count}*\n"
+            f"📌 Усього дій: *{activities_count}*\n"
+            f"🚀 Реферали: *{referrals_count}*\n\n"
+            f"🏅 *ПРОГРЕС*\n"
+            f"🏆 Досягнень: *{achievements_count}*\n"
+            f"🕓 Останнє: *{last_achievement_title}*\n"
             f"🎯 Наступна ціль: *{next_goal_text}*"
         )
 
         sent_msg = await message.answer(text, parse_mode="Markdown")
-        safe_create_task(auto_delete(sent_msg, 30))
+        safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
     except Exception as e:
         logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
         sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
-        safe_create_task(auto_delete(sent_msg, 30))
+        safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
 
 
 @router.callback_query(F.data == "invite_friend")
