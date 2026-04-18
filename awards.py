@@ -34,43 +34,38 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         return None
 
     try:
-        # Відкриваємо шаблон
-        img = Image.open(TEMPLATE_PATH).convert("RGBA") # RGBA для кращої роботи з шарами
+        img = Image.open(TEMPLATE_PATH).convert("RGBA")
         draw = ImageDraw.Draw(img)
         img_width, img_height = img.size
 
-        # Підготовка шрифтів з фолбеком
         def get_font(path, size):
             try:
                 return ImageFont.truetype(path, size) if os.path.exists(path) else ImageFont.load_default()
-            except:
+            except Exception:
                 return ImageFont.load_default()
 
-        # Адаптивний розмір шрифту для нікнейма
-        # Якщо нік занадто довгий — зменшуємо шрифт, щоб не виліз за краї
         display_name = f"@{nickname}".upper()
         name_font_size = 55
-        if len(display_name) > 12: name_font_size = 45
-        if len(display_name) > 16: name_font_size = 35
+        if len(display_name) > 12:
+            name_font_size = 45
+        if len(display_name) > 16:
+            name_font_size = 35
 
         name_font = get_font(FONT_PATH, name_font_size)
         title_font = get_font(FONT_PATH, 42)
         hp_font = get_font(FONT_PATH, 85)
 
-        # Функція центрування
         def draw_centered_text(text, font, y, fill):
             bbox = draw.textbbox((0, 0), text, font=font)
             w = bbox[2] - bbox[0]
             draw.text(((img_width - w) // 2, y), text, font=font, fill=fill)
 
-        # Малюємо дані (Координати Y підганяються під твій шаблон)
         draw_centered_text(display_name, name_font, y=110, fill="white")
         draw_centered_text("ЧЕМПІОН ТИЖНЯ", title_font, y=285, fill="#F0F0F0")
         draw_centered_text(str(hp_score), hp_font, y=465, fill="black")
 
-        # Використовуємо tempfile для уникнення конфліктів при паралельних запитах
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=BASE_DIR)
-        os.close(tmp_fd) # Закриваємо дескриптор, PIL сам відкриє файл
+        os.close(tmp_fd)
 
         img.convert("RGB").save(tmp_path, "PNG", optimize=True)
         logger.info(f"[AWARDS] Картка створена: {tmp_path}")
@@ -93,9 +88,8 @@ async def sunday_final_logic(bot: Bot) -> None:
     card_path: Optional[str] = None
 
     try:
-        # 1. Отримуємо дані з GAS через базу
         top_users = await get_weekly_top_users()
-        
+
         if not top_users or not isinstance(top_users, list):
             logger.warning("[AWARDS] Дані про лідерів порожні або невірні.")
             return
@@ -108,11 +102,9 @@ async def sunday_final_logic(bot: Bot) -> None:
             logger.info("[AWARDS] Активності за тиждень не було. Пропускаємо.")
             return
 
-        # 2. Створюємо артефакт (картку)
         card_path = create_fifa_card(nickname, hp_score)
         caption = get_phrase("winner", mention=f"@{nickname}")
 
-        # 3. Публікація в групу
         if card_path and os.path.exists(card_path):
             await bot.send_photo(
                 chat_id=REPORTS_GROUP_ID,
@@ -121,32 +113,28 @@ async def sunday_final_logic(bot: Bot) -> None:
                 parse_mode="Markdown"
             )
         else:
-            # Фолбек, якщо картинка не згенерувалась
             await bot.send_message(
                 REPORTS_GROUP_ID,
                 f"🏆 *ВІТАЄМО ЧЕМПІОНА!*\n\n{caption}\n💪 Результат: {hp_score} HP",
                 parse_mode="Markdown"
             )
 
-        # 4. Скидання статистики (CRITICAL)
-        # Робимо це ТІЛЬКИ після успішної відправки привітання
         success_reset = await reset_weekly_stats()
-        
+
         if success_reset:
-            logger.info("[AWARDS] Статистику тижня успішно скинуто.")
+            logger.info("[AWARDS] Weekly final completed successfully.")
             await bot.send_message(
                 REPORTS_GROUP_ID,
-                "🔄 *Новий тиждень розпочато!*\nУсі HP обнулено. Час знову ставати монстром! 🦾🏎️💨",
+                "🔄 *Новий тиждень розпочато!*\nРейтинг тижня оновлено. Час знову ставати монстром! 🦾🏎️💨",
                 parse_mode="Markdown"
             )
         else:
-            logger.error("[AWARDS] Помилка скидання статистики в Google Таблиці!")
+            logger.error("[AWARDS] Weekly final completed, but reset step reported failure.")
 
     except Exception as e:
         logger.error(f"[AWARDS] Критичний збій Sunday Final: {e}", exc_info=True)
 
     finally:
-        # Гарантоване видалення сміття
         if card_path and os.path.exists(card_path):
             try:
                 os.remove(card_path)
