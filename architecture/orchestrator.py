@@ -161,6 +161,44 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     user = event.payload["user"]
 
     t = time.perf_counter()
+    current_state = await state_machine.get_state(event.user_id)
+    logger.info(
+        "[TRAIN] get_state user_id=%s action=%s state=%s took %sms",
+        event.user_id,
+        action,
+        current_state,
+        _ms(t),
+    )
+
+    if current_state == UserFlowState.VIDEO_WAITING:
+        t = time.perf_counter()
+        msg = await _reply_transport(source, "⏳ Спочатку надішли відео за попереднє тренування!")
+        logger.info(
+            "[TRAIN] blocked by VIDEO_WAITING user_id=%s action=%s took %sms total=%sms",
+            event.user_id,
+            action,
+            _ms(t),
+            _ms(total_started),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_video_waiting_{event.user_id}")
+        return False
+
+    if current_state == UserFlowState.PROCESSING:
+        t = time.perf_counter()
+        msg = await _reply_transport(source, "⏳ Зачекай, попереднє тренування ще обробляється.")
+        logger.info(
+            "[TRAIN] blocked by PROCESSING user_id=%s action=%s took %sms total=%sms",
+            event.user_id,
+            action,
+            _ms(t),
+            _ms(total_started),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_processing_{event.user_id}")
+        return False
+
+    t = time.perf_counter()
     can_log = await ActivityService.can_user_log_activity(event.user_id, action)
     logger.info(
         "[TRAIN] can_user_log_activity user_id=%s action=%s took %sms",
