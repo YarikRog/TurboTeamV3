@@ -54,6 +54,24 @@ async def get_user_by_telegram_id(telegram_user_id: int) -> Optional[Dict[str, A
     return None
 
 
+async def get_user_by_nickname(nickname: str) -> Optional[Dict[str, Any]]:
+    def _query():
+        sb = get_supabase()
+        return (
+            sb.table("users")
+            .select("*")
+            .eq("nickname", nickname)
+            .limit(1)
+            .execute()
+        )
+
+    response = await _run_sync(_query)
+
+    if response.data:
+        return response.data[0]
+    return None
+
+
 async def get_all_users() -> List[Dict[str, Any]]:
     def _query():
         sb = get_supabase()
@@ -92,6 +110,15 @@ async def create_user(
         raise RuntimeError("Failed to create user in Supabase")
 
     return response.data[0]
+
+
+async def delete_user_by_id(user_id: str) -> bool:
+    def _query():
+        sb = get_supabase()
+        return sb.table("users").delete().eq("id", user_id).execute()
+
+    await _run_sync(_query)
+    return True
 
 
 # ==============================================================================
