@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 flow_event_bus = EventBus()
 
+WELCOME_HP_BONUS = 50
+RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
+
 
 def mention(user: types.User) -> str:
     return f"@{user.username or user.first_name}"
@@ -33,6 +36,32 @@ def mention(user: types.User) -> str:
 
 def _ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
+
+
+def _get_return_to_group_reply_keyboard() -> types.ReplyKeyboardMarkup:
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text=RETURN_TO_GROUP_TEXT)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+
+def _get_group_inline_keyboard() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📘 Правила користування TurboTeam",
+                    callback_data="turbo_rules",
+                ),
+            ],
+        ]
+    )
 
 
 async def _reply_transport(source: Message | CallbackQuery, text: str, show_alert: bool = False):
@@ -63,7 +92,14 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     logger.info("[REG] check_user_exists user_id=%s took %sms", user_id, _ms(t))
 
     if already_exists:
-        await message.answer("⚠️ Ти вже в базі.")
+        await message.answer(
+            "⚠️ Ти вже в базі.",
+            reply_markup=_get_return_to_group_reply_keyboard(),
+        )
+        await message.answer(
+            "Тримай перепустку в групу 👇",
+            reply_markup=_get_group_inline_keyboard(),
+        )
         logger.info("[REG] user already exists user_id=%s total=%sms", user_id, _ms(total_started))
         return False
 
@@ -75,6 +111,15 @@ async def on_user_registered(event: EventEnvelope) -> bool:
         await message.answer("⚠️ Не вдалося завершити реєстрацію. Спробуй ще раз.")
         logger.info("[REG] registration failed user_id=%s total=%sms", user_id, _ms(total_started))
         return False
+
+    t = time.perf_counter()
+    welcome_bonus_ok, _, _ = await ActivityService.grant_hp(
+        user_id=user_id,
+        nickname=nickname,
+        action_type="Welcome Bonus",
+        hp=WELCOME_HP_BONUS,
+    )
+    logger.info("[REG] welcome bonus user_id=%s took %sms ok=%s", user_id, _ms(t), welcome_bonus_ok)
 
     t = time.perf_counter()
     await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
@@ -101,34 +146,24 @@ async def on_user_registered(event: EventEnvelope) -> bool:
         )
         logger.info("[REG] referral task scheduled user_id=%s took %sms", user_id, _ms(t))
 
-    group_kb = types.InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
-            ],
-            [
-                types.InlineKeyboardButton(
-                    text="📘 Правила користування TurboTeam",
-                    callback_data="turbo_rules",
-                ),
-            ],
-        ]
+    t = time.perf_counter()
+    await message.answer(
+        f"✅ Реєстрацію завершено. Тобі нараховано +{WELCOME_HP_BONUS} HP",
+        reply_markup=types.ReplyKeyboardRemove(),
     )
-
-    onboarding_text = (
-        "Вітаємо в команді 🔥\n\n"
-        "Щоб заробляти HP, обирай Gym або Street у Turbo-панелі й надсилай "
-        "відео-кружечок у бот 🤳\n\n"
-        "Це потрібно як підтвердження, що ти справді тренувався 💪\n\n"
-        "Якщо сьогодні відпочинок — просто натисни «Відпочинок» 😌\n\n"
-        "Без спаму — у нас Turbo-контроль 😎\n\n"
-        "Тримай перепустку в групу 👇"
-    )
+    logger.info("[REG] registration success answer user_id=%s took %sms", user_id, _ms(t))
 
     t = time.perf_counter()
     await message.answer(
-        onboarding_text,
-        reply_markup=group_kb,
+        "Тисни кнопку нижче, якщо треба швидко повернутися в групу 👇",
+        reply_markup=_get_return_to_group_reply_keyboard(),
+    )
+    logger.info("[REG] return reply keyboard user_id=%s took %sms", user_id, _ms(t))
+
+    t = time.perf_counter()
+    await message.answer(
+        "Тримай перепустку в групу 👇",
+        reply_markup=_get_group_inline_keyboard(),
     )
     logger.info("[REG] onboarding answer user_id=%s took %sms", user_id, _ms(t))
 
@@ -137,6 +172,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     group_welcome_text = (
         get_phrase("welcome", mention=user_mention)
         + "\n\n"
+        + f"🔥 Новачку одразу нараховано +{WELCOME_HP_BONUS} HP\n"
         + "Освоюйся в TurboTeam 👀\n"
         + "Усі дії, Turbo-панель і правила — у закріплених повідомленнях групи 👆"
     )
@@ -379,7 +415,7 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
         return False
 
     t = time.perf_counter()
-    ok = await ActivityService.grant_hp(event.user_id, user.full_name, action_name, int(hp))
+    ok, _, _ = await ActivityService.grant_hp(event.user_id, user.full_name, action_name, int(hp))
     logger.info(
         "[STATIC] grant_hp user_id=%s action=%s took %sms",
         event.user_id,
