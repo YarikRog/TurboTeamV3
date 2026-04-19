@@ -92,6 +92,12 @@ async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: 
 async def send_invite_prompt(message: Message, actor: User, delete_origin: bool = False):
     uid = actor.id
 
+    if delete_origin:
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.debug(f"[REFERRAL] message.delete failed: {e}")
+
     cooldown_key = KeyManager.get_ref_cooldown_key(uid)
     warn_key = KeyManager.get_ref_warn_key(uid)
 
@@ -101,7 +107,7 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
             sent_msg = await message.answer(
                 "⏳ Бро, запрошення друга можна відкривати раз на 10 хв. Спробуй пізніше."
             )
-            safe_create_task(auto_delete(sent_msg, REF_MESSAGE_TTL))
+            safe_create_task(auto_delete(sent_msg, 1))
         return
 
     await set_flag(cooldown_key, ex=REF_COOLDOWN)
@@ -123,12 +129,6 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
             InlineKeyboardButton(text="Натискай сюди 👈", url=share_url)
         ]]
     )
-
-    if delete_origin:
-        try:
-            await message.delete()
-        except Exception as e:
-            logger.debug(f"[REFERRAL] message.delete failed: {e}")
 
     sent_msg = await message.answer(
         f"🚀 **ЧАС РОЗШИРЮВАТИ КОМАНДУ!**\n\n"
@@ -189,13 +189,13 @@ async def process_referral_logic(
         except Exception as e:
             logger.debug(f"[REFERRAL] get_chat_member failed: {e}")
 
-        referrer_granted = await ActivityService.grant_hp(
+        referrer_granted, _, _ = await ActivityService.grant_hp(
             referrer_id, ref_name, "Referral Bonus", HP_REF_BATA
         )
 
         await asyncio.sleep(0.5)
 
-        newbie_granted = await ActivityService.grant_hp(
+        newbie_granted, _, _ = await ActivityService.grant_hp(
             new_user_id, new_nickname, "Welcome Bonus", HP_REF_NEWBIE
         )
 
