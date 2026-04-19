@@ -11,7 +11,7 @@ from aiogram import types
 from aiogram.types import Message
 
 from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
-from cache import KeyManager, acquire_lock, get_data, set_data
+from cache import KeyManager, acquire_lock, get_data, redis_client, set_data
 from database import get_kyiv_now, add_activity, check_activity_limit, update_user_activity
 from phrases import get_phrase
 from config import GROUP_LINK
@@ -238,25 +238,44 @@ class ActivityService:
             "Rest",
             "Skipped",
         ]
+        cache_actions = [
+            action_name
+            for action_name in daily_actions
+            if action_name.strip().lower() not in ignore_set
+        ]
 
-        for action_name in daily_actions:
-            if action_name.strip().lower() in ignore_set:
-                continue
+        if cache_actions:
+            if redis_client is not None:
+                try:
+                    pipe = redis_client.pipeline()
+                    for action_name in cache_actions:
+                        pipe.get(KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}"))
+                    cached_locks = await pipe.execute()
 
-            lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
-            if (await get_data(lock_key)) is not None:
-                logger.debug(
-                    "[check_today_report] Redis-hit: uid=%s action=%s date=%s",
-                    user_id,
-                    action_name,
-                    today,
-                )
-                return True
+                    for action_name, cached_lock in zip(cache_actions, cached_locks):
+                        if cached_lock is not None:
+                            logger.debug(
+                                "[check_today_report] Redis-hit: uid=%s action=%s date=%s",
+                                user_id,
+                                action_name,
+                                today,
+                            )
+                            return True
+                except Exception as e:
+                    logger.error(f"[check_today_report] Redis pipeline error: {e}")
+            else:
+                for action_name in cache_actions:
+                    lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
+                    if (await get_data(lock_key)) is not None:
+                        logger.debug(
+                            "[check_today_report] Redis-hit: uid=%s action=%s date=%s",
+                            user_id,
+                            action_name,
+                            today,
+                        )
+                        return True
 
-        for action_name in daily_actions:
-            if action_name.strip().lower() in ignore_set:
-                continue
-
+        for action_name in cache_actions:
             can_log = await ActivityService.can_user_log_activity(user_id, action_name)
             if not can_log:
                 logger.debug(
