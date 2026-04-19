@@ -36,21 +36,43 @@ async def download_user_avatar(bot: Bot, user_id: int) -> Optional[str]:
     Повертає шлях до тимчасового файла або None.
     """
     try:
+        logger.info(f"[AWARDS] avatar: requesting profile photos for user_id={user_id}")
         photos = await bot.get_user_profile_photos(user_id=user_id, limit=1)
-        if not photos.total_count or not photos.photos:
+
+        total_count = int(getattr(photos, "total_count", 0) or 0)
+        logger.info(f"[AWARDS] avatar: total_count={total_count} for user_id={user_id}")
+
+        if total_count == 0 or not photos.photos:
+            logger.warning(f"[AWARDS] avatar: no profile photos for user_id={user_id}")
             return None
 
         best_photo = photos.photos[0][-1]
-        file = await bot.get_file(best_photo.file_id)
+        logger.info(
+            f"[AWARDS] avatar: selected file_id={best_photo.file_id} "
+            f"size={best_photo.width}x{best_photo.height}"
+        )
 
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".jpg", dir=BASE_DIR)
         os.close(tmp_fd)
 
-        await bot.download_file(file.file_path, destination=tmp_path)
+        await bot.download(best_photo.file_id, destination=tmp_path)
+
+        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            logger.warning(f"[AWARDS] avatar: file downloaded but empty for user_id={user_id}")
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+            return None
+
+        logger.info(
+            f"[AWARDS] avatar: downloaded successfully for user_id={user_id}, "
+            f"path={tmp_path}, size_bytes={os.path.getsize(tmp_path)}"
+        )
         return tmp_path
 
     except Exception as e:
-        logger.warning(f"[AWARDS] Не вдалося завантажити аватарку user_id={user_id}: {e}")
+        logger.warning(f"[AWARDS] Не вдалося завантажити аватарку user_id={user_id}: {e}", exc_info=True)
         return None
 
 
@@ -71,9 +93,10 @@ def paste_circle_avatar(base_img: Image.Image, avatar_path: str) -> None:
         x = AVATAR_CENTER_X - AVATAR_SIZE // 2
         y = AVATAR_TOP_Y
         base_img.alpha_composite(avatar, (x, y))
+        logger.info(f"[AWARDS] avatar: pasted circle avatar at x={x}, y={y}")
 
     except Exception as e:
-        logger.warning(f"[AWARDS] Не вдалося вставити аватарку: {e}")
+        logger.warning(f"[AWARDS] Не вдалося вставити аватарку: {e}", exc_info=True)
 
 
 # ==============================================================================
@@ -149,7 +172,10 @@ def create_fifa_card(
 
         # Аватарка
         if avatar_path and os.path.exists(avatar_path):
+            logger.info(f"[AWARDS] avatar: found avatar_path={avatar_path}, pasting into card")
             paste_circle_avatar(img, avatar_path)
+        else:
+            logger.info("[AWARDS] avatar: no avatar_path available, generating card without avatar")
 
         # Заголовок трохи нижче
         draw_centered_text(
