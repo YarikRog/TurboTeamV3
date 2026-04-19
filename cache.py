@@ -83,6 +83,10 @@ class KeyManager:
     def get_training_rollback_key(uid: int, date_str: str, action_type: str, video_id: str) -> str:
         return f"{KeyManager.PREFIX}:rollback:{uid}:{date_str}:{action_type}:{video_id}"
 
+    @staticmethod
+    def get_training_rollback_lock_key(uid: int, date_str: str, action_type: str, video_id: str) -> str:
+        return f"{KeyManager.PREFIX}:rollback_lock:{uid}:{date_str}:{action_type}:{video_id}"
+
     # --- Limits / anti-spam ---
     @staticmethod
     def get_limit_key(user_id: int, action_type: str, date_str: str) -> str:
