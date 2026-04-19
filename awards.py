@@ -28,6 +28,7 @@ FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
 def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
     """
     Генерує FIFA-картку переможця з автоматичним масштабуванням тексту.
+    Оптимізовано під Oswald.
     """
     if not os.path.exists(TEMPLATE_PATH):
         logger.error(f"[AWARDS] Шаблон не знайдено: {TEMPLATE_PATH}")
@@ -45,24 +46,67 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 return ImageFont.load_default()
 
         display_name = f"@{nickname}".upper()
-        name_font_size = 55
+
+        # Oswald візуально вузький і високий, тому трохи інші розміри
+        name_font_size = 50
         if len(display_name) > 12:
-            name_font_size = 45
+            name_font_size = 42
         if len(display_name) > 16:
-            name_font_size = 35
+            name_font_size = 34
+        if len(display_name) > 20:
+            name_font_size = 28
 
         name_font = get_font(FONT_PATH, name_font_size)
-        title_font = get_font(FONT_PATH, 42)
-        hp_font = get_font(FONT_PATH, 85)
+        title_font = get_font(FONT_PATH, 34)
+        hp_font = get_font(FONT_PATH, 92)
 
-        def draw_centered_text(text, font, y, fill):
-            bbox = draw.textbbox((0, 0), text, font=font)
+        def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
+            bbox = draw.textbbox(
+                (0, 0),
+                text,
+                font=font,
+                stroke_width=stroke_width,
+            )
             w = bbox[2] - bbox[0]
-            draw.text(((img_width - w) // 2, y), text, font=font, fill=fill)
+            x = (img_width - w) // 2
+            draw.text(
+                (x, y),
+                text,
+                font=font,
+                fill=fill,
+                stroke_fill=stroke_fill,
+                stroke_width=stroke_width,
+            )
 
-        draw_centered_text(display_name, name_font, y=110, fill="white")
-        draw_centered_text("ЧЕМПІОН ТИЖНЯ", title_font, y=285, fill="#F0F0F0")
-        draw_centered_text(str(hp_score), hp_font, y=465, fill="black")
+        # Нік
+        draw_centered_text(
+            display_name,
+            name_font,
+            y=118,
+            fill="white",
+            stroke_fill="#0A1A4F",
+            stroke_width=2,
+        )
+
+        # Заголовок
+        draw_centered_text(
+            "ЧЕМПІОН ТИЖНЯ",
+            title_font,
+            y=292,
+            fill="#F4F4F4",
+            stroke_fill="#0A1A4F",
+            stroke_width=1,
+        )
+
+        # HP
+        draw_centered_text(
+            str(hp_score),
+            hp_font,
+            y=452,
+            fill="black",
+            stroke_fill="#A86F00",
+            stroke_width=1,
+        )
 
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=BASE_DIR)
         os.close(tmp_fd)
