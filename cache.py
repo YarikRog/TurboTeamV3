@@ -45,6 +45,10 @@ class KeyManager:
         return f"{KeyManager.PREFIX}:ref_cooldown:{uid}"
 
     @staticmethod
+    def get_ref_warn_key(uid: int) -> str:
+        return f"{KeyManager.PREFIX}:ref_warn:{uid}"
+
+    @staticmethod
     def get_ref_processed_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:ref_processed:{uid}"
 
