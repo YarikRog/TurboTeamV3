@@ -1,7 +1,7 @@
 import logging
 import random
-from typing import Optional, Dict, Any, List
-from datetime import timedelta
+from typing import Optional, Dict, Any
+from datetime import timedelta, datetime
 
 import pytz
 from aiogram.types import Message, User
@@ -21,16 +21,26 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 def _get_current_week_period() -> tuple[str, str]:
     """
-    Returns current week boundaries in ISO format.
-    Week starts on Monday, timezone = Kyiv.
+    Returns custom week boundaries in ISO format.
+    Week starts on Sunday at 20:00 Kyiv time.
+    Period: Sunday 20:00 -> next Sunday 20:00
     """
-    now = pytz.UTC.localize(__import__("datetime").datetime.utcnow()).astimezone(KYIV_TZ)
-    week_start = (now - timedelta(days=now.weekday())).replace(
-        hour=0,
+    now = datetime.now(KYIV_TZ)
+
+    # weekday(): Monday=0 ... Sunday=6
+    days_since_sunday = (now.weekday() + 1) % 7
+    current_sunday = (now - timedelta(days=days_since_sunday)).replace(
+        hour=20,
         minute=0,
         second=0,
         microsecond=0,
     )
+
+    if now < current_sunday:
+        week_start = current_sunday - timedelta(days=7)
+    else:
+        week_start = current_sunday
+
     week_end = week_start + timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()
