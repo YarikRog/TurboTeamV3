@@ -75,15 +75,20 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
 def _get_current_week_period() -> tuple[str, str]:
     """
     Returns current week boundaries in ISO format.
-    Week starts on Monday, timezone = Kyiv.
+    TurboTeam week starts on Sunday at 20:00 Kyiv time.
     """
     now = get_kyiv_now()
-    week_start = (now - timedelta(days=now.weekday())).replace(
-        hour=0,
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
         minute=0,
         second=0,
         microsecond=0,
     )
+    if now < current_sunday_20:
+        week_start = current_sunday_20 - timedelta(days=7)
+    else:
+        week_start = current_sunday_20
+
     week_end = week_start + timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()

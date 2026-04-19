@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
-from config import ADMIN_IDS
+from config import ADMIN_IDS, REPORTS_GROUP_ID
 from cache import get_data, set_flag, delete_data, KeyManager
 from database import get_user_stats
 from referral import send_invite_prompt
@@ -266,6 +266,9 @@ async def gateway_video_note(m: Message):
 @router.message(Command("reject"))
 async def handle_reject_training(m: Message):
     if m.from_user.id not in ADMIN_IDS:
+        return
+
+    if m.chat.id != REPORTS_GROUP_ID:
         return
 
     if not m.reply_to_message:

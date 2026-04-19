@@ -4,15 +4,14 @@ from aiogram import Bot, Router
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-from architecture.events import EventEnvelope, PENALTY_APPLIED
 from cache import KeyManager, acquire_lock, get_data, set_data, delete_data
+from config import REPORTS_GROUP_ID
 from database import get_kyiv_now, update_user_activity
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 REPORT_THRESHOLD = 3
-REPORT_PENALTY_HP = 120
 REPORT_TTL = 172800  # 48 hours
 
 USER_WARNING_TEXT = (
@@ -49,6 +48,7 @@ async def rollback_training_report(
     group_message_id: int,
     moderator_name: str = "адмін",
     reason: str = "manual_reject",
+    send_group_status: bool = False,
 ) -> bool:
     meta = await get_data(KeyManager.get_report_meta_key(group_message_id))
     if not isinstance(meta, dict):
@@ -60,7 +60,8 @@ async def rollback_training_report(
     hp = int(meta.get("hp") or 0)
     video_id = str(meta.get("video_id") or "")
     date_str = str(meta.get("date_str") or get_kyiv_now().strftime("%Y-%m-%d"))
-    nickname = str(meta.get("nickname") or "system")
+    rollback_video_id = video_id or "no_video_id"
+    group_chat_id = int(meta.get("group_chat_id") or REPORTS_GROUP_ID)
     video_group_message_id = meta.get("video_group_message_id")
     text_group_message_id = meta.get("text_group_message_id")
 
@@ -68,27 +69,44 @@ async def rollback_training_report(
         logger.warning("[REPORTS] rollback invalid meta for group_message_id=%s meta=%s", group_message_id, meta)
         return False
 
-    penalty_video_id = f"rollback:{group_message_id}:{video_id or 'no_video'}"
     rollback_key = KeyManager.get_training_rollback_key(
         target_uid,
         date_str,
         action_type,
-        video_id or "no_video_id",
+        rollback_video_id,
+    )
+    rollback_lock_key = KeyManager.get_training_rollback_lock_key(
+        target_uid,
+        date_str,
+        action_type,
+        rollback_video_id,
     )
 
-    penalty_ok = await update_user_activity(
+    rollback_lock = await acquire_lock(rollback_lock_key, ex=REPORT_TTL)
+    if not rollback_lock:
+        logger.info(
+            "[REPORTS] rollback already processed/in progress target_uid=%s action=%s msg_id=%s",
+            target_uid,
+            action_type,
+            group_message_id,
+        )
+        return False
+
+    rollback_activity_id = f"rollback:{target_uid}:{date_str}:{action_type}:{rollback_video_id}"
+    rollback_ok = await update_user_activity(
         user_id=target_uid,
         nickname="system",
         action_name=f"{action_type} Rollback",
         hp_change=-abs(hp),
-        video_id=penalty_video_id,
+        video_id=rollback_activity_id,
         is_check=False,
-        skip_lock=False,
+        skip_lock=True,
     )
 
-    if not penalty_ok or penalty_ok == "already_done":
+    if not rollback_ok or rollback_ok == "already_done":
+        await delete_data(rollback_lock_key)
         logger.warning(
-            "[REPORTS] rollback penalty write failed target_uid=%s action=%s msg_id=%s",
+            "[REPORTS] rollback activity write failed target_uid=%s action=%s msg_id=%s",
             target_uid,
             action_type,
             group_message_id,
@@ -97,6 +115,8 @@ async def rollback_training_report(
 
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Street:{date_str}"))
+    await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Gym:{date_str}"))
+    await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Street:{date_str}"))
     await delete_data(rollback_key)
 
     if video_group_message_id:
@@ -106,13 +126,13 @@ async def rollback_training_report(
 
     try:
         if video_group_message_id:
-            await bot.delete_message(chat_id=callback_or_chat_id(bot), message_id=int(video_group_message_id))
+            await bot.delete_message(chat_id=group_chat_id, message_id=int(video_group_message_id))
     except Exception as e:
         logger.debug(f"[REPORTS] Failed to delete group video msg: {e}")
 
     try:
         if text_group_message_id:
-            await bot.delete_message(chat_id=callback_or_chat_id(bot), message_id=int(text_group_message_id))
+            await bot.delete_message(chat_id=group_chat_id, message_id=int(text_group_message_id))
     except Exception as e:
         logger.debug(f"[REPORTS] Failed to delete group text msg: {e}")
 
@@ -121,25 +141,21 @@ async def rollback_training_report(
     except Exception as e:
         logger.debug(f"[REPORTS] Failed to notify target_uid={target_uid}: {e}")
 
-    try:
-        await bot.send_message(
-            chat_id=callback_or_chat_id(bot),
-            text=(
-                f"🚫 Тренування скасовано: -{hp} HP\n"
-                f"Причина: {reason}\n"
-                f"Модератор: {moderator_name}\n"
-                f"Користувач може перездати тренування ще раз сьогодні."
-            ),
-        )
-    except Exception as e:
-        logger.warning(f"[REPORTS] Failed to send rollback status message: {e}")
+    if send_group_status:
+        try:
+            await bot.send_message(
+                chat_id=group_chat_id,
+                text=(
+                    f"🚫 Тренування скасовано: -{hp} HP\n"
+                    f"Причина: {reason}\n"
+                    f"Модератор: {moderator_name}\n"
+                    f"Користувач може перездати тренування ще раз сьогодні."
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"[REPORTS] Failed to send rollback status message: {e}")
 
     return True
-
-
-def callback_or_chat_id(bot: Bot) -> int:
-    from config import REPORTS_GROUP_ID
-    return REPORTS_GROUP_ID
 
 
 @router.callback_query(ReportCallback.filter())
@@ -205,23 +221,6 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
         await delete_data(penalty_key)
         await callback.answer("⚠️ Не вдалося скасувати тренування. Спробуй ще раз.", show_alert=True)
         return
-
-    from architecture.orchestrator import flow_event_bus
-
-    await flow_event_bus.publish(
-        EventEnvelope(
-            name=PENALTY_APPLIED,
-            user_id=target_uid,
-            payload={
-                "reason": "community_reports",
-                "report_message_id": report_msg_id,
-                "action_type": action_type,
-                "penalty_hp": REPORT_PENALTY_HP,
-                "reports_count": current_count,
-            },
-            idempotency_key=f"penalty:{target_uid}:{report_msg_id}",
-        )
-    )
 
     try:
         await callback.message.edit_reply_markup(reply_markup=None)

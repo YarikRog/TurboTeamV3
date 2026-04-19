@@ -464,7 +464,6 @@ class ActivityService:
         try:
             group_video_msg = await message.copy_to(
                 REPORTS_GROUP_ID,
-                reply_markup=report_kb,
             )
         except Exception as e:
             logger.warning("[SERVICE] Failed to copy video to group: %s", e)
@@ -472,9 +471,16 @@ class ActivityService:
         group_text_msg = await message.bot.send_message(
             REPORTS_GROUP_ID,
             f"{get_phrase('report', nickname=f'@{user.username or user.first_name}')}\n+{hp} HP",
+            reply_markup=report_kb,
         )
 
         today = get_kyiv_now().strftime("%Y-%m-%d")
+        rollback_key = KeyManager.get_training_rollback_key(
+            user.id,
+            today,
+            action_type,
+            video_id or "no_video_id",
+        )
         report_meta = {
             "target_uid": user.id,
             "nickname": nickname,
@@ -482,6 +488,8 @@ class ActivityService:
             "hp": hp,
             "video_id": video_id,
             "date_str": today,
+            "group_chat_id": REPORTS_GROUP_ID,
+            "rollback_key": rollback_key,
             "video_group_message_id": group_video_msg.message_id if group_video_msg else None,
             "text_group_message_id": group_text_msg.message_id if group_text_msg else None,
         }
@@ -500,12 +508,6 @@ class ActivityService:
                 ex=REPORT_META_TTL,
             )
 
-        rollback_key = KeyManager.get_training_rollback_key(
-            user.id,
-            today,
-            action_type,
-            video_id or "no_video_id",
-        )
         await set_data(rollback_key, report_meta, ex=REPORT_META_TTL)
 
         return True
