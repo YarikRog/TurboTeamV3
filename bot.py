@@ -26,7 +26,9 @@ from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboa
 from supabase_db import (
     get_supabase,
     get_user_by_telegram_id,
+    get_user_by_nickname,
     create_user,
+    delete_user_by_id,
     add_activity,
     add_referral,
     get_referrals_count,
@@ -246,23 +248,13 @@ async def wipe_user(message: types.Message, command: CommandObject):
             await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
             return
 
-        sb = get_supabase()
-
         target_user = None
 
         if args.isdigit():
             target_user = await get_user_by_telegram_id(int(args))
         elif args.startswith("@"):
             username = args[1:].strip()
-            response = (
-                sb.table("users")
-                .select("*")
-                .eq("nickname", username)
-                .limit(1)
-                .execute()
-            )
-            if response.data:
-                target_user = response.data[0]
+            target_user = await get_user_by_nickname(username)
         else:
             await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
             return
@@ -275,40 +267,8 @@ async def wipe_user(message: types.Message, command: CommandObject):
         user_uuid = str(target_user.get("id"))
         nickname = target_user.get("nickname") or f"ID:{telegram_user_id}"
 
-        (
-            sb.table("user_achievements")
-            .delete()
-            .eq("user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("activities")
-            .delete()
-            .eq("user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("referrals")
-            .delete()
-            .eq("new_user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("referrals")
-            .delete()
-            .eq("referrer_user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("users")
-            .delete()
-            .eq("id", user_uuid)
-            .execute()
-        )
+        # Dependent rows are removed by Supabase ON DELETE CASCADE constraints.
+        await delete_user_by_id(user_uuid)
 
         today = get_kyiv_now().strftime("%Y-%m-%d")
 
