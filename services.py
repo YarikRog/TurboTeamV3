@@ -11,7 +11,7 @@ from aiogram import types
 from aiogram.types import Message
 
 from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
-from cache import KeyManager, acquire_lock, get_data
+from cache import KeyManager, acquire_lock, get_data, set_data
 from database import get_kyiv_now, add_activity, check_activity_limit, update_user_activity
 from phrases import get_phrase
 from config import GROUP_LINK
@@ -25,6 +25,8 @@ from supabase_db import (
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
+
+REPORT_META_TTL = 172800  # 48 hours
 
 # ==============================================================================
 # STREAK PARAMETERS
@@ -406,6 +408,7 @@ class ActivityService:
         1. calculate HP
         2. write activity
         3. publish report to group with complaint button
+        4. save mapping for manual/admin rollback
         """
         user = message.from_user
         nickname = user.full_name
@@ -455,16 +458,54 @@ class ActivityService:
             action_type=action_type,
         )
 
+        group_video_msg = None
+        group_text_msg = None
+
         try:
-            await message.copy_to(
+            group_video_msg = await message.copy_to(
                 REPORTS_GROUP_ID,
                 reply_markup=report_kb,
             )
         except Exception as e:
             logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
-        await message.bot.send_message(
+        group_text_msg = await message.bot.send_message(
             REPORTS_GROUP_ID,
             f"{get_phrase('report', nickname=f'@{user.username or user.first_name}')}\n+{hp} HP",
         )
+
+        today = get_kyiv_now().strftime("%Y-%m-%d")
+        report_meta = {
+            "target_uid": user.id,
+            "nickname": nickname,
+            "action_type": action_type,
+            "hp": hp,
+            "video_id": video_id,
+            "date_str": today,
+            "video_group_message_id": group_video_msg.message_id if group_video_msg else None,
+            "text_group_message_id": group_text_msg.message_id if group_text_msg else None,
+        }
+
+        if group_video_msg:
+            await set_data(
+                KeyManager.get_report_meta_key(group_video_msg.message_id),
+                report_meta,
+                ex=REPORT_META_TTL,
+            )
+
+        if group_text_msg:
+            await set_data(
+                KeyManager.get_report_meta_key(group_text_msg.message_id),
+                report_meta,
+                ex=REPORT_META_TTL,
+            )
+
+        rollback_key = KeyManager.get_training_rollback_key(
+            user.id,
+            today,
+            action_type,
+            video_id or "no_video_id",
+        )
+        await set_data(rollback_key, report_meta, ex=REPORT_META_TTL)
+
         return True
