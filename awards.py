@@ -3,7 +3,7 @@ import os
 import tempfile
 from typing import Optional
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from aiogram import Bot
 from aiogram.types import FSInputFile
 
@@ -20,12 +20,71 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_PATH = os.path.join(BASE_DIR, "card_template.png")
 FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
 
+# Позиція та розмір аватарки
+AVATAR_SIZE = 150
+AVATAR_CENTER_X = 300
+AVATAR_TOP_Y = 155
+
+
+# ==============================================================================
+# HELPER: АВАТАРКА
+# ==============================================================================
+
+async def download_user_avatar(bot: Bot, user_id: int) -> Optional[str]:
+    """
+    Завантажує найбільшу доступну аватарку юзера.
+    Повертає шлях до тимчасового файла або None.
+    """
+    try:
+        photos = await bot.get_user_profile_photos(user_id=user_id, limit=1)
+        if not photos.total_count or not photos.photos:
+            return None
+
+        best_photo = photos.photos[0][-1]
+        file = await bot.get_file(best_photo.file_id)
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".jpg", dir=BASE_DIR)
+        os.close(tmp_fd)
+
+        await bot.download_file(file.file_path, destination=tmp_path)
+        return tmp_path
+
+    except Exception as e:
+        logger.warning(f"[AWARDS] Не вдалося завантажити аватарку user_id={user_id}: {e}")
+        return None
+
+
+def paste_circle_avatar(base_img: Image.Image, avatar_path: str) -> None:
+    """
+    Вставляє круглу аватарку в картку.
+    """
+    try:
+        avatar = Image.open(avatar_path).convert("RGBA")
+        avatar = ImageOps.fit(avatar, (AVATAR_SIZE, AVATAR_SIZE), method=Image.Resampling.LANCZOS)
+
+        mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
+
+        avatar.putalpha(mask)
+
+        x = AVATAR_CENTER_X - AVATAR_SIZE // 2
+        y = AVATAR_TOP_Y
+        base_img.alpha_composite(avatar, (x, y))
+
+    except Exception as e:
+        logger.warning(f"[AWARDS] Не вдалося вставити аватарку: {e}")
+
 
 # ==============================================================================
 # ГЕНЕРАЦІЯ FIFA КАРТКИ (CORE ENGINE)
 # ==============================================================================
 
-def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
+def create_fifa_card(
+    nickname: str,
+    hp_score: int,
+    avatar_path: Optional[str] = None,
+) -> Optional[str]:
     """
     Генерує FIFA-картку переможця з автоматичним масштабуванням тексту.
     Оптимізовано під Oswald.
@@ -78,19 +137,25 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 stroke_width=stroke_width,
             )
 
+        # Нік трохи вище
         draw_centered_text(
             display_name,
             name_font,
-            y=95,
+            y=88,
             fill="white",
             stroke_fill="#0A1A4F",
             stroke_width=2,
         )
 
+        # Аватарка
+        if avatar_path and os.path.exists(avatar_path):
+            paste_circle_avatar(img, avatar_path)
+
+        # Заголовок трохи нижче
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
-            y=325,
+            y=345,
             fill="#F4F4F4",
             stroke_fill="#0A1A4F",
             stroke_width=1,
@@ -129,14 +194,23 @@ async def send_test_fifa_card(
     chat_id: int,
     nickname: str = "yarik721",
     hp_score: int = 678,
+    user_id: Optional[int] = None,
 ) -> bool:
     """
     Генерує тестову FIFA-картку і надсилає її в чат.
     """
     card_path: Optional[str] = None
+    avatar_path: Optional[str] = None
 
     try:
-        card_path = create_fifa_card(nickname, hp_score)
+        if user_id:
+            avatar_path = await download_user_avatar(bot, user_id)
+
+        card_path = create_fifa_card(
+            nickname=nickname,
+            hp_score=hp_score,
+            avatar_path=avatar_path,
+        )
 
         if not card_path or not os.path.exists(card_path):
             await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову FIFA-картку.")
@@ -161,6 +235,12 @@ async def send_test_fifa_card(
             except Exception as e:
                 logger.warning(f"[AWARDS] Не вдалося видалити тестовий файл: {e}")
 
+        if avatar_path and os.path.exists(avatar_path):
+            try:
+                os.remove(avatar_path)
+            except Exception as e:
+                logger.warning(f"[AWARDS] Не вдалося видалити тимчасову аватарку: {e}")
+
 
 # ==============================================================================
 # НЕДІЛЬНИЙ ФІНАЛ (TASK EXECUTION)
@@ -172,6 +252,7 @@ async def sunday_final_logic(bot: Bot) -> None:
     """
     logger.info("🏁 [AWARDS] Початок фінальної обробки тижня...")
     card_path: Optional[str] = None
+    avatar_path: Optional[str] = None
 
     try:
         top_users = await get_weekly_top_users()
@@ -183,12 +264,21 @@ async def sunday_final_logic(bot: Bot) -> None:
         leader = top_users[0]
         nickname = leader.get("nickname") or leader.get("nick") or "Анонім"
         hp_score = int(leader.get("hp") or 0)
+        telegram_user_id = leader.get("telegram_user_id")
 
         if hp_score <= 0:
             logger.info("[AWARDS] Активності за тиждень не було. Пропускаємо.")
             return
 
-        card_path = create_fifa_card(nickname, hp_score)
+        if telegram_user_id:
+            avatar_path = await download_user_avatar(bot, int(telegram_user_id))
+
+        card_path = create_fifa_card(
+            nickname=nickname,
+            hp_score=hp_score,
+            avatar_path=avatar_path,
+        )
+
         caption = get_phrase("winner", mention=f"@{nickname}")
 
         if card_path and os.path.exists(card_path):
@@ -227,3 +317,9 @@ async def sunday_final_logic(bot: Bot) -> None:
                 logger.debug(f"[AWARDS] Тимчасовий файл {card_path} видалено.")
             except Exception as e:
                 logger.warning(f"[AWARDS] Не вдалося видалити файл: {e}")
+
+        if avatar_path and os.path.exists(avatar_path):
+            try:
+                os.remove(avatar_path)
+            except Exception as e:
+                logger.warning(f"[AWARDS] Не вдалося видалити тимчасову аватарку: {e}")
