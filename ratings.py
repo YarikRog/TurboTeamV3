@@ -6,14 +6,9 @@ from datetime import timedelta, datetime
 import pytz
 from aiogram.types import Message, User
 
-from config import ADMIN_IDS
 from cache import get_data, set_data, set_flag, KeyManager
 from services import safe_create_task, auto_delete
-from supabase_db import (
-    get_all_users,
-    get_user_activities_in_period,
-    get_referrals_count,
-)
+from supabase_db import get_weekly_rating
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -46,24 +41,6 @@ def _get_current_week_period() -> tuple[str, str]:
     return week_start.isoformat(), week_end.isoformat()
 
 
-async def _get_user_week_hp(user_uuid: str, period_start: str, period_end: str) -> int:
-    activities = await get_user_activities_in_period(
-        user_uuid,
-        created_at_from=period_start,
-        created_at_to=period_end,
-        limit=1000,
-    )
-
-    total = 0
-    for activity in activities:
-        try:
-            total += int(activity.get("hp_change", 0) or 0)
-        except Exception:
-            continue
-
-    return total
-
-
 # ==============================================================================
 # ОТРИМАННЯ ДАНИХ РЕЙТИНГУ (ULTRA SAFE)
 # ==============================================================================
@@ -71,7 +48,7 @@ async def _get_user_week_hp(user_uuid: str, period_start: str, period_end: str) 
 async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Отримує рейтингові дані з багаторівневим захистом.
-    Redis cache (60-120s) -> Supabase weekly rating.
+    Redis cache (60-120s) -> Supabase weekly rating RPC.
     """
     cache_key = KeyManager.get_rating_cache_key()
 
@@ -84,36 +61,26 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 
     try:
         period_start, period_end = _get_current_week_period()
-        users = await get_all_users()
-        ranking_rows = []
+        ranking_rows = await get_weekly_rating(period_start, period_end)
 
-        for user in users:
-            user_uuid = user.get("id")
-            if not user_uuid:
-                continue
-
-            hp = await _get_user_week_hp(str(user_uuid), period_start, period_end)
-            referrals_count = await get_referrals_count(str(user_uuid))
-
-            nickname = user.get("nickname") or f"ID:{user.get('telegram_user_id', 'unknown')}"
-
-            ranking_rows.append({
-                "telegram_user_id": user.get("telegram_user_id"),
-                "nick": nickname,
-                "hp": hp,
-                "referrals_count": referrals_count,
+        normalized_rows = []
+        for row in ranking_rows:
+            normalized_rows.append({
+                "telegram_user_id": row.get("telegram_user_id"),
+                "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
+                "hp": int(row.get("hp", 0) or 0),
+                "referrals_count": int(row.get("referrals_count", 0) or 0),
+                "rank": int(row.get("rank", 0) or 0),
             })
 
-        ranking_rows.sort(key=lambda x: (-int(x.get("hp", 0)), str(x.get("nick", ""))))
-
-        top_list = ranking_rows[:10]
+        top_list = normalized_rows[:10]
 
         user_rank = "?"
         user_hp = 0
 
-        for idx, player in enumerate(ranking_rows, start=1):
+        for player in normalized_rows:
             if int(player.get("telegram_user_id", 0) or 0) == int(user_id):
-                user_rank = idx
+                user_rank = int(player.get("rank", 0) or 0) or "?"
                 user_hp = int(player.get("hp", 0) or 0)
                 break
 
@@ -128,7 +95,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
         return result
 
     except Exception as e:
-        logger.error(f"[RATINGS] Supabase weekly rating build failed for uid={user_id}: {e}", exc_info=True)
+        logger.error(f"[RATINGS] Supabase weekly rating RPC failed for uid={user_id}: {e}", exc_info=True)
 
     return None
 

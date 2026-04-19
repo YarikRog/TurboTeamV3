@@ -54,7 +54,7 @@ class StateMachineService:
     async def register_user(self, user_id: int) -> bool:
         return await self.transition(user_id, UserFlowState.REGISTERED)
 
-    async def begin_training(self, user_id: int, action: str, ttl: int = 120) -> bool:
+    async def begin_training(self, user_id: int, action: str, ttl: int = 600) -> bool:
         if not await self.transition(user_id, UserFlowState.TRAINING_STARTED, ttl=ttl):
             return False
         await set_data(KeyManager.get_session_key(user_id), {"action": action}, ex=ttl)
