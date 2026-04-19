@@ -101,6 +101,7 @@ async def test_award(message: types.Message):
         chat_id=message.chat.id,
         nickname=message.from_user.username or message.from_user.first_name or "yarik721",
         hp_score=678,
+        user_id=message.from_user.id,
     )
 
 
