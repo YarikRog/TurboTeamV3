@@ -18,6 +18,7 @@ from supabase_db import (
     get_all_users,
     get_user_activities_in_period,
     get_referrals_count,
+    get_weekly_rating,
     add_referral as supabase_add_referral,
 )
 
@@ -474,38 +475,7 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
 async def get_weekly_top_users():
     try:
         period_start, period_end = _get_current_week_period()
-        users = await get_all_users()
-        ranking_rows = []
-
-        for user in users:
-            user_uuid = user.get("id")
-            if not user_uuid:
-                continue
-
-            activities = await get_user_activities_in_period(
-                str(user_uuid),
-                created_at_from=period_start,
-                created_at_to=period_end,
-                limit=1000,
-            )
-
-            hp_total = 0
-            for activity in activities:
-                try:
-                    hp_total += int(activity.get("hp_change", 0) or 0)
-                except Exception:
-                    continue
-
-            referrals_count = await get_referrals_count(str(user_uuid))
-
-            ranking_rows.append({
-                "nick": user.get("nickname") or f"ID:{user.get('telegram_user_id', 'unknown')}",
-                "hp": hp_total,
-                "referrals_count": referrals_count,
-                "telegram_user_id": user.get("telegram_user_id"),
-            })
-
-        ranking_rows.sort(key=lambda x: (-int(x.get("hp", 0)), str(x.get("nick", ""))))
+        ranking_rows = await get_weekly_rating(period_start, period_end)
         return ranking_rows[:10]
 
     except Exception as e:
