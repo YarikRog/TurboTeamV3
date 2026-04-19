@@ -74,6 +74,15 @@ class KeyManager:
     def get_report_penalty_key(target_uid: int, v_msg_id: int) -> str:
         return f"{KeyManager.PREFIX}:report_penalty:{target_uid}:{v_msg_id}"
 
+    # --- Training report mapping ---
+    @staticmethod
+    def get_report_meta_key(group_message_id: int) -> str:
+        return f"{KeyManager.PREFIX}:report_meta:{group_message_id}"
+
+    @staticmethod
+    def get_training_rollback_key(uid: int, date_str: str, action_type: str, video_id: str) -> str:
+        return f"{KeyManager.PREFIX}:rollback:{uid}:{date_str}:{action_type}:{video_id}"
+
     # --- Limits / anti-spam ---
     @staticmethod
     def get_limit_key(user_id: int, action_type: str, date_str: str) -> str:
