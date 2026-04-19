@@ -13,6 +13,7 @@ from cache import get_data, set_flag, delete_data, KeyManager
 from database import get_user_stats
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
+from reports import rollback_training_report
 from services import safe_create_task, auto_delete
 from supabase_db import (
     get_user_by_telegram_id,
@@ -27,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 PROFILE_COOLDOWN = 7200
 PROFILE_MESSAGE_TTL = 120
-
 
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
@@ -261,6 +261,38 @@ async def gateway_video_note(m: Message):
             idempotency_key=f"video:{m.from_user.id}:{m.message_id}",
         )
     )
+
+
+@router.message(Command("reject"))
+async def handle_reject_training(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    if not m.reply_to_message:
+        sent = await m.answer("⚠️ Використання: reply на кружок або текст репорту командою /reject")
+        safe_create_task(auto_delete(sent, 5))
+        try:
+            await m.delete()
+        except Exception:
+            pass
+        return
+
+    ok = await rollback_training_report(
+        bot=m.bot,
+        group_message_id=m.reply_to_message.message_id,
+        moderator_name=m.from_user.full_name,
+        reason="manual_reject",
+    )
+
+    try:
+        await m.delete()
+    except Exception:
+        pass
+
+    if not ok:
+        sent = await m.answer("⚠️ Не вдалося скасувати саме це тренування. Reply має бути на кружок або текст репорту.")
+        safe_create_task(auto_delete(sent, 5))
+        return
 
 
 @router.message(Command("panel"))
