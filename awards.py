@@ -108,7 +108,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_centered_text(
             "HP",
             hp_label_font,
-            y=545,
+            y=575,
             fill="#1A1A1A",
         )
 
