@@ -1,493 +1,216 @@
-import asyncio
 import logging
 import os
-import json
+import tempfile
+from typing import Optional
 
-import sentry_sdk
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command, CommandObject
-from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
+from PIL import Image, ImageDraw, ImageFont
+from aiogram import Bot
+from aiogram.types import FSInputFile
 
-from architecture.events import EventEnvelope, TRAINING_SELECTED, USER_REGISTERED
-from architecture.orchestrator import flow_event_bus
-from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
-from database import check_user_exists, close_db_session, get_kyiv_now
-from handlers import router as action_router
+from config import REPORTS_GROUP_ID
 from phrases import get_phrase
-from referral import router as ref_router
-from reports import router as reports_router
-from tasks import setup_scheduler
-
-from cache import redis_client, set_data, delete_data, KeyManager, acquire_lock
-from services import validate_quiz
-from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
-from supabase_db import (
-    get_supabase,
-    get_user_by_telegram_id,
-    create_user,
-    add_activity,
-    add_referral,
-    get_referrals_count,
-    get_user_activities_count,
-)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
+from database import get_weekly_top_users, reset_weekly_stats
 
 logger = logging.getLogger(__name__)
 
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        traces_sample_rate=0.1,
-        profiles_sample_rate=0.1,
-    )
-    logger.info("🛡️ [MONITORING] Sentry initialized")
-
-storage = RedisStorage(
-    redis=redis_client,
-    key_builder=DefaultKeyBuilder(with_destiny=True, prefix="turbo_fsm"),
-)
-
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode="Markdown", link_preview_is_disabled=True)
-)
-dp = Dispatcher(storage=storage)
+# ==============================================================================
+# ШЛЯХИ ДО РЕСУРСІВ
+# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_PATH = os.path.join(BASE_DIR, "card_template.png")
+FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
 
 
-@dp.message(Command("rules"))
-async def cmd_rules(message: types.Message):
-    await message.answer(get_phrase("rules_text"))
+# ==============================================================================
+# ГЕНЕРАЦІЯ FIFA КАРТКИ (CORE ENGINE)
+# ==============================================================================
 
-
-@dp.message(Command("menu"))
-async def show_menu_in_group(message: types.Message):
-    if message.chat.id != REPORTS_GROUP_ID:
-        return
-
-    bot_username = await bot.get_me()
-    await message.answer(
-        "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇",
-        reply_markup=get_inline_menu(bot_username.username)
-    )
-    await message.answer("🏆", reply_markup=get_rating_reply_keyboard())
-
-
-@dp.message(Command("panel"))
-async def admin_panel(message: types.Message):
-    if message.from_user.id in ADMIN_IDS:
-        me = await bot.get_me()
-        await message.answer(
-            "🔥 *Твій пульт керування TurboTeam!* \nТисни на газ, бро! 🏎️💨",
-            reply_markup=get_inline_menu(me.username)
-        )
-
-
-@dp.message(Command("sbtest"))
-async def supabase_test(message: types.Message):
-    try:
-        sb = get_supabase()
-        response = sb.table("users").select("id", count="exact").limit(1).execute()
-        await message.answer(
-            f"✅ Supabase підключений\n"
-            f"Таблиця users доступна\n"
-            f"Кількість записів: {response.count or 0}"
-        )
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
-        await message.answer("❌ Supabase test failed. Дивись логи.")
-
-
-@dp.message(Command("sbadd"))
-async def supabase_add_user(message: types.Message):
-    try:
-        telegram_user_id = message.from_user.id
-        nickname = message.from_user.username or message.from_user.first_name
-
-        existing_user = await get_user_by_telegram_id(telegram_user_id)
-        if existing_user:
-            await message.answer(
-                "ℹ️ Юзер уже є в Supabase\n"
-                f"nickname: {existing_user.get('nickname')}\n"
-                f"telegram_user_id: {existing_user.get('telegram_user_id')}"
-            )
-            return
-
-        new_user = await create_user(
-            telegram_user_id=telegram_user_id,
-            nickname=nickname,
-        )
-
-        await message.answer(
-            "✅ Юзера створено в Supabase\n"
-            f"id: {new_user.get('id')}\n"
-            f"nickname: {new_user.get('nickname')}\n"
-            f"telegram_user_id: {new_user.get('telegram_user_id')}"
-        )
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbadd error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add user failed. Дивись логи.")
-
-
-@dp.message(Command("sbaddactivity"))
-async def supabase_add_activity(message: types.Message):
-    try:
-        telegram_user_id = message.from_user.id
-        existing_user = await get_user_by_telegram_id(telegram_user_id)
-
-        if not existing_user:
-            await message.answer("❌ Юзера немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        await add_activity(
-            user_id=existing_user["id"],
-            action_name="Gym",
-            hp_change=100,
-            video_status="✅",
-            video_id="sbtest-video",
-        )
-
-        await message.answer("✅ Активність додано в Supabase")
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add activity failed. Дивись логи.")
-
-
-@dp.message(Command("sbaddref"))
-async def supabase_add_ref(message: types.Message, command: CommandObject):
-    try:
-        args = (command.args or "").strip()
-        if not args.isdigit():
-            await message.answer("❌ Використання: /sbaddref 1118823479")
-            return
-
-        new_user = await get_user_by_telegram_id(message.from_user.id)
-        if not new_user:
-            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        referrer_telegram_id = int(args)
-        referrer_user = await get_user_by_telegram_id(referrer_telegram_id)
-        if not referrer_user:
-            await message.answer("❌ Реферера з таким Telegram ID немає в Supabase")
-            return
-
-        if referrer_user["id"] == new_user["id"]:
-            await message.answer("❌ Не можна створити реферал самому собі")
-            return
-
-        await add_referral(
-            referrer_user_id=referrer_user["id"],
-            new_user_id=new_user["id"],
-            points=150,
-        )
-
-        await message.answer("✅ Реферал додано в Supabase")
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbaddref error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add referral failed. Дивись логи.")
-
-
-@dp.message(Command("sbme"))
-async def supabase_me(message: types.Message):
-    try:
-        telegram_user_id = message.from_user.id
-        user = await get_user_by_telegram_id(telegram_user_id)
-
-        if not user:
-            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        activities_count = await get_user_activities_count(user["id"])
-        referrals_count = await get_referrals_count(user["id"])
-
-        await message.answer(
-            "🧠 Дані з Supabase\n"
-            f"nickname: {user.get('nickname')}\n"
-            f"telegram_user_id: {user.get('telegram_user_id')}\n"
-            f"activities: {activities_count}\n"
-            f"referrals: {referrals_count}"
-        )
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbme error: {e}", exc_info=True)
-        await message.answer("❌ Supabase read failed. Дивись логи.")
-
-
-@dp.message(Command("wipeuser"))
-async def wipe_user(message: types.Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS:
-        return
+def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
+    """
+    Генерує FIFA-картку переможця з автоматичним масштабуванням тексту.
+    Оптимізовано під Oswald.
+    """
+    if not os.path.exists(TEMPLATE_PATH):
+        logger.error(f"[AWARDS] Шаблон не знайдено: {TEMPLATE_PATH}")
+        return None
 
     try:
-        args = (command.args or "").strip()
-        if not args:
-            await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
-            return
+        img = Image.open(TEMPLATE_PATH).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+        img_width, _ = img.size
 
-        sb = get_supabase()
-
-        target_user = None
-
-        if args.isdigit():
-            target_user = await get_user_by_telegram_id(int(args))
-        elif args.startswith("@"):
-            username = args[1:].strip()
-            response = (
-                sb.table("users")
-                .select("*")
-                .eq("nickname", username)
-                .limit(1)
-                .execute()
-            )
-            if response.data:
-                target_user = response.data[0]
-        else:
-            await message.answer("❌ Використання: /wipeuser 123456789 або /wipeuser @username")
-            return
-
-        if not target_user:
-            await message.answer("❌ Юзера не знайдено.")
-            return
-
-        telegram_user_id = int(target_user.get("telegram_user_id"))
-        user_uuid = str(target_user.get("id"))
-        nickname = target_user.get("nickname") or f"ID:{telegram_user_id}"
-
-        (
-            sb.table("user_achievements")
-            .delete()
-            .eq("user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("activities")
-            .delete()
-            .eq("user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("referrals")
-            .delete()
-            .eq("new_user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("referrals")
-            .delete()
-            .eq("referrer_user_id", user_uuid)
-            .execute()
-        )
-
-        (
-            sb.table("users")
-            .delete()
-            .eq("id", user_uuid)
-            .execute()
-        )
-
-        today = get_kyiv_now().strftime("%Y-%m-%d")
-
-        redis_keys = [
-            KeyManager.get_reg_key(telegram_user_id),
-            KeyManager.get_ref_key(telegram_user_id),
-            KeyManager.get_ref_cooldown_key(telegram_user_id),
-            KeyManager.get_ref_warn_key(telegram_user_id),
-            KeyManager.get_ref_processed_key(telegram_user_id),
-            KeyManager.get_state_key(telegram_user_id),
-            KeyManager.get_session_key(telegram_user_id),
-            KeyManager.get_profile_limit_key(telegram_user_id),
-            KeyManager.get_profile_warn_key(telegram_user_id),
-            KeyManager.get_rating_limit_key(telegram_user_id),
-            KeyManager.get_training_repeat_key(telegram_user_id, f"Gym:{today}"),
-            KeyManager.get_training_repeat_key(telegram_user_id, f"Street:{today}"),
-            KeyManager.get_action_lock_key(telegram_user_id, f"Gym:{today}"),
-            KeyManager.get_action_lock_key(telegram_user_id, f"Street:{today}"),
-            KeyManager.get_action_lock_key(telegram_user_id, f"Rest:{today}"),
-            KeyManager.get_action_lock_key(telegram_user_id, f"Skipped:{today}"),
-        ]
-
-        for key in redis_keys:
-            await delete_data(key)
-
-        await message.answer(
-            f"✅ Юзера видалено повністю\n"
-            f"nickname: {nickname}\n"
-            f"telegram_user_id: {telegram_user_id}"
-        )
-
-    except Exception as e:
-        logger.error(f"[ADMIN] /wipeuser error: {e}", exc_info=True)
-        await message.answer("❌ Не вдалося видалити юзера. Дивись логи.")
-
-
-@dp.message(CommandStart())
-async def start_handler(message: types.Message, command: CommandObject):
-    user_id = message.from_user.id
-    args = (command.args or "").strip()
-    start_payload = args or "plain"
-    start_key = KeyManager.get_start_dedupe_key(user_id, start_payload)
-
-    if not await acquire_lock(start_key, ex=2):
-        return
-
-    if args in {"gym", "street"}:
-        await flow_event_bus.publish(
-            EventEnvelope(
-                name=TRAINING_SELECTED,
-                user_id=user_id,
-                payload={
-                    "source": message,
-                    "user": message.from_user,
-                    "action": args.capitalize(),
-                },
-                idempotency_key=f"training-select:{user_id}:{message.message_id}",
-            )
-        )
-
-        try:
-            await message.delete()
-        except Exception as e:
-            logger.debug(f"[START] Failed to delete /start message: {e}")
-
-        return
-
-    progress_message = await message.answer("⏳ Перевіряю твої дані, зачекай кілька секунд...")
-
-    try:
-        is_registered = await check_user_exists(user_id)
-
-        if not is_registered:
-            if args and args.isdigit():
-                referrer_id = int(args)
-                if referrer_id != user_id:
-                    await set_data(KeyManager.get_ref_key(user_id), str(referrer_id), ex=86400)
-                else:
-                    logger.info("[START] Self-referral blocked for user_id=%s", user_id)
-
-            welcome_text = (
-                f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
-                "Ти потрапив у TurboTeam. Пройди опитування: 👇"
-            )
-
-            kb = get_quiz_reply_keyboard(WEB_APP_URL)
-            await progress_message.delete()
-            return await message.answer(welcome_text, reply_markup=kb)
-
-        await progress_message.delete()
-
-        if not args:
-            group_return_kb = types.InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        types.InlineKeyboardButton(
-                            text="ВХІД У ГРУПУ 🏎️",
-                            url=GROUP_LINK,
-                        )
-                    ]
-                ]
-            )
-
-            return await message.answer(
-                f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥",
-                reply_markup=group_return_kb
-            )
-
-    except Exception as e:
-        logger.error(f"[START] start_handler error: {e}", exc_info=True)
-        try:
-            await progress_message.delete()
-        except Exception:
-            pass
-        await message.answer("⚠️ Сталася помилка під час перевірки. Спробуй ще раз.")
-
-
-@dp.message(F.web_app_data)
-async def web_app_receive(message: types.Message):
-    user_id = message.from_user.id
-    nickname = message.from_user.username or message.from_user.first_name
-
-    progress_message = None
-
-    try:
-        data = json.loads(message.web_app_data.data)
-        if not validate_quiz(data):
-            return await message.answer("❌ Дані некоректні.")
-
-        progress_message = await message.answer("⏳ Реєструю тебе в TurboTeam...")
-
-        await flow_event_bus.publish(
-            EventEnvelope(
-                name=USER_REGISTERED,
-                user_id=user_id,
-                payload={
-                    "message": message,
-                    "nickname": nickname,
-                    "quiz_data": data,
-                },
-                idempotency_key=f"user-registered:{user_id}:{message.message_id}",
-            )
-        )
-
-        if progress_message:
+        def get_font(path, size):
             try:
-                await progress_message.delete()
+                return ImageFont.truetype(path, size) if os.path.exists(path) else ImageFont.load_default()
             except Exception:
-                pass
+                return ImageFont.load_default()
+
+        display_name = f"@{nickname}".upper()
+
+        name_font_size = 50
+        if len(display_name) > 12:
+            name_font_size = 42
+        if len(display_name) > 16:
+            name_font_size = 34
+        if len(display_name) > 20:
+            name_font_size = 28
+
+        name_font = get_font(FONT_PATH, name_font_size)
+        title_font = get_font(FONT_PATH, 34)
+        hp_font = get_font(FONT_PATH, 92)
+
+        def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
+            bbox = draw.textbbox(
+                (0, 0),
+                text,
+                font=font,
+                stroke_width=stroke_width,
+            )
+            w = bbox[2] - bbox[0]
+            x = (img_width - w) // 2
+            draw.text(
+                (x, y),
+                text,
+                font=font,
+                fill=fill,
+                stroke_fill=stroke_fill,
+                stroke_width=stroke_width,
+            )
+
+        draw_centered_text(
+            display_name,
+            name_font,
+            y=118,
+            fill="white",
+            stroke_fill="#0A1A4F",
+            stroke_width=2,
+        )
+
+        draw_centered_text(
+            "ЧЕМПІОН ТИЖНЯ",
+            title_font,
+            y=292,
+            fill="#F4F4F4",
+            stroke_fill="#0A1A4F",
+            stroke_width=1,
+        )
+
+        draw_centered_text(
+            str(hp_score),
+            hp_font,
+            y=452,
+            fill="black",
+            stroke_fill="#A86F00",
+            stroke_width=1,
+        )
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=BASE_DIR)
+        os.close(tmp_fd)
+
+        img.convert("RGB").save(tmp_path, "PNG", optimize=True)
+        logger.info(f"[AWARDS] Картка створена: {tmp_path}")
+        return tmp_path
 
     except Exception as e:
-        logger.error(f"❌ [WEBAPP ERROR] {e}", exc_info=True)
-
-        if progress_message:
-            try:
-                await progress_message.delete()
-            except Exception:
-                pass
-
-        await message.answer("❌ Критична помилка реєстрації.")
+        logger.error(f"[AWARDS] Помилка PIL: {e}", exc_info=True)
+        return None
 
 
-dp.include_router(reports_router)
-dp.include_router(ref_router)
-dp.include_router(action_router)
+async def send_test_fifa_card(bot: Bot, chat_id: int, nickname: str = "yarik721", hp_score: int = 678) -> bool:
+    """
+    Генерує тестову FIFA-картку і надсилає її в указаний чат.
+    """
+    card_path: Optional[str] = None
 
-
-async def on_startup():
-    me = await bot.get_me()
-    await set_data(KeyManager.get_bot_username_key(), me.username)
-    logger.info(f"🚀 Бот @{me.username} онлайн!")
-
-
-async def on_shutdown():
-    logger.info("🛑 Зупинка бота...")
-    await close_db_session()
-    if redis_client:
-        await redis_client.aclose()
-    await bot.session.close()
-
-
-async def main():
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
-    scheduler = setup_scheduler(bot)
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        card_path = create_fifa_card(nickname, hp_score)
+
+        if card_path and os.path.exists(card_path):
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=FSInputFile(card_path),
+                caption=f"🧪 Тест FIFA-картки\n@{nickname} — {hp_score} HP",
+            )
+            return True
+
+        await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову картку.")
+        return False
+
+    except Exception as e:
+        logger.error(f"[AWARDS] Test FIFA card error: {e}", exc_info=True)
+        await bot.send_message(chat_id, "❌ Помилка тестової генерації картки.")
+        return False
+
     finally:
-        scheduler.shutdown()
+        if card_path and os.path.exists(card_path):
+            try:
+                os.remove(card_path)
+            except Exception as e:
+                logger.warning(f"[AWARDS] Не вдалося видалити тестовий файл: {e}")
 
 
-if __name__ == "__main__":
+# ==============================================================================
+# НЕДІЛЬНИЙ ФІНАЛ (TASK EXECUTION)
+# ==============================================================================
+
+async def sunday_final_logic(bot: Bot) -> None:
+    """
+    Автоматизована логіка підбиття підсумків тижня.
+    """
+    logger.info("🏁 [AWARDS] Початок фінальної обробки тижня...")
+    card_path: Optional[str] = None
+
     try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+        top_users = await get_weekly_top_users()
+
+        if not top_users or not isinstance(top_users, list):
+            logger.warning("[AWARDS] Дані про лідерів порожні або невірні.")
+            return
+
+        leader = top_users[0]
+        nickname = leader.get("nickname") or leader.get("nick") or "Анонім"
+        hp_score = int(leader.get("hp") or 0)
+
+        if hp_score <= 0:
+            logger.info("[AWARDS] Активності за тиждень не було. Пропускаємо.")
+            return
+
+        card_path = create_fifa_card(nickname, hp_score)
+        caption = get_phrase("winner", mention=f"@{nickname}")
+
+        if card_path and os.path.exists(card_path):
+            await bot.send_photo(
+                chat_id=REPORTS_GROUP_ID,
+                photo=FSInputFile(card_path),
+                caption=caption,
+                parse_mode="Markdown"
+            )
+        else:
+            await bot.send_message(
+                REPORTS_GROUP_ID,
+                f"🏆 *ВІТАЄМО ЧЕМПІОНА!*\n\n{caption}\n💪 Результат: {hp_score} HP",
+                parse_mode="Markdown"
+            )
+
+        success_reset = await reset_weekly_stats()
+
+        if success_reset:
+            logger.info("[AWARDS] Weekly final completed successfully.")
+            await bot.send_message(
+                REPORTS_GROUP_ID,
+                "🔄 *Новий тиждень розпочато!*\nРейтинг тижня оновлено. Час знову ставати монстром! 🦾🏎️💨",
+                parse_mode="Markdown"
+            )
+        else:
+            logger.error("[AWARDS] Weekly final completed, but reset step reported failure.")
+
+    except Exception as e:
+        logger.error(f"[AWARDS] Критичний збій Sunday Final: {e}", exc_info=True)
+
+    finally:
+        if card_path and os.path.exists(card_path):
+            try:
+                os.remove(card_path)
+                logger.debug(f"[AWARDS] Тимчасовий файл {card_path} видалено.")
+            except Exception as e:
+                logger.warning(f"[AWARDS] Не вдалося видалити файл: {e}")
