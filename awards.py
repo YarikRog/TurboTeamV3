@@ -37,7 +37,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
     try:
         img = Image.open(TEMPLATE_PATH).convert("RGBA")
         draw = ImageDraw.Draw(img)
-        img_width, img_height = img.size
+        img_width, _ = img.size
 
         def get_font(path, size):
             try:
@@ -47,7 +47,6 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
 
         display_name = f"@{nickname}".upper()
 
-        # Oswald візуально вузький і високий, тому трохи інші розміри
         name_font_size = 50
         if len(display_name) > 12:
             name_font_size = 42
@@ -78,7 +77,6 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 stroke_width=stroke_width,
             )
 
-        # Нік
         draw_centered_text(
             display_name,
             name_font,
@@ -88,7 +86,6 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             stroke_width=2,
         )
 
-        # Заголовок
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
@@ -98,7 +95,6 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             stroke_width=1,
         )
 
-        # HP
         draw_centered_text(
             str(hp_score),
             hp_font,
@@ -118,6 +114,39 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
     except Exception as e:
         logger.error(f"[AWARDS] Помилка PIL: {e}", exc_info=True)
         return None
+
+
+async def send_test_fifa_card(bot: Bot, chat_id: int, nickname: str = "yarik721", hp_score: int = 678) -> bool:
+    """
+    Генерує тестову FIFA-картку і надсилає її в указаний чат.
+    """
+    card_path: Optional[str] = None
+
+    try:
+        card_path = create_fifa_card(nickname, hp_score)
+
+        if card_path and os.path.exists(card_path):
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=FSInputFile(card_path),
+                caption=f"🧪 Тест FIFA-картки\n@{nickname} — {hp_score} HP",
+            )
+            return True
+
+        await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову картку.")
+        return False
+
+    except Exception as e:
+        logger.error(f"[AWARDS] Test FIFA card error: {e}", exc_info=True)
+        await bot.send_message(chat_id, "❌ Помилка тестової генерації картки.")
+        return False
+
+    finally:
+        if card_path and os.path.exists(card_path):
+            try:
+                os.remove(card_path)
+            except Exception as e:
+                logger.warning(f"[AWARDS] Не вдалося видалити тестовий файл: {e}")
 
 
 # ==============================================================================
