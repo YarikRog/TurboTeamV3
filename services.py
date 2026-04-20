@@ -58,7 +58,7 @@ TRAINING_ACHIEVEMENTS = [
 def validate_quiz(data: dict) -> bool:
     """
     Validates quiz data from WebApp.
-    Accepts any non-empty strings.
+    Accepts any non-empty strings for all 5 quiz fields.
     """
     try:
         logger.debug(f"[VALIDATE] Quiz data: {data}")
@@ -74,8 +74,18 @@ def validate_quiz(data: dict) -> bool:
             return False
 
         goal = data.get("goal")
-        if not isinstance(goal, str) or not (0 < len(goal) < 200):
+        if not isinstance(goal, str) or not (0 < len(goal.strip()) < 200):
             logger.warning(f"[VALIDATE] Invalid goal: {goal!r}")
+            return False
+
+        weekly_plan = data.get("weekly_plan")
+        if not isinstance(weekly_plan, str) or len(weekly_plan.strip()) == 0:
+            logger.warning(f"[VALIDATE] Invalid weekly_plan: {weekly_plan!r}")
+            return False
+
+        training_place = data.get("training_place")
+        if not isinstance(training_place, str) or len(training_place.strip()) == 0:
+            logger.warning(f"[VALIDATE] Invalid training_place: {training_place!r}")
             return False
 
         return True
