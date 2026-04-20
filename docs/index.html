@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -400,7 +399,7 @@
 
       <div id="progressWrap" class="progress-wrap">
         <div class="progress-meta">
-          <span id="progressText">Крок 1 / 3</span>
+          <span id="progressText">Крок 1 / 5</span>
           <span>Швидкий відбір</span>
         </div>
         <div class="progress-bar">
@@ -502,7 +501,7 @@
         <p class="step-desc">Обери головну ціль, яка зараз для тебе найважливіша.</p>
 
         <div class="options">
-          <button class="option-btn" onclick="finishQuiz('Схуднення')">
+          <button class="option-btn" onclick="nextStep('goal', 'Схуднення', 4)">
             <div class="option-icon">🏃</div>
             <div class="option-text">
               <strong>Схуднення</strong>
@@ -510,7 +509,7 @@
             </div>
           </button>
 
-          <button class="option-btn" onclick="finishQuiz('Набір маси')">
+          <button class="option-btn" onclick="nextStep('goal', 'Набір маси', 4)">
             <div class="option-icon">🏋️</div>
             <div class="option-text">
               <strong>Набір маси</strong>
@@ -518,7 +517,7 @@
             </div>
           </button>
 
-          <button class="option-btn" onclick="finishQuiz('Витривалість')">
+          <button class="option-btn" onclick="nextStep('goal', 'Витривалість', 4)">
             <div class="option-icon">🚴</div>
             <div class="option-text">
               <strong>Витривалість</strong>
@@ -529,6 +528,78 @@
 
         <div class="footer-row">
           <button class="back-btn" onclick="goBack(2)">← Назад</button>
+        </div>
+      </div>
+
+      <div id="step4" class="step">
+        <div class="step-kicker">Крок 4</div>
+        <h2 class="step-title">Скільки разів на тиждень плануєш тренуватись?</h2>
+        <p class="step-desc">Обери свій реальний темп, без зайвого пафосу.</p>
+
+        <div class="options">
+          <button class="option-btn" onclick="nextStep('weekly_plan', '1-2 рази', 5)">
+            <div class="option-icon">🌿</div>
+            <div class="option-text">
+              <strong>1–2 рази</strong>
+              <span>Спокійний вхід у ритм</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="nextStep('weekly_plan', '3-4 рази', 5)">
+            <div class="option-icon">⚡</div>
+            <div class="option-text">
+              <strong>3–4 рази</strong>
+              <span>Оптимальний темп для росту</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="nextStep('weekly_plan', '5+ разів', 5)">
+            <div class="option-icon">🔥</div>
+            <div class="option-text">
+              <strong>5+ разів</strong>
+              <span>Максимальна зарядка на результат</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="footer-row">
+          <button class="back-btn" onclick="goBack(3)">← Назад</button>
+        </div>
+      </div>
+
+      <div id="step5" class="step">
+        <div class="step-kicker">Крок 5</div>
+        <h2 class="step-title">Де здебільшого тренуєшся?</h2>
+        <p class="step-desc">Це допоможе краще зрозуміти твій стиль у грі.</p>
+
+        <div class="options">
+          <button class="option-btn" onclick="finishQuiz('У залі')">
+            <div class="option-icon">🏋️</div>
+            <div class="option-text">
+              <strong>У залі</strong>
+              <span>Люблю залізо, ваги й режим</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="finishQuiz('На вулиці / турніках')">
+            <div class="option-icon">🦾</div>
+            <div class="option-text">
+              <strong>На вулиці / турніках</strong>
+              <span>Характер, база і вільний стиль</span>
+            </div>
+          </button>
+
+          <button class="option-btn" onclick="finishQuiz('І там, і там')">
+            <div class="option-icon">⚔️</div>
+            <div class="option-text">
+              <strong>І там, і там</strong>
+              <span>Комбіную все, що дає прогрес</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="footer-row">
+          <button class="back-btn" onclick="goBack(4)">← Назад</button>
         </div>
       </div>
 
@@ -547,6 +618,7 @@
 
     let quizResults = {};
     let currentStep = 0;
+    const TOTAL_STEPS = 5;
 
     const hero = document.getElementById('hero');
     const progressWrap = document.getElementById('progressWrap');
@@ -570,9 +642,9 @@
         target.classList.add('active');
       }
 
-      const percent = (stepNumber / 3) * 100;
+      const percent = (stepNumber / TOTAL_STEPS) * 100;
       progressFill.style.width = percent + '%';
-      progressText.textContent = `Крок ${stepNumber} / 3`;
+      progressText.textContent = `Крок ${stepNumber} / ${TOTAL_STEPS}`;
     }
 
     function nextStep(field, value, next) {
@@ -584,8 +656,8 @@
       showStep(stepNumber);
     }
 
-    function finishQuiz(goalValue) {
-      quizResults.goal = goalValue;
+    function finishQuiz(trainingPlaceValue) {
+      quizResults.training_place = trainingPlaceValue;
       quizResults.action = "submit_quiz";
 
       document.querySelectorAll('.step.active').forEach(el => el.classList.remove('active'));
