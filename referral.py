@@ -192,13 +192,19 @@ async def process_referral_logic(
         referrer_action = f"Referral Bonus ({new_user_id})"
 
         referrer_granted, _, _ = await ActivityService.grant_hp(
-            referrer_id, ref_name, referrer_action, HP_REF_BATA
+            referrer_id,
+            ref_name,
+            referrer_action,
+            HP_REF_BATA,
         )
 
         await asyncio.sleep(0.5)
 
         newbie_granted, _, _ = await ActivityService.grant_hp(
-            new_user_id, new_nickname, "Referral Welcome Bonus", HP_REF_NEWBIE
+            new_user_id,
+            new_nickname,
+            "Referral Welcome Bonus",
+            HP_REF_NEWBIE,
         )
 
         if not referrer_granted or not newbie_granted:
