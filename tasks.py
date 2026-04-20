@@ -89,6 +89,16 @@ async def send_morning_motivation(bot) -> None:
 
 
 @safe_job
+async def send_day_motivation(bot) -> None:
+    """15:00 Kyiv — day motivation + top-3."""
+    phrase = get_phrase("day")
+    top3 = await build_top3_text()
+    text = phrase + top3
+    await bot.send_message(chat_id=REPORTS_GROUP_ID, text=text, parse_mode="Markdown")
+    logger.info("[TASKS] Day motivation sent")
+
+
+@safe_job
 async def send_evening_motivation(bot) -> None:
     """21:00 Kyiv — evening motivation + top-3."""
     phrase = get_phrase("evening")
@@ -149,6 +159,9 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     )
     scheduler.add_job(
         inactive_reminder, "cron", hour=11, minute=0, args=[bot]
+    )
+    scheduler.add_job(
+        send_day_motivation, "cron", hour=15, minute=0, args=[bot]
     )
     scheduler.add_job(
         send_evening_motivation, "cron", hour=21, minute=0, args=[bot]
