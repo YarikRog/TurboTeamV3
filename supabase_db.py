@@ -91,6 +91,8 @@ async def create_user(
     gender: Optional[str] = None,
     level: Optional[str] = None,
     goal: Optional[str] = None,
+    weekly_plan: Optional[str] = None,
+    training_place: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload = {
         "telegram_user_id": telegram_user_id,
@@ -98,6 +100,8 @@ async def create_user(
         "gender": gender,
         "level": level,
         "goal": goal,
+        "weekly_plan": weekly_plan,
+        "training_place": training_place,
     }
 
     def _query():
