@@ -189,8 +189,10 @@ async def process_referral_logic(
         except Exception as e:
             logger.debug(f"[REFERRAL] get_chat_member failed: {e}")
 
+        referrer_action = f"Referral Bonus ({new_user_id})"
+
         referrer_granted, _, _ = await ActivityService.grant_hp(
-            referrer_id, ref_name, "Referral Bonus", HP_REF_BATA
+            referrer_id, ref_name, referrer_action, HP_REF_BATA
         )
 
         await asyncio.sleep(0.5)
