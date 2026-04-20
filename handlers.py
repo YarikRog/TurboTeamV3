@@ -253,6 +253,9 @@ async def handle_static_actions(callback: CallbackQuery):
 
 @router.message(F.video_note)
 async def gateway_video_note(m: Message):
+    if m.chat.type != "private":
+        return
+
     await flow_event_bus.publish(
         EventEnvelope(
             name=VIDEO_UPLOADED,
