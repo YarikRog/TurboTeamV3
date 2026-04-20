@@ -73,7 +73,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
                 "rank": int(row.get("rank", 0) or 0),
             })
 
-        top_list = normalized_rows[:10]
+        top_list = normalized_rows[:3]
 
         user_rank = "?"
         user_hp = 0
