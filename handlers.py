@@ -133,6 +133,8 @@ async def handle_my_profile(message: Message):
                 skip_count += 1
 
         training_count = gym_count + street_count
+        activities_count = gym_count + street_count + rest_count + skip_count
+
         status_title = get_training_status(training_count)
         next_goal, next_goal_progress = get_next_training_goal(training_count)
 
@@ -147,7 +149,6 @@ async def handle_my_profile(message: Message):
         nickname = user_row.get("nickname") or message.from_user.first_name
         hp_total = int(stats.get("hp_total", 0) or 0)
         streak = int(stats.get("streak", 0) or 0)
-        activities_count = int(stats.get("activities_count", 0) or 0)
 
         nickname_html = escape(str(nickname))
         status_title_html = escape(str(status_title))
