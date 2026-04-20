@@ -21,6 +21,7 @@ from supabase_db import (
     get_referrals_count,
     get_user_achievements_count,
     get_last_user_achievement,
+    get_all_users,
 )
 
 router = Router()
@@ -63,6 +64,23 @@ def get_next_training_goal(training_count: int) -> tuple[int | None, str]:
             return goal, f"{training_count}/{goal}"
 
     return None, "MAX"
+
+
+def _calc_percent(part: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round((part / total) * 100, 1)
+
+
+def _count_values(users: list[dict], field_name: str, allowed_values: list[str]) -> dict[str, int]:
+    result = {value: 0 for value in allowed_values}
+
+    for user in users:
+        raw_value = str(user.get(field_name) or "").strip()
+        if raw_value in result:
+            result[raw_value] += 1
+
+    return result
 
 
 @router.message(F.text == "🏆 Рейтинг ТОП")
@@ -300,6 +318,69 @@ async def handle_reject_training(m: Message):
         sent = await m.answer("⚠️ Не вдалося скасувати саме це тренування. Reply має бути на кружок або текст репорту.")
         safe_create_task(auto_delete(sent, 5))
         return
+
+
+@router.message(Command("quizstats"))
+async def handle_quiz_stats(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        users = await get_all_users()
+        total_users = len(users)
+
+        if total_users == 0:
+            sent = await m.answer("📉 У базі поки немає юзерів.")
+            safe_create_task(auto_delete(sent, 10))
+            return
+
+        level_values = ["Новачок", "Середній", "Профі"]
+        goal_values = ["Схуднення", "Набір маси", "Витривалість"]
+        weekly_plan_values = ["1-2 рази", "3-4 рази", "5+ разів"]
+        training_place_values = ["У залі", "На вулиці / турніках", "І там, і там"]
+
+        level_stats = _count_values(users, "level", level_values)
+        goal_stats = _count_values(users, "goal", goal_values)
+        weekly_plan_stats = _count_values(users, "weekly_plan", weekly_plan_values)
+        training_place_stats = _count_values(users, "training_place", training_place_values)
+
+        text = (
+            f"📊 <b>СТАТИСТИКА КВІЗУ</b>\n\n"
+            f"👥 Усього юзерів: <b>{total_users}</b>\n\n"
+
+            f"🎖️ <b>РІВЕНЬ</b>\n"
+            f"Новачок — <b>{_calc_percent(level_stats['Новачок'], total_users)}%</b>\n"
+            f"Середній — <b>{_calc_percent(level_stats['Середній'], total_users)}%</b>\n"
+            f"Профі — <b>{_calc_percent(level_stats['Профі'], total_users)}%</b>\n\n"
+
+            f"🎯 <b>ЦІЛЬ</b>\n"
+            f"Схуднення — <b>{_calc_percent(goal_stats['Схуднення'], total_users)}%</b>\n"
+            f"Набір маси — <b>{_calc_percent(goal_stats['Набір маси'], total_users)}%</b>\n"
+            f"Витривалість — <b>{_calc_percent(goal_stats['Витривалість'], total_users)}%</b>\n\n"
+
+            f"📅 <b>ПЛАН НА ТИЖДЕНЬ</b>\n"
+            f"1–2 рази — <b>{_calc_percent(weekly_plan_stats['1-2 рази'], total_users)}%</b>\n"
+            f"3–4 рази — <b>{_calc_percent(weekly_plan_stats['3-4 рази'], total_users)}%</b>\n"
+            f"5+ разів — <b>{_calc_percent(weekly_plan_stats['5+ разів'], total_users)}%</b>\n\n"
+
+            f"🏋️ <b>ДЕ ТРЕНУЮТЬСЯ</b>\n"
+            f"У залі — <b>{_calc_percent(training_place_stats['У залі'], total_users)}%</b>\n"
+            f"На вулиці / турніках — <b>{_calc_percent(training_place_stats['На вулиці / турніках'], total_users)}%</b>\n"
+            f"І там, і там — <b>{_calc_percent(training_place_stats['І там, і там'], total_users)}%</b>"
+        )
+
+        sent = await m.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent, 120))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_quiz_stats error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Не вдалося зібрати статистику квізу.")
+        safe_create_task(auto_delete(sent, 10))
 
 
 @router.message(Command("panel"))
