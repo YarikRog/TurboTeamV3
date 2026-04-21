@@ -4,6 +4,7 @@ import asyncio
 import json
 import random
 import pytz
+from html import escape
 
 from datetime import datetime, timedelta
 from typing import Optional, List, Union, Dict, Any
@@ -516,7 +517,7 @@ async def get_inactive_users() -> List[str]:
         for user in users:
             telegram_user_id = user.get("telegram_user_id")
             user_uuid = user.get("id")
-            nickname = user.get("nickname") or str(telegram_user_id)
+            nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
 
             if not telegram_user_id or not user_uuid:
                 continue
@@ -534,13 +535,19 @@ async def get_inactive_users() -> List[str]:
                     last_activity_date = activity_date
 
             if last_activity_date is None:
-                inactive_users.append(str(nickname))
+                display_name = escape(nickname)
+                inactive_users.append(
+                    f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
+                )
                 continue
 
             silent_days = (today - last_activity_date).days
 
             if silent_days >= INACTIVE_DAYS_THRESHOLD:
-                inactive_users.append(str(nickname))
+                display_name = escape(nickname)
+                inactive_users.append(
+                    f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
+                )
 
         return inactive_users
 
