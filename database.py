@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # TIMEZONE (single source of truth)
 # ==============================================================================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
+INACTIVE_DAYS_THRESHOLD = 3
 
 
 def get_kyiv_now() -> datetime:
@@ -459,6 +460,8 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
             gender=quiz_data.get("gender", "N/A"),
             level=quiz_data.get("level", "N/A"),
             goal=str(quiz_data.get("goal", "N/A"))[:200],
+            weekly_plan=str(quiz_data.get("weekly_plan", "N/A"))[:100],
+            training_place=str(quiz_data.get("training_place", "N/A"))[:100],
         )
 
         await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
@@ -520,14 +523,23 @@ async def get_inactive_users() -> List[str]:
 
             activities = await get_user_activities(str(user_uuid), limit=50)
 
-            has_today_activity = False
+            last_activity_date = None
             for activity in activities:
                 created_at = _parse_activity_created_at(activity.get("created_at"))
-                if created_at and created_at.date() == today:
-                    has_today_activity = True
-                    break
+                if not created_at:
+                    continue
 
-            if not has_today_activity:
+                activity_date = created_at.date()
+                if last_activity_date is None or activity_date > last_activity_date:
+                    last_activity_date = activity_date
+
+            if last_activity_date is None:
+                inactive_users.append(str(nickname))
+                continue
+
+            silent_days = (today - last_activity_date).days
+
+            if silent_days >= INACTIVE_DAYS_THRESHOLD:
                 inactive_users.append(str(nickname))
 
         return inactive_users
