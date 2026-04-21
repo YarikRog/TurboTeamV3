@@ -110,7 +110,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_centered_text(
             display_name,
             name_font,
-            y=185,
+            y=220,
             fill="white",
             stroke_fill="#0A1A4F",
             stroke_width=2,
