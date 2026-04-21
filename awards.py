@@ -57,7 +57,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         name_font = get_font(FONT_PATH, name_font_size)
         title_font = get_font(FONT_PATH, 32)
         hp_font = get_font(FONT_PATH, 56)
-        hp_label_font = get_font(FONT_PATH, 34)
+        hp_label_font = get_font(FONT_PATH, 42)
 
         def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
             bbox = draw.textbbox(
@@ -106,7 +106,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 stroke_width=stroke_width,
             )
 
-        # 1. НІК — зелена зона
+        # 1. НІК — не чіпаємо
         draw_centered_text(
             display_name,
             name_font,
@@ -116,7 +116,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             stroke_width=2,
         )
 
-        # 2. ЧЕМПІОН ТИЖНЯ — червона зона
+        # 2. ЧЕМПІОН ТИЖНЯ — не чіпаємо
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
@@ -126,23 +126,27 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             stroke_width=1,
         )
 
-        # 3. HP-БЛОК — синя зона
+        # 3. HP-БЛОК
         hp_box = (85, 690, 405, 930)
 
+        # 678 — на 50 вище
         draw_text_center_in_box(
             str(hp_score),
             hp_font,
-            box=(hp_box[0] - 20, hp_box[1] - 70, hp_box[2] - 20, hp_box[1] + 60),
+            box=(hp_box[0] - 20, hp_box[1] - 120, hp_box[2] - 20, hp_box[1] + 10),
             fill="black",
             stroke_fill="#A86F00",
             stroke_width=1,
         )
 
+        # HP — на 70 вище і жирніше / потужніше
         draw_text_center_in_box(
             "HP",
             hp_label_font,
-            box=(hp_box[0] - 20, hp_box[1] + 20, hp_box[2] - 20, hp_box[3] - 70),
-            fill="#1A1A1A",
+            box=(hp_box[0] - 20, hp_box[1] - 50, hp_box[2] - 20, hp_box[3] - 140),
+            fill="black",
+            stroke_fill="#A86F00",
+            stroke_width=1,
         )
 
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=BASE_DIR)
