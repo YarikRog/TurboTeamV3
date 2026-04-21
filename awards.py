@@ -46,17 +46,17 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
 
         display_name = f"@{nickname}".upper()
 
-        name_font_size = 48
+        name_font_size = 44
         if len(display_name) > 12:
-            name_font_size = 42
+            name_font_size = 38
         if len(display_name) > 16:
-            name_font_size = 36
+            name_font_size = 32
         if len(display_name) > 20:
-            name_font_size = 30
+            name_font_size = 28
 
         name_font = get_font(FONT_PATH, name_font_size)
-        title_font = get_font(FONT_PATH, 28)
-        hp_font = get_font(FONT_PATH, 58)
+        title_font = get_font(FONT_PATH, 24)
+        hp_font = get_font(FONT_PATH, 56)
         hp_label_font = get_font(FONT_PATH, 24)
 
         def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
@@ -106,45 +106,42 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 stroke_width=stroke_width,
             )
 
-        # 1. Нік — опускаємо нижче, але лишаємо над "ЧЕМПІОН ТИЖНЯ"
+        # 1. НІК — зелена зона
         draw_centered_text(
             display_name,
             name_font,
-            y=150,
+            y=185,
             fill="white",
             stroke_fill="#0A1A4F",
             stroke_width=2,
         )
 
-        # 2. Чемпіон тижня — трохи нижче
+        # 2. ЧЕМПІОН ТИЖНЯ — червона зона
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
-            y=430,
+            y=320,
             fill="#F4F4F4",
             stroke_fill="#0A1A4F",
             stroke_width=1,
         )
 
-        # 3. HP блок — у білий квадрат зліва внизу
-        # Підганяв по твоєму скріну, має бути близько
-        hp_box = (120, 840, 470, 1070)
+        # 3. HP-БЛОК — синя зона
+        hp_box = (85, 690, 405, 930)
 
-        # Число HP у верхній частині блоку
         draw_text_center_in_box(
             str(hp_score),
             hp_font,
-            box=(hp_box[0], hp_box[1], hp_box[2], hp_box[1] + 135),
+            box=(hp_box[0], hp_box[1], hp_box[2], hp_box[1] + 130),
             fill="black",
             stroke_fill="#A86F00",
             stroke_width=1,
         )
 
-        # Текст HP у нижній частині блоку
         draw_text_center_in_box(
             "HP",
             hp_label_font,
-            box=(hp_box[0], hp_box[1] + 120, hp_box[2], hp_box[3]),
+            box=(hp_box[0], hp_box[1] + 110, hp_box[2], hp_box[3]),
             fill="#1A1A1A",
         )
 
