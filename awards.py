@@ -22,13 +22,12 @@ FONT_PATH = os.path.join(BASE_DIR, "font.ttf")
 
 
 # ==============================================================================
-# ГЕНЕРАЦІЯ FIFA КАРТКИ (CORE ENGINE)
+# ГЕНЕРАЦІЯ ГРАМОТИ (CORE ENGINE)
 # ==============================================================================
 
 def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
     """
-    Генерує FIFA-картку переможця з автоматичним масштабуванням тексту.
-    Оптимізовано під Oswald.
+    Генерує грамоту переможця тижня з автоматичним масштабуванням тексту.
     """
     if not os.path.exists(TEMPLATE_PATH):
         logger.error(f"[AWARDS] Шаблон не знайдено: {TEMPLATE_PATH}")
@@ -47,18 +46,18 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
 
         display_name = f"@{nickname}".upper()
 
-        name_font_size = 50
+        name_font_size = 48
         if len(display_name) > 12:
             name_font_size = 42
         if len(display_name) > 16:
-            name_font_size = 34
+            name_font_size = 36
         if len(display_name) > 20:
-            name_font_size = 28
+            name_font_size = 30
 
         name_font = get_font(FONT_PATH, name_font_size)
-        title_font = get_font(FONT_PATH, 34)
-        hp_font = get_font(FONT_PATH, 92)
-        hp_label_font = get_font(FONT_PATH, 28)
+        title_font = get_font(FONT_PATH, 28)
+        hp_font = get_font(FONT_PATH, 58)
+        hp_label_font = get_font(FONT_PATH, 24)
 
         def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
             bbox = draw.textbbox(
@@ -78,37 +77,74 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
                 stroke_width=stroke_width,
             )
 
+        def draw_text_center_in_box(text, font, box, fill, stroke_fill=None, stroke_width=0):
+            """
+            box = (x1, y1, x2, y2)
+            """
+            bbox = draw.textbbox(
+                (0, 0),
+                text,
+                font=font,
+                stroke_width=stroke_width,
+            )
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+
+            x1, y1, x2, y2 = box
+            box_w = x2 - x1
+            box_h = y2 - y1
+
+            x = x1 + (box_w - text_w) // 2
+            y = y1 + (box_h - text_h) // 2
+
+            draw.text(
+                (x, y),
+                text,
+                font=font,
+                fill=fill,
+                stroke_fill=stroke_fill,
+                stroke_width=stroke_width,
+            )
+
+        # 1. Нік — опускаємо нижче, але лишаємо над "ЧЕМПІОН ТИЖНЯ"
         draw_centered_text(
             display_name,
             name_font,
-            y=88,
+            y=150,
             fill="white",
             stroke_fill="#0A1A4F",
             stroke_width=2,
         )
 
+        # 2. Чемпіон тижня — трохи нижче
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
-            y=345,
+            y=430,
             fill="#F4F4F4",
             stroke_fill="#0A1A4F",
             stroke_width=1,
         )
 
-        draw_centered_text(
+        # 3. HP блок — у білий квадрат зліва внизу
+        # Підганяв по твоєму скріну, має бути близько
+        hp_box = (120, 840, 470, 1070)
+
+        # Число HP у верхній частині блоку
+        draw_text_center_in_box(
             str(hp_score),
             hp_font,
-            y=452,
+            box=(hp_box[0], hp_box[1], hp_box[2], hp_box[1] + 135),
             fill="black",
             stroke_fill="#A86F00",
             stroke_width=1,
         )
 
-        draw_centered_text(
+        # Текст HP у нижній частині блоку
+        draw_text_center_in_box(
             "HP",
             hp_label_font,
-            y=575,
+            box=(hp_box[0], hp_box[1] + 120, hp_box[2], hp_box[3]),
             fill="#1A1A1A",
         )
 
@@ -132,7 +168,7 @@ async def send_test_fifa_card(
     user_id: Optional[int] = None,
 ) -> bool:
     """
-    Генерує тестову FIFA-картку і надсилає її в чат.
+    Генерує тестову грамоту і надсилає її в чат.
     """
     card_path: Optional[str] = None
 
@@ -143,19 +179,19 @@ async def send_test_fifa_card(
         )
 
         if not card_path or not os.path.exists(card_path):
-            await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову FIFA-картку.")
+            await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову грамоту.")
             return False
 
         await bot.send_photo(
             chat_id=chat_id,
             photo=FSInputFile(card_path),
-            caption=f"🧪 Тест FIFA-картки\n@{nickname} — {hp_score} HP",
+            caption=f"🧪 Тест грамоти\n@{nickname} — {hp_score} HP",
         )
         return True
 
     except Exception as e:
-        logger.error(f"[AWARDS] Помилка тестової картки: {e}", exc_info=True)
-        await bot.send_message(chat_id, "❌ Помилка під час тесту FIFA-картки.")
+        logger.error(f"[AWARDS] Помилка тестової грамоти: {e}", exc_info=True)
+        await bot.send_message(chat_id, "❌ Помилка під час тесту грамоти.")
         return False
 
     finally:
