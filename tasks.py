@@ -121,13 +121,15 @@ async def inactive_reminder(bot) -> None:
 
     mentions = " ".join(inactive_list)
     text = (
-        f"🚨 **РОЗДУПЛЯТОР ТУРБОТІМ** 🚨\n\n"
+        f"🚨 <b>РОЗДУПЛЯТОР ТУРБОТІМ</b> 🚨\n\n"
         f"{mentions}\n\n"
         f"Бро, ти де зник? Вже 3 дні тиші! "
         f"Повертайся в стрій, HP самі себе не зароблять! 🔥"
     )
     await bot.send_message(
-        chat_id=REPORTS_GROUP_ID, text=text, parse_mode="Markdown"
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="HTML",
     )
     logger.info(f"[TASKS] Inactive reminder triggered for {len(inactive_list)} users")
 
