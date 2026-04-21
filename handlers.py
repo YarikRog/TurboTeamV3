@@ -83,6 +83,32 @@ def _count_values(users: list[dict], field_name: str, allowed_values: list[str])
     return result
 
 
+def _count_filled(users: list[dict], field_name: str) -> int:
+    total = 0
+    for user in users:
+        raw_value = str(user.get(field_name) or "").strip()
+        if raw_value:
+            total += 1
+    return total
+
+
+def _format_stat_block(
+    title: str,
+    stats: dict[str, int],
+    total: int,
+    ordered_labels: list[str],
+) -> str:
+    lines = [f"{title}"]
+
+    for label in ordered_labels:
+        count = int(stats.get(label, 0) or 0)
+        percent = _calc_percent(count, total)
+        word = "юзер" if count == 1 else "юзери" if 2 <= count <= 4 else "юзерів"
+        lines.append(f"{label} — <b>{count}</b> {word} — <b>{percent}%</b>")
+
+    return "\n".join(lines)
+
+
 @router.message(F.text == "🏆 Рейтинг ТОП")
 async def handle_show_rating_message(message: Message):
     await show_rating_for_user(message, message.from_user)
@@ -344,33 +370,26 @@ async def handle_quiz_stats(m: Message):
         weekly_plan_stats = _count_values(users, "weekly_plan", weekly_plan_values)
         training_place_stats = _count_values(users, "training_place", training_place_values)
 
+        total_level = _count_filled(users, "level")
+        total_goal = _count_filled(users, "goal")
+        total_weekly_plan = _count_filled(users, "weekly_plan")
+        total_training_place = _count_filled(users, "training_place")
+
         text = (
             f"📊 <b>СТАТИСТИКА КВІЗУ</b>\n\n"
-            f"👥 Усього юзерів: <b>{total_users}</b>\n\n"
-
-            f"🎖️ <b>РІВЕНЬ</b>\n"
-            f"Новачок — <b>{_calc_percent(level_stats['Новачок'], total_users)}%</b>\n"
-            f"Середній — <b>{_calc_percent(level_stats['Середній'], total_users)}%</b>\n"
-            f"Профі — <b>{_calc_percent(level_stats['Профі'], total_users)}%</b>\n\n"
-
-            f"🎯 <b>ЦІЛЬ</b>\n"
-            f"Схуднення — <b>{_calc_percent(goal_stats['Схуднення'], total_users)}%</b>\n"
-            f"Набір маси — <b>{_calc_percent(goal_stats['Набір маси'], total_users)}%</b>\n"
-            f"Витривалість — <b>{_calc_percent(goal_stats['Витривалість'], total_users)}%</b>\n\n"
-
-            f"📅 <b>ПЛАН НА ТИЖДЕНЬ</b>\n"
-            f"1–2 рази — <b>{_calc_percent(weekly_plan_stats['1-2 рази'], total_users)}%</b>\n"
-            f"3–4 рази — <b>{_calc_percent(weekly_plan_stats['3-4 рази'], total_users)}%</b>\n"
-            f"5+ разів — <b>{_calc_percent(weekly_plan_stats['5+ разів'], total_users)}%</b>\n\n"
-
-            f"🏋️ <b>ДЕ ТРЕНУЮТЬСЯ</b>\n"
-            f"У залі — <b>{_calc_percent(training_place_stats['У залі'], total_users)}%</b>\n"
-            f"На вулиці / турніках — <b>{_calc_percent(training_place_stats['На вулиці / турніках'], total_users)}%</b>\n"
-            f"І там, і там — <b>{_calc_percent(training_place_stats['І там, і там'], total_users)}%</b>"
+            f"👥 Усього юзерів у базі: <b>{total_users}</b>\n\n"
+            f"{_format_stat_block('🎖️ <b>РІВЕНЬ</b>', level_stats, total_level, level_values)}\n\n"
+            f"{_format_stat_block('🎯 <b>ЦІЛЬ</b>', goal_stats, total_goal, goal_values)}\n\n"
+            f"{_format_stat_block('📅 <b>ПЛАН НА ТИЖДЕНЬ</b>', weekly_plan_stats, total_weekly_plan, ['1–2 рази', '3–4 рази', '5+ разів'])}\n\n"
+            f"{_format_stat_block('🏋️ <b>ДЕ ТРЕНУЮТЬСЯ</b>', training_place_stats, total_training_place, training_place_values)}"
         )
 
+        text = text.replace("1–2 рази", f"1–2 рази — <b>{weekly_plan_stats['1-2 рази']}</b> {'юзер' if weekly_plan_stats['1-2 рази'] == 1 else 'юзери' if 2 <= weekly_plan_stats['1-2 рази'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['1-2 рази'], total_weekly_plan)}%</b>")
+        text = text.replace("3–4 рази", f"3–4 рази — <b>{weekly_plan_stats['3-4 рази']}</b> {'юзер' if weekly_plan_stats['3-4 рази'] == 1 else 'юзери' if 2 <= weekly_plan_stats['3-4 рази'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['3-4 рази'], total_weekly_plan)}%</b>")
+        text = text.replace("5+ разів", f"5+ разів — <b>{weekly_plan_stats['5+ разів']}</b> {'юзер' if weekly_plan_stats['5+ разів'] == 1 else 'юзери' if 2 <= weekly_plan_stats['5+ разів'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['5+ разів'], total_weekly_plan)}%</b>")
+
         sent = await m.answer(text, parse_mode="HTML")
-        safe_create_task(auto_delete(sent, 120))
+        safe_create_task(auto_delete(sent, 180))
 
         try:
             await m.delete()
