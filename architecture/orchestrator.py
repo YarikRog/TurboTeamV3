@@ -1,570 +1,546 @@
-import aiohttp
 import logging
-import asyncio
-import json
-import random
-import pytz
+import time
 
-from datetime import datetime, timedelta
-from typing import Optional, List, Union, Dict, Any
+from aiogram import types
+from aiogram.types import CallbackQuery, Message
 
-from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
-from cache import get_data, set_flag, KeyManager, acquire_lock, delete_data
-from supabase_db import (
-    get_user_by_telegram_id,
-    create_user,
-    add_activity as supabase_add_activity,
-    get_user_activities,
-    get_all_users,
-    get_user_activities_in_period,
-    get_referrals_count,
-    get_weekly_rating,
-    add_referral as supabase_add_referral,
+from architecture.event_bus import EventBus
+from architecture.events import (
+    EventEnvelope,
+    PENALTY_APPLIED,
+    REST_SELECTED,
+    SKIP_SELECTED,
+    TRAINING_SELECTED,
+    USER_REGISTERED,
+    VIDEO_UPLOADED,
 )
+from architecture.state_machine import UserFlowState, state_machine
+from cache import KeyManager, delete_data, get_data, set_flag, set_data
+from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
+from database import get_kyiv_now, register_user_from_quiz, check_user_exists
+from phrases import get_phrase
+from referral import process_referral_logic
+from services import ActivityService, auto_delete, safe_create_task
 
 logger = logging.getLogger(__name__)
 
-# ==============================================================================
-# TIMEZONE (single source of truth)
-# ==============================================================================
-KYIV_TZ = pytz.timezone("Europe/Kyiv")
+flow_event_bus = EventBus()
+
+WELCOME_HP_BONUS = 50
+RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
 
 
-def get_kyiv_now() -> datetime:
-    return datetime.now(KYIV_TZ)
+def mention(user: types.User) -> str:
+    return f"@{user.username or user.first_name}"
 
 
-def get_seconds_until_kyiv_midnight() -> int:
-    """
-    Returns TTL in seconds until next midnight in Kyiv timezone.
-    Minimum value is 1 second.
-    """
-    now = get_kyiv_now()
-    next_midnight = (now + timedelta(days=1)).replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
+def _ms(start: float) -> int:
+    return int((time.perf_counter() - start) * 1000)
+
+
+def _get_return_to_group_reply_keyboard() -> types.ReplyKeyboardMarkup:
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text=RETURN_TO_GROUP_TEXT)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
     )
-    return max(1, int((next_midnight - now).total_seconds()))
 
 
-def _parse_activity_created_at(value: Any) -> Optional[datetime]:
-    """
-    Safely parses Supabase created_at value into timezone-aware datetime.
-    Supports ISO strings with trailing Z.
-    """
-    if not value:
-        return None
+def _get_group_inline_keyboard() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="ВХІД У ГРУПУ 🏎️", url=GROUP_LINK),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📘 Правила користування TurboTeam",
+                    callback_data="turbo_rules",
+                ),
+            ],
+        ]
+    )
 
-    if isinstance(value, datetime):
-        dt = value
-    elif isinstance(value, str):
-        try:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except Exception:
+
+async def _reply_transport(source: Message | CallbackQuery, text: str, show_alert: bool = False):
+    if isinstance(source, CallbackQuery):
+        if show_alert:
+            await source.answer(text, show_alert=True)
             return None
-    else:
-        return None
 
-    if dt.tzinfo is None:
-        dt = pytz.UTC.localize(dt)
+        sent = await source.message.answer(text)
+        await source.answer()
+        return sent
 
-    return dt.astimezone(KYIV_TZ)
+    return await source.answer(text)
 
 
-def _get_current_week_period() -> tuple[str, str]:
-    """
-    Returns current week boundaries in ISO format.
-    TurboTeam week starts on Sunday at 20:00 Kyiv time.
-    """
-    now = get_kyiv_now()
-    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
-        hour=20,
-        minute=0,
-        second=0,
-        microsecond=0,
+async def on_user_registered(event: EventEnvelope) -> bool:
+    total_started = time.perf_counter()
+
+    message: Message = event.payload["message"]
+    quiz_data = event.payload["quiz_data"]
+    user_id = event.user_id
+    nickname = event.payload["nickname"]
+
+    logger.info("[REG] Start registration flow user_id=%s", user_id)
+
+    t = time.perf_counter()
+    already_exists = await check_user_exists(user_id)
+    logger.info("[REG] check_user_exists user_id=%s took %sms", user_id, _ms(t))
+
+    if already_exists:
+        await message.answer(
+            "⚠️ Ти вже в базі.",
+            reply_markup=_get_return_to_group_reply_keyboard(),
+        )
+        await message.answer(
+            "Тримай перепустку в групу 👇",
+            reply_markup=_get_group_inline_keyboard(),
+        )
+        logger.info("[REG] user already exists user_id=%s total=%sms", user_id, _ms(total_started))
+        return False
+
+    t = time.perf_counter()
+    success = await register_user_from_quiz(user_id, nickname, quiz_data)
+    logger.info("[REG] register_user_from_quiz user_id=%s took %sms", user_id, _ms(t))
+
+    if not success:
+        await message.answer("⚠️ Не вдалося завершити реєстрацію. Спробуй ще раз.")
+        logger.info("[REG] registration failed user_id=%s total=%sms", user_id, _ms(total_started))
+        return False
+
+    t = time.perf_counter()
+    welcome_bonus_ok, _, _ = await ActivityService.grant_hp(
+        user_id=user_id,
+        nickname=nickname,
+        action_type="Welcome Bonus",
+        hp=WELCOME_HP_BONUS,
     )
-    if now < current_sunday_20:
-        week_start = current_sunday_20 - timedelta(days=7)
-    else:
-        week_start = current_sunday_20
+    logger.info("[REG] welcome bonus user_id=%s took %sms ok=%s", user_id, _ms(t), welcome_bonus_ok)
 
-    week_end = week_start + timedelta(days=7)
+    t = time.perf_counter()
+    await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+    logger.info("[REG] set reg flag user_id=%s took %sms", user_id, _ms(t))
 
-    return week_start.isoformat(), week_end.isoformat()
+    t = time.perf_counter()
+    await state_machine.register_user(user_id)
+    logger.info("[REG] state_machine.register_user user_id=%s took %sms", user_id, _ms(t))
 
+    t = time.perf_counter()
+    ref_key = KeyManager.get_ref_key(user_id)
+    referrer_id = await get_data(ref_key)
+    logger.info("[REG] get pending ref user_id=%s took %sms", user_id, _ms(t))
 
-async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Resolves Telegram user id -> Supabase users row.
-    """
-    try:
-        return await get_user_by_telegram_id(user_id)
-    except Exception as e:
-        logger.error(f"[DB] failed to load Supabase user: user_id={user_id}, error={e}")
-        return None
+    if referrer_id:
+        t = time.perf_counter()
+        await delete_data(ref_key)
+        logger.info("[REG] delete pending ref user_id=%s took %sms", user_id, _ms(t))
 
-
-def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
-    """
-    Counts consecutive training days (Gym/Street) backward from today in Kyiv timezone.
-    Multiple trainings on the same day count as one streak day.
-    """
-    training_actions = {"Gym", "Street"}
-    training_dates = set()
-
-    for activity in activities:
-        action_name = str(activity.get("action_name", ""))
-        if action_name not in training_actions:
-            continue
-
-        created_at = _parse_activity_created_at(activity.get("created_at"))
-        if not created_at:
-            continue
-
-        training_dates.add(created_at.date())
-
-    streak = 0
-    cursor = get_kyiv_now().date()
-
-    while cursor in training_dates:
-        streak += 1
-        cursor -= timedelta(days=1)
-
-    return streak
-
-
-async def _has_activity_today(
-    user_id: int,
-    action_name: str,
-    video_id: str = "",
-) -> bool:
-    """
-    Checks whether this activity already exists today in Kyiv timezone.
-    """
-    user_row = await _get_supabase_user_row(user_id)
-    if not user_row:
-        return False
-
-    supabase_user_id = user_row.get("id")
-    if not supabase_user_id:
-        logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
-        return False
-
-    try:
-        activities = await get_user_activities(str(supabase_user_id), limit=200)
-    except Exception as e:
-        logger.error(f"[DB] failed to read activities: user_id={user_id}, error={e}")
-        return False
-
-    today = get_kyiv_now().date()
-    normalized_video_id = str(video_id or "").strip()
-
-    for activity in activities:
-        if str(activity.get("action_name", "")) != str(action_name):
-            continue
-
-        created_at = _parse_activity_created_at(activity.get("created_at"))
-        if not created_at or created_at.date() != today:
-            continue
-
-        existing_video_id = str(activity.get("video_id") or "").strip()
-
-        if normalized_video_id:
-            if existing_video_id == normalized_video_id:
-                return True
-            continue
-
-        return True
-
-    return False
-
-
-# ==============================================================================
-# HTTP LAYER (ULTRA OPTIMIZED SINGLETON)
-# ==============================================================================
-API_SEMAPHORE = asyncio.Semaphore(20)
-
-_session: Optional[aiohttp.ClientSession] = None
-_session_lock = asyncio.Lock()
-
-
-async def get_session() -> aiohttp.ClientSession:
-    """
-    High-load safe singleton session.
-    - avoids race condition
-    - reuses TCP pool
-    - minimal lock contention
-    """
-    global _session
-
-    if _session and not _session.closed:
-        return _session
-
-    async with _session_lock:
-        if _session and not _session.closed:
-            return _session
-
-        connector = aiohttp.TCPConnector(
-            limit=100,
-            limit_per_host=30,
-            ttl_dns_cache=300,
-            enable_cleanup_closed=True,
+        t = time.perf_counter()
+        safe_create_task(
+            process_referral_logic(user_id, nickname, int(str(referrer_id)), message.bot),
+            name=f"referral_{user_id}",
         )
+        logger.info("[REG] referral task scheduled user_id=%s took %sms", user_id, _ms(t))
 
-        timeout = aiohttp.ClientTimeout(
-            total=25,
-            connect=5,
-            sock_connect=5,
-            sock_read=20,
-        )
+    t = time.perf_counter()
+    await message.answer(
+        f"✅ Реєстрацію завершено. Тобі нараховано +{WELCOME_HP_BONUS} HP",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+    logger.info("[REG] registration success answer user_id=%s took %sms", user_id, _ms(t))
 
-        _session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-        )
+    t = time.perf_counter()
+    await message.answer(
+        "Тисни кнопку нижче, якщо треба швидко повернутися в групу 👇",
+        reply_markup=_get_return_to_group_reply_keyboard(),
+    )
+    logger.info("[REG] return reply keyboard user_id=%s took %sms", user_id, _ms(t))
 
-        logger.info("[DB] HTTP session initialized (PRODUCTION MODE)")
+    t = time.perf_counter()
+    await message.answer(
+        "Тримай перепустку в групу 👇",
+        reply_markup=_get_group_inline_keyboard(),
+    )
+    logger.info("[REG] onboarding answer user_id=%s took %sms", user_id, _ms(t))
 
-    return _session
+    user_mention = mention(message.from_user)
 
-
-async def close_db_session() -> None:
-    global _session
-
-    async with _session_lock:
-        if _session and not _session.closed:
-            await _session.close()
-            _session = None
-            logger.info("[DB] HTTP session closed")
-
-
-# ==============================================================================
-# INTERNAL CORE REQUEST (ALL TRAFFIC GOES HERE)
-# ==============================================================================
-async def _request(payload: dict, method: str = "POST") -> Any:
-    """
-    Legacy GAS request layer. Kept temporarily for compatibility.
-    """
-    session = await get_session()
-
-    async with API_SEMAPHORE:
-        try:
-            if method == "GET":
-                async with session.get(
-                    GOOGLE_SCRIPT_URL,
-                    params=payload,
-                    allow_redirects=True,
-                ) as resp:
-                    return await _handle_response(resp)
-
-            async with session.post(
-                GOOGLE_SCRIPT_URL,
-                json=payload,
-                allow_redirects=True,
-            ) as resp:
-                return await _handle_response(resp)
-        except Exception as e:
-            logger.error(f"[DB] critical request error: {e}")
-            return {"success": False}
-
-
-async def _handle_response(resp: aiohttp.ClientResponse) -> Any:
-    """
-    Safe JSON parsing + fallback protection.
-    """
-    try:
-        text = await resp.text()
-
-        if resp.status != 200:
-            return {"success": False, "status": resp.status}
-
-        try:
-            return json.loads(text)
-        except Exception:
-            logger.error(f"[DB] invalid JSON: {text[:200]}")
-            return {"success": False}
-
-    except Exception as e:
-        logger.error(f"[DB] response error: {e}")
-        return {"success": False}
-
-
-# ==============================================================================
-# PUBLIC API (FAST PATH FIRST)
-# ==============================================================================
-
-async def check_activity_limit(user_id: int, nickname: str, action_name: str) -> bool:
-    key = KeyManager.get_action_lock_key(
-        user_id, f"{action_name}:{get_kyiv_now().date()}"
+    group_welcome_text = (
+        get_phrase("welcome", mention=user_mention)
+        + "\n\n"
+        + f"🔥 Новачку одразу нараховано +{WELCOME_HP_BONUS} HP\n"
+        + "Освоюйся в TurboTeam 👀\n"
+        + "Усі дії, Turbo-панель і правила — у закріплених повідомленнях групи 👆"
     )
 
-    cached = await get_data(key)
-    if cached is not None:
-        return False
-
-    already_exists = await _has_activity_today(user_id, action_name)
-    return not already_exists
-
-
-async def add_activity(
-    user_id: int,
-    nickname: str,
-    action_name: str,
-    hp_change: int,
-    video_id: str = ""
-) -> Union[bool, str]:
-    return await update_user_activity(
-        user_id, nickname, action_name, hp_change, video_id, False
+    t = time.perf_counter()
+    await message.bot.send_message(
+        REPORTS_GROUP_ID,
+        group_welcome_text,
+        parse_mode="Markdown",
     )
+    logger.info("[REG] group welcome send user_id=%s took %sms", user_id, _ms(t))
 
-
-async def get_user_stats(user_id: int) -> Optional[Dict]:
-    user_row = await _get_supabase_user_row(user_id)
-    if not user_row:
-        return None
-
-    supabase_user_id = user_row.get("id")
-    if not supabase_user_id:
-        logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
-        return None
-
-    try:
-        activities = await get_user_activities(str(supabase_user_id), limit=1000)
-    except Exception as e:
-        logger.error(f"[DB] failed to get user activities for stats: user_id={user_id}, error={e}")
-        return None
-
-    hp_total = 0
-    for activity in activities:
-        try:
-            hp_total += int(activity.get("hp_change", 0) or 0)
-        except Exception:
-            continue
-
-    stats = {
-        "user_id": str(supabase_user_id),
-        "telegram_user_id": user_row.get("telegram_user_id"),
-        "nickname": user_row.get("nickname", ""),
-        "hp": hp_total,
-        "hp_total": hp_total,
-        "activities_count": len(activities),
-        "streak": _calculate_training_streak(activities),
-    }
-
-    return stats
-
-
-# ==============================================================================
-# CORE WRITE (ZERO LOSS + IDEMPOTENCY LOCK)
-# ==============================================================================
-async def update_user_activity(
-    user_id: int,
-    nickname: str,
-    action_name: str,
-    hp_change: int,
-    video_id: str = "",
-    is_check: bool = False,
-    skip_lock: bool = False,
-) -> Union[bool, str]:
-
-    today = get_kyiv_now().strftime("%Y-%m-%d")
-    lock_key = KeyManager.get_action_lock_key(user_id, f"{action_name}:{today}")
-
-    if not skip_lock:
-        lock = await acquire_lock(lock_key, ex=get_seconds_until_kyiv_midnight())
-        if not lock:
-            return False
-
-    delay = RETRY_DELAY
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            if is_check:
-                already_exists = await _has_activity_today(user_id, action_name, video_id)
-                return not already_exists
-
-            already_exists = await _has_activity_today(user_id, action_name, video_id)
-            if already_exists:
-                return "already_done"
-
-            user_row = await _get_supabase_user_row(user_id)
-            if not user_row:
-                logger.warning(f"[DB] user not found in Supabase: telegram_user_id={user_id}")
-                await asyncio.sleep(delay + random.uniform(0, 0.3))
-                delay *= 1.6
-                continue
-
-            supabase_user_id = user_row.get("id")
-            if not supabase_user_id:
-                logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
-                await asyncio.sleep(delay + random.uniform(0, 0.3))
-                delay *= 1.6
-                continue
-
-            await supabase_add_activity(
-                user_id=str(supabase_user_id),
-                action_name=str(action_name),
-                hp_change=int(hp_change),
-                video_status="✅",
-                video_id=str(video_id) if video_id else None,
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(f"[DB] retry error: {e}")
-            await asyncio.sleep(delay + random.uniform(0, 0.3))
-            delay *= 1.6
-
-    if not skip_lock:
-        await delete_data(lock_key)
-    return False
-
-
-# ==============================================================================
-# USER SYSTEM
-# ==============================================================================
-async def check_user_exists(user_id: int) -> bool:
-    cache_key = KeyManager.get_reg_key(user_id)
-
-    cached = await get_data(cache_key)
-    if cached is not None:
-        return True
-
-    user_row = await _get_supabase_user_row(user_id)
-    exists = user_row is not None
-
-    if exists:
-        await set_flag(cache_key, ex=3600)
-
-    return exists
-
-
-async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) -> bool:
-    """
-    Registration without duplicate pre-check.
-    Existence is already checked in orchestrator before this call.
-    """
-    try:
-        existing_user = await _get_supabase_user_row(user_id)
-        if existing_user:
-            await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
-            return True
-
-        await create_user(
-            telegram_user_id=user_id,
-            nickname=str(nickname),
-            gender=quiz_data.get("gender", "N/A"),
-            level=quiz_data.get("level", "N/A"),
-            goal=str(quiz_data.get("goal", "N/A"))[:200],
-            weekly_plan=str(quiz_data.get("weekly_plan", "N/A"))[:100],
-            training_place=str(quiz_data.get("training_place", "N/A"))[:100],
-        )
-
-        await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
-        return True
-
-    except Exception as e:
-        logger.warning(f"[DB] registration failed: user_id={user_id}, error={e}")
-        return False
-
-
-# ==============================================================================
-# ANALYTICS
-# ==============================================================================
-async def get_weekly_top_users():
-    try:
-        period_start, period_end = _get_current_week_period()
-        ranking_rows = await get_weekly_rating(period_start, period_end)
-        return ranking_rows[:10]
-
-    except Exception as e:
-        logger.error(f"[DB] failed to build weekly top users: {e}", exc_info=True)
-        return []
-
-
-async def reset_weekly_stats() -> bool:
-    """
-    Supabase weekly rating is calculated by date range,
-    so no explicit reset is required anymore.
-    """
+    logger.info("[REG] Finished registration flow user_id=%s total=%sms", user_id, _ms(total_started))
     return True
 
 
-async def penalty_user(user_id: int, points: int) -> bool:
-    result = await update_user_activity(
-        user_id=user_id,
-        nickname="system",
-        action_name="Penalty",
-        hp_change=-abs(int(points)),
-        video_id="manual_penalty",
-        is_check=False,
-        skip_lock=False,
+async def on_training_selected(event: EventEnvelope) -> bool:
+    total_started = time.perf_counter()
+
+    source = event.payload["source"]
+    action = event.payload["action"]
+    user = event.payload["user"]
+
+    t = time.perf_counter()
+    current_state = await state_machine.get_state(event.user_id)
+    logger.info(
+        "[TRAIN] get_state user_id=%s action=%s state=%s took %sms",
+        event.user_id,
+        action,
+        current_state,
+        _ms(t),
     )
-    return result is True
 
+    if current_state == UserFlowState.VIDEO_WAITING:
+        t = time.perf_counter()
+        msg = await _reply_transport(source, "⏳ Спочатку надішли відео за попереднє тренування!")
+        logger.info(
+            "[TRAIN] blocked by VIDEO_WAITING user_id=%s action=%s took %sms total=%sms",
+            event.user_id,
+            action,
+            _ms(t),
+            _ms(total_started),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_video_waiting_{event.user_id}")
+        return False
 
-async def get_inactive_users() -> List[str]:
-    try:
-        users = await get_all_users()
-        today = get_kyiv_now().date()
-        inactive_users = []
+    if current_state == UserFlowState.PROCESSING:
+        t = time.perf_counter()
+        msg = await _reply_transport(source, "⏳ Зачекай, попереднє тренування ще обробляється.")
+        logger.info(
+            "[TRAIN] blocked by PROCESSING user_id=%s action=%s took %sms total=%sms",
+            event.user_id,
+            action,
+            _ms(t),
+            _ms(total_started),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_processing_{event.user_id}")
+        return False
 
-        for user in users:
-            telegram_user_id = user.get("telegram_user_id")
-            user_uuid = user.get("id")
-            nickname = user.get("nickname") or str(telegram_user_id)
+    t = time.perf_counter()
+    can_log = await ActivityService.can_user_log_activity(event.user_id, action)
+    logger.info(
+        "[TRAIN] can_user_log_activity user_id=%s action=%s took %sms",
+        event.user_id,
+        action,
+        _ms(t),
+    )
 
-            if not telegram_user_id or not user_uuid:
-                continue
+    if not can_log:
+        today = get_kyiv_now().strftime("%Y-%m-%d")
+        repeat_key = KeyManager.get_training_repeat_key(event.user_id, f"{action}:{today}")
 
-            activities = await get_user_activities(str(user_uuid), limit=50)
+        t = time.perf_counter()
+        repeat_count_raw = await get_data(repeat_key)
+        logger.info(
+            "[TRAIN] get repeat key user_id=%s action=%s took %sms",
+            event.user_id,
+            action,
+            _ms(t),
+        )
 
-            has_today_activity = False
-            for activity in activities:
-                created_at = _parse_activity_created_at(activity.get("created_at"))
-                if created_at and created_at.date() == today:
-                    has_today_activity = True
-                    break
+        repeat_count = int(str(repeat_count_raw)) if repeat_count_raw is not None else 0
+        next_count = repeat_count + 1
 
-            if not has_today_activity:
-                inactive_users.append(str(nickname))
+        t = time.perf_counter()
+        await set_data(
+            repeat_key,
+            next_count,
+            ex=ActivityService.get_seconds_until_kyiv_midnight(),
+        )
+        logger.info(
+            "[TRAIN] set repeat counter user_id=%s action=%s count=%s took %sms",
+            event.user_id,
+            action,
+            next_count,
+            _ms(t),
+        )
 
-        return inactive_users
+        back_to_group_kb = types.InlineKeyboardMarkup(
+            inline_keyboard=[[
+                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK)
+            ]]
+        )
 
-    except Exception as e:
-        logger.error(f"[DB] failed to get inactive users: {e}", exc_info=True)
-        return []
+        async def _send_with_button(text: str):
+            if isinstance(source, CallbackQuery):
+                msg = await source.message.answer(text, reply_markup=back_to_group_kb)
+                await source.answer()
+                return msg
 
+            return await source.answer(text, reply_markup=back_to_group_kb)
 
-async def add_referral_bonus(referrer_id: int, new_user_id: int, new_user_name: str) -> bool:
-    try:
-        referrer_row = await _get_supabase_user_row(referrer_id)
-        new_user_row = await _get_supabase_user_row(new_user_id)
-
-        if not referrer_row or not new_user_row:
-            logger.warning(
-                f"[DB] referral write failed: referrer={referrer_id} new_user={new_user_id}"
+        if next_count == 1:
+            t = time.perf_counter()
+            msg = await _send_with_button(
+                f"⚠️ Сьогодні ти вже робив {action}. Можеш обрати інший тип тренування або чекати до завтра."
             )
+            logger.info(
+                "[TRAIN] duplicate first warning user_id=%s action=%s took %sms total=%sms",
+                event.user_id,
+                action,
+                _ms(t),
+                _ms(total_started),
+            )
+
+            if msg is not None:
+                safe_create_task(
+                    auto_delete(msg, 60),
+                    name=f"auto_delete_train_duplicate_{event.user_id}_{action}",
+                )
             return False
 
-        referrer_user_uuid = referrer_row.get("id")
-        new_user_uuid = new_user_row.get("id")
-
-        if not referrer_user_uuid or not new_user_uuid:
-            logger.warning(
-                f"[DB] referral UUID missing: referrer={referrer_id} new_user={new_user_id}"
+        if next_count == 2:
+            t = time.perf_counter()
+            msg = await _send_with_button(get_phrase("spam", nickname=mention(user)))
+            logger.info(
+                "[TRAIN] duplicate spam warning user_id=%s action=%s took %sms total=%sms",
+                event.user_id,
+                action,
+                _ms(t),
+                _ms(total_started),
             )
+
+            if msg is not None:
+                safe_create_task(
+                    auto_delete(msg, 60),
+                    name=f"auto_delete_train_spam_{event.user_id}_{action}",
+                )
             return False
 
-        await supabase_add_referral(
-            referrer_user_id=str(referrer_user_uuid),
-            new_user_id=str(new_user_uuid),
+        if isinstance(source, CallbackQuery):
+            await source.answer("На сьогодні досить ⛔️\nТи вже тренувався 🔥", show_alert=True)
+
+        logger.info(
+            "[TRAIN] duplicate hard-block user_id=%s action=%s total=%sms",
+            event.user_id,
+            action,
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
+    started = await state_machine.begin_training(event.user_id, action, ttl=120)
+    logger.info(
+        "[TRAIN] begin_training user_id=%s action=%s took %sms",
+        event.user_id,
+        action,
+        _ms(t),
+    )
+
+    if not started:
+        await _reply_transport(source, "⚠️ Не вдалося активувати сесію. Спробуй ще раз.")
+        logger.info(
+            "[TRAIN] begin_training failed user_id=%s action=%s total=%sms",
+            event.user_id,
+            action,
+            _ms(total_started),
+        )
+        return False
+
+    training_instruction = (
+        f"Ти обрав {action} 💪\n\n"
+        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 2 хвилин 🤳\n\n"
+        "Кружечок потрібен як підтвердження, що ти реально тренувався 🔥\n\n"
+        "Після цього тренування зарахується, і ти отримаєш HP ⚡️"
+    )
+
+    t = time.perf_counter()
+    msg = await _reply_transport(source, training_instruction)
+    logger.info(
+        "[TRAIN] training_start reply user_id=%s action=%s took %sms",
+        event.user_id,
+        action,
+        _ms(t),
+    )
+
+    if msg is not None:
+        safe_create_task(auto_delete(msg, 15), name=f"auto_delete_start_{event.user_id}")
+
+    logger.info(
+        "[TRAIN] Finished training selection user_id=%s action=%s total=%sms",
+        event.user_id,
+        action,
+        _ms(total_started),
+    )
+    return True
+
+
+async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int, phrase_key: str) -> bool:
+    total_started = time.perf_counter()
+
+    source = event.payload["source"]
+    user = event.payload["user"]
+
+    t = time.perf_counter()
+    today_has_activity = await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"])
+    logger.info(
+        "[STATIC] check_today_report user_id=%s action=%s took %sms",
+        event.user_id,
+        action_name,
+        _ms(t),
+    )
+
+    if today_has_activity:
+        t = time.perf_counter()
+        await _reply_transport(
+            source,
+            "💪 На сьогодні вже досить. Ти вже зафіксував свою активність.",
+            show_alert=True,
+        )
+        logger.info(
+            "[STATIC] already-had-activity reply user_id=%s action=%s took %sms total=%sms",
+            event.user_id,
+            action_name,
+            _ms(t),
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
+    ok, _, _ = await ActivityService.grant_hp(event.user_id, user.full_name, action_name, int(hp))
+    logger.info(
+        "[STATIC] grant_hp user_id=%s action=%s took %sms",
+        event.user_id,
+        action_name,
+        _ms(t),
+    )
+
+    if not ok:
+        await _reply_transport(
+            source,
+            "⚠️ Помилка запису в таблицю. Спробуй ще раз.",
+            show_alert=isinstance(source, CallbackQuery),
+        )
+        logger.info(
+            "[STATIC] grant_hp failed user_id=%s action=%s total=%sms",
+            event.user_id,
+            action_name,
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
+    await state_machine.complete(event.user_id)
+    logger.info(
+        "[STATIC] state_machine.complete user_id=%s action=%s took %sms",
+        event.user_id,
+        action_name,
+        _ms(t),
+    )
+
+    t = time.perf_counter()
+    msg = await _reply_transport(source, get_phrase(phrase_key, nickname=mention(user)))
+    logger.info(
+        "[STATIC] success reply user_id=%s action=%s took %sms total=%sms",
+        event.user_id,
+        action_name,
+        _ms(t),
+        _ms(total_started),
+    )
+
+    if msg is not None:
+        safe_create_task(auto_delete(msg, 15), name=f"auto_delete_static_{event.user_id}_{action_name}")
+
+    return True
+
+
+async def on_rest_selected(event: EventEnvelope) -> bool:
+    return await _handle_static_action(event, "Rest", HP_REST, "rest")
+
+
+async def on_skip_selected(event: EventEnvelope) -> bool:
+    return await _handle_static_action(event, "Skipped", HP_SKIP, "skip")
+
+
+async def on_video_uploaded(event: EventEnvelope) -> bool:
+    total_started = time.perf_counter()
+
+    message: Message = event.payload["message"]
+
+    t = time.perf_counter()
+    current_state = await state_machine.get_state(event.user_id)
+    logger.info("[VIDEO] get_state user_id=%s took %sms", event.user_id, _ms(t))
+
+    if current_state != UserFlowState.VIDEO_WAITING:
+        await message.answer("⏰ Спочатку вибери тренування в меню!")
+        logger.info("[VIDEO] wrong state user_id=%s total=%sms", event.user_id, _ms(total_started))
+        return False
+
+    if message.forward_from or message.forward_date:
+        await message.answer("❌ Тільки свіжі кружечки!")
+        logger.info("[VIDEO] forwarded video rejected user_id=%s total=%sms", event.user_id, _ms(total_started))
+        return False
+
+    t = time.perf_counter()
+    session_data = await state_machine.get_session(event.user_id)
+    logger.info("[VIDEO] get_session user_id=%s took %sms", event.user_id, _ms(t))
+
+    if not session_data:
+        await message.answer("⏰ Сесія вичерпана. Почни заново.")
+        logger.info("[VIDEO] no session user_id=%s total=%sms", event.user_id, _ms(total_started))
+        return False
+
+    t = time.perf_counter()
+    await state_machine.mark_processing(event.user_id, ttl=60)
+    logger.info("[VIDEO] mark_processing user_id=%s took %sms", event.user_id, _ms(t))
+
+    t = time.perf_counter()
+    success = await ActivityService.process_training_full_cycle(message, session_data["action"])
+    logger.info(
+        "[VIDEO] process_training_full_cycle user_id=%s action=%s took %sms",
+        event.user_id,
+        session_data["action"],
+        _ms(t),
+    )
+
+    if success:
+        t = time.perf_counter()
+        await state_machine.complete(event.user_id)
+        logger.info(
+            "[VIDEO] state_machine.complete user_id=%s took %sms total=%sms",
+            event.user_id,
+            _ms(t),
+            _ms(total_started),
         )
         return True
 
-    except Exception as e:
-        logger.error(f"[DB] failed to add referral bonus: {e}", exc_info=True)
-        return False
+    t = time.perf_counter()
+    await state_machine.restore_video_waiting(event.user_id, ttl=60)
+    logger.info("[VIDEO] restore_video_waiting user_id=%s took %sms", event.user_id, _ms(t))
+
+    await message.answer("⚠️ Помилка запису в таблицю. Спробуй ще раз.")
+    logger.info("[VIDEO] failed flow user_id=%s total=%sms", event.user_id, _ms(total_started))
+    return False
+
+
+async def on_penalty_applied(event: EventEnvelope) -> bool:
+    t = time.perf_counter()
+    await state_machine.penalize(event.user_id)
+    logger.info("[PENALTY] state_machine.penalize user_id=%s took %sms", event.user_id, _ms(t))
+    return True
+
+
+flow_event_bus.subscribe(USER_REGISTERED, on_user_registered)
+flow_event_bus.subscribe(TRAINING_SELECTED, on_training_selected)
+flow_event_bus.subscribe(REST_SELECTED, on_rest_selected)
+flow_event_bus.subscribe(SKIP_SELECTED, on_skip_selected)
+flow_event_bus.subscribe(VIDEO_UPLOADED, on_video_uploaded)
+flow_event_bus.subscribe(PENALTY_APPLIED, on_penalty_applied)
