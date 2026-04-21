@@ -55,9 +55,9 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             name_font_size = 28
 
         name_font = get_font(FONT_PATH, name_font_size)
-        title_font = get_font(FONT_PATH, 34)
+        title_font = get_font(FONT_PATH, 32)
         hp_font = get_font(FONT_PATH, 56)
-        hp_label_font = get_font(FONT_PATH, 24)
+        hp_label_font = get_font(FONT_PATH, 34)
 
         def draw_centered_text(text, font, y, fill, stroke_fill=None, stroke_width=0):
             bbox = draw.textbbox(
@@ -110,7 +110,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_centered_text(
             display_name,
             name_font,
-            y=270,
+            y=185,
             fill="white",
             stroke_fill="#0A1A4F",
             stroke_width=2,
@@ -120,10 +120,10 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
-            y=370,
+            y=320,
             fill="#F4F4F4",
             stroke_fill="#0A1A4F",
-            stroke_width=2,
+            stroke_width=1,
         )
 
         # 3. HP-БЛОК — синя зона
@@ -132,7 +132,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_text_center_in_box(
             str(hp_score),
             hp_font,
-            box=(hp_box[0], hp_box[1], hp_box[2], hp_box[1] + 130),
+            box=(hp_box[0] - 20, hp_box[1] - 70, hp_box[2] - 20, hp_box[1] + 60),
             fill="black",
             stroke_fill="#A86F00",
             stroke_width=1,
@@ -141,7 +141,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_text_center_in_box(
             "HP",
             hp_label_font,
-            box=(hp_box[0], hp_box[1] + 110, hp_box[2], hp_box[3]),
+            box=(hp_box[0] - 20, hp_box[1] + 20, hp_box[2] - 20, hp_box[3] - 70),
             fill="#1A1A1A",
         )
 
