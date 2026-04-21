@@ -55,7 +55,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             name_font_size = 28
 
         name_font = get_font(FONT_PATH, name_font_size)
-        title_font = get_font(FONT_PATH, 24)
+        title_font = get_font(FONT_PATH, 34)
         hp_font = get_font(FONT_PATH, 56)
         hp_label_font = get_font(FONT_PATH, 24)
 
