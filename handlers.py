@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 PROFILE_COOLDOWN = 7200
 PROFILE_MESSAGE_TTL = 120
+ADMIN_HELP_TTL = 120
 
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
@@ -109,6 +110,31 @@ def _format_stat_block(
     return "\n".join(lines)
 
 
+def _build_admin_help_text() -> str:
+    return (
+        "🛠️ <b>АДМІН-КОМАНДИ TURBOTEAM</b>\n\n"
+        "📋 <b>ОСНОВНІ</b>\n"
+        "/adminhelp — список усіх адмін-команд\n"
+        "/panel — відкрити Turbo-панель\n"
+        "/menu — вивести Turbo-меню в групі\n"
+        "/rating — показати рейтинг\n"
+        "/reject — скасувати тренування через reply\n"
+        "/quizstats — статистика квізу\n\n"
+        "🧪 <b>SUPABASE / ТЕСТИ</b>\n"
+        "/sbtest — перевірка підключення Supabase\n"
+        "/sbadd — створити себе в Supabase\n"
+        "/sbaddactivity — додати тестову активність\n"
+        "/sbaddref 123456789 — додати тестовий реферал\n"
+        "/sbme — показати свої дані з Supabase\n"
+        "/testaward — тестова FIFA-картка\n\n"
+        "🧹 <b>АДМІН-ДІЇ</b>\n"
+        "/wipeuser 123456789 — видалити юзера за Telegram ID\n"
+        "/wipeuser @username — видалити юзера за ніком\n\n"
+        "📘 <b>ІНШЕ</b>\n"
+        "/rules — текст правил"
+    )
+
+
 @router.message(F.text == "🏆 Рейтинг ТОП")
 async def handle_show_rating_message(message: Message):
     await show_rating_for_user(message, message.from_user)
@@ -117,6 +143,25 @@ async def handle_show_rating_message(message: Message):
 @router.message(Command("rating"))
 async def handle_show_rating_command(message: Message):
     await show_rating_for_user(message, message.from_user)
+
+
+@router.message(Command("adminhelp"))
+async def handle_admin_help(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        sent = await message.answer(_build_admin_help_text(), parse_mode="HTML")
+        safe_create_task(auto_delete(sent, ADMIN_HELP_TTL))
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_admin_help error: {e}", exc_info=True)
+        sent = await message.answer("⚠️ Не вдалося відкрити список адмін-команд.")
+        safe_create_task(auto_delete(sent, 10))
 
 
 @router.message(F.text == "👤 Мій профіль")
