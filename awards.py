@@ -120,10 +120,10 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
         draw_centered_text(
             "ЧЕМПІОН ТИЖНЯ",
             title_font,
-            y=320,
+            y=370,
             fill="#F4F4F4",
             stroke_fill="#0A1A4F",
-            stroke_width=1,
+            stroke_width=2,
         )
 
         # 3. HP-БЛОК — синя зона
