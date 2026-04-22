@@ -93,19 +93,22 @@ def _count_filled(users: list[dict], field_name: str) -> int:
     return total
 
 
+def _word_users(count: int) -> str:
+    return "юзер" if count == 1 else "юзери" if 2 <= count <= 4 else "юзерів"
+
+
 def _format_stat_block(
     title: str,
     stats: dict[str, int],
     total: int,
-    ordered_labels: list[str],
+    ordered_items: list[tuple[str, str]],
 ) -> str:
-    lines = [f"{title}"]
+    lines = [title]
 
-    for label in ordered_labels:
-        count = int(stats.get(label, 0) or 0)
+    for value_key, display_label in ordered_items:
+        count = int(stats.get(value_key, 0) or 0)
         percent = _calc_percent(count, total)
-        word = "юзер" if count == 1 else "юзери" if 2 <= count <= 4 else "юзерів"
-        lines.append(f"{label} — <b>{count}</b> {word} — <b>{percent}%</b>")
+        lines.append(f"{display_label} — <b>{count}</b> {_word_users(count)} — <b>{percent}%</b>")
 
     return "\n".join(lines)
 
@@ -407,8 +410,21 @@ async def handle_quiz_stats(m: Message):
 
         level_values = ["Новачок", "Середній", "Профі"]
         goal_values = ["Схуднення", "Набір маси", "Витривалість"]
-        weekly_plan_values = ["1-2 рази", "3-4 рази", "5+ разів"]
-        training_place_values = ["У залі", "На вулиці / турніках", "І там, і там"]
+
+        weekly_plan_items = [
+            ("1-2 рази", "1–2 рази"),
+            ("3-4 рази", "3–4 рази"),
+            ("5+ разів", "5+ разів"),
+        ]
+
+        training_place_items = [
+            ("У залі", "У залі"),
+            ("На вулиці / турніках", "На вулиці / турніках"),
+            ("І там, і там", "І там, і там"),
+        ]
+
+        weekly_plan_values = [item[0] for item in weekly_plan_items]
+        training_place_values = [item[0] for item in training_place_items]
 
         level_stats = _count_values(users, "level", level_values)
         goal_stats = _count_values(users, "goal", goal_values)
@@ -423,15 +439,11 @@ async def handle_quiz_stats(m: Message):
         text = (
             f"📊 <b>СТАТИСТИКА КВІЗУ</b>\n\n"
             f"👥 Усього юзерів у базі: <b>{total_users}</b>\n\n"
-            f"{_format_stat_block('🎖️ <b>РІВЕНЬ</b>', level_stats, total_level, level_values)}\n\n"
-            f"{_format_stat_block('🎯 <b>ЦІЛЬ</b>', goal_stats, total_goal, goal_values)}\n\n"
-            f"{_format_stat_block('📅 <b>ПЛАН НА ТИЖДЕНЬ</b>', weekly_plan_stats, total_weekly_plan, ['1–2 рази', '3–4 рази', '5+ разів'])}\n\n"
-            f"{_format_stat_block('🏋️ <b>ДЕ ТРЕНУЮТЬСЯ</b>', training_place_stats, total_training_place, training_place_values)}"
+            f"{_format_stat_block('🎖️ <b>РІВЕНЬ</b>', level_stats, total_level, [(x, x) for x in level_values])}\n\n"
+            f"{_format_stat_block('🎯 <b>ЦІЛЬ</b>', goal_stats, total_goal, [(x, x) for x in goal_values])}\n\n"
+            f"{_format_stat_block('📅 <b>ПЛАН НА ТИЖДЕНЬ</b>', weekly_plan_stats, total_weekly_plan, weekly_plan_items)}\n\n"
+            f"{_format_stat_block('🏋️ <b>ДЕ ТРЕНУЮТЬСЯ</b>', training_place_stats, total_training_place, training_place_items)}"
         )
-
-        text = text.replace("1–2 рази", f"1–2 рази — <b>{weekly_plan_stats['1-2 рази']}</b> {'юзер' if weekly_plan_stats['1-2 рази'] == 1 else 'юзери' if 2 <= weekly_plan_stats['1-2 рази'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['1-2 рази'], total_weekly_plan)}%</b>")
-        text = text.replace("3–4 рази", f"3–4 рази — <b>{weekly_plan_stats['3-4 рази']}</b> {'юзер' if weekly_plan_stats['3-4 рази'] == 1 else 'юзери' if 2 <= weekly_plan_stats['3-4 рази'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['3-4 рази'], total_weekly_plan)}%</b>")
-        text = text.replace("5+ разів", f"5+ разів — <b>{weekly_plan_stats['5+ разів']}</b> {'юзер' if weekly_plan_stats['5+ разів'] == 1 else 'юзери' if 2 <= weekly_plan_stats['5+ разів'] <= 4 else 'юзерів'} — <b>{_calc_percent(weekly_plan_stats['5+ разів'], total_weekly_plan)}%</b>")
 
         sent = await m.answer(text, parse_mode="HTML")
         safe_create_task(auto_delete(sent, 180))
