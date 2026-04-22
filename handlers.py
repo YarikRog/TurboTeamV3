@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import time
 from html import escape
 
 from aiogram import F, Router
@@ -129,13 +131,87 @@ def _build_admin_help_text() -> str:
         "/sbaddactivity — додати тестову активність\n"
         "/sbaddref 123456789 — додати тестовий реферал\n"
         "/sbme — показати свої дані з Supabase\n"
-        "/testaward — тестова FIFA-картка\n\n"
+        "/testaward — тестова FIFA-картка\n"
+        "/loadtest 50 — безпечний тест паралельного навантаження\n\n"
         "🧹 <b>АДМІН-ДІЇ</b>\n"
         "/wipeuser 123456789 — видалити юзера за Telegram ID\n"
         "/wipeuser @username — видалити юзера за ніком\n\n"
         "📘 <b>ІНШЕ</b>\n"
         "/rules — текст правил"
     )
+
+
+async def _run_single_load_job(job_id: int) -> dict:
+    started = time.perf_counter()
+
+    test_uid = 900000000 + job_id
+    test_key = KeyManager.get_profile_warn_key(test_uid)
+
+    dummy_users = [
+        {"level": "Новачок", "goal": "Схуднення", "weekly_plan": "1-2 рази"},
+        {"level": "Середній", "goal": "Набір маси", "weekly_plan": "3-4 рази"},
+        {"level": "Профі", "goal": "Витривалість", "weekly_plan": "5+ разів"},
+    ]
+
+    try:
+        await set_flag(test_key, ex=30)
+        cached = await get_data(test_key)
+
+        level_stats = _count_values(dummy_users, "level", ["Новачок", "Середній", "Профі"])
+        total_level = _count_filled(dummy_users, "level")
+        _ = _format_stat_block(
+            "TEST",
+            level_stats,
+            total_level,
+            [("Новачок", "Новачок"), ("Середній", "Середній"), ("Профі", "Профі")],
+        )
+
+        await asyncio.sleep(0)
+
+        return {
+            "ok": cached is not None,
+            "job_id": job_id,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        }
+
+    except Exception as e:
+        logger.error(f"[LOADTEST] job failed: job_id={job_id}, error={e}", exc_info=True)
+        return {
+            "ok": False,
+            "job_id": job_id,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "error": str(e),
+        }
+
+
+async def _run_loadtest_batch(total_jobs: int) -> dict:
+    started = time.perf_counter()
+
+    tasks = [
+        asyncio.create_task(_run_single_load_job(i + 1))
+        for i in range(total_jobs)
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=False)
+
+    success_count = sum(1 for item in results if item.get("ok"))
+    fail_count = total_jobs - success_count
+    max_ms = max((item.get("duration_ms", 0) for item in results), default=0)
+    min_ms = min((item.get("duration_ms", 0) for item in results), default=0)
+    avg_ms = round(
+        sum(item.get("duration_ms", 0) for item in results) / total_jobs,
+        1,
+    ) if total_jobs > 0 else 0.0
+
+    return {
+        "total_jobs": total_jobs,
+        "success_count": success_count,
+        "fail_count": fail_count,
+        "total_duration_s": round(time.perf_counter() - started, 2),
+        "min_ms": min_ms,
+        "max_ms": max_ms,
+        "avg_ms": avg_ms,
+    }
 
 
 @router.message(F.text == "🏆 Рейтинг ТОП")
@@ -456,6 +532,65 @@ async def handle_quiz_stats(m: Message):
     except Exception as e:
         logger.error(f"[HANDLERS] handle_quiz_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати статистику квізу.")
+        safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(Command("loadtest"))
+async def handle_loadtest(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        parts = (m.text or "").strip().split()
+        total_jobs = 20
+
+        if len(parts) >= 2:
+            try:
+                total_jobs = int(parts[1])
+            except Exception:
+                total_jobs = 20
+
+        if total_jobs < 1:
+            total_jobs = 1
+
+        if total_jobs > 200:
+            total_jobs = 200
+
+        progress = await m.answer(
+            f"⏳ Запускаю load test на <b>{total_jobs}</b> паралельних задач...",
+            parse_mode="HTML",
+        )
+
+        result = await _run_loadtest_batch(total_jobs)
+
+        text = (
+            f"🧪 <b>LOAD TEST RESULT</b>\n\n"
+            f"📦 Задач: <b>{result['total_jobs']}</b>\n"
+            f"✅ Успішно: <b>{result['success_count']}</b>\n"
+            f"❌ Помилок: <b>{result['fail_count']}</b>\n\n"
+            f"⏱ Загальний час: <b>{result['total_duration_s']} c</b>\n"
+            f"⚡ Найшвидша задача: <b>{result['min_ms']} ms</b>\n"
+            f"🐢 Найтриваліша задача: <b>{result['max_ms']} ms</b>\n"
+            f"📊 Середній час: <b>{result['avg_ms']} ms</b>\n\n"
+            f"ℹ️ Це безпечний тест конкурентності без створення юзерів у базі."
+        )
+
+        try:
+            await progress.delete()
+        except Exception:
+            pass
+
+        sent = await m.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent, 180))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_loadtest error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Load test впав.")
         safe_create_task(auto_delete(sent, 10))
 
 
