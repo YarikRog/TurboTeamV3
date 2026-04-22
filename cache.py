@@ -16,8 +16,11 @@ try:
     redis_client: Optional[redis.Redis] = redis.from_url(
         _url,
         decode_responses=True,
-        max_connections=50,
+        max_connections=200,
         retry_on_timeout=True,
+        health_check_interval=30,
+        socket_connect_timeout=5,
+        socket_timeout=5,
     )
     logger.info("--- [CACHE] Redis connected (single client) ---")
 except Exception as e:
