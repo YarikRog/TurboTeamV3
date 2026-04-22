@@ -12,11 +12,11 @@ from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID
 from cache import get_data, set_flag, delete_data, KeyManager
-from database import get_user_stats
+from database import get_user_stats, check_user_exists
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
 from reports import rollback_training_report
-from services import safe_create_task, auto_delete
+from services import safe_create_task, auto_delete, validate_quiz
 from supabase_db import (
     get_user_by_telegram_id,
     get_user_activities,
@@ -144,18 +144,37 @@ def _build_admin_help_text() -> str:
 async def _run_single_load_job(job_id: int) -> dict:
     started = time.perf_counter()
 
-    test_uid = 900000000 + job_id
-    test_key = KeyManager.get_profile_warn_key(test_uid)
+    quiz_data = {
+        "gender": "Чоловік",
+        "level": "Новачок",
+        "goal": "Схуднення",
+        "weekly_plan": "3-4 рази",
+        "training_place": "І там, і там",
+    }
 
-    dummy_users = [
-        {"level": "Новачок", "goal": "Схуднення", "weekly_plan": "1-2 рази"},
-        {"level": "Середній", "goal": "Набір маси", "weekly_plan": "3-4 рази"},
-        {"level": "Профі", "goal": "Витривалість", "weekly_plan": "5+ разів"},
-    ]
+    test_uid = 900000000 + job_id
 
     try:
-        await set_flag(test_key, ex=30)
-        cached = await get_data(test_key)
+        quiz_ok = validate_quiz(quiz_data)
+        if not quiz_ok:
+            return {
+                "ok": False,
+                "job_id": job_id,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                "error": "quiz validation failed",
+            }
+
+        redis_key = KeyManager.get_profile_warn_key(test_uid)
+        await set_flag(redis_key, ex=60)
+        redis_value = await get_data(redis_key)
+
+        exists = await check_user_exists(test_uid)
+
+        dummy_users = [
+            {"level": "Новачок", "goal": "Схуднення", "weekly_plan": "1-2 рази"},
+            {"level": "Середній", "goal": "Набір маси", "weekly_plan": "3-4 рази"},
+            {"level": "Профі", "goal": "Витривалість", "weekly_plan": "5+ разів"},
+        ]
 
         level_stats = _count_values(dummy_users, "level", ["Новачок", "Середній", "Профі"])
         total_level = _count_filled(dummy_users, "level")
@@ -169,13 +188,13 @@ async def _run_single_load_job(job_id: int) -> dict:
         await asyncio.sleep(0)
 
         return {
-            "ok": cached is not None,
+            "ok": redis_value is not None and exists is False,
             "job_id": job_id,
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
         }
 
     except Exception as e:
-        logger.error(f"[LOADTEST] job failed: job_id={job_id}, error={e}", exc_info=True)
+        logger.error(f"[LOADTEST2] job failed: job_id={job_id}, error={e}", exc_info=True)
         return {
             "ok": False,
             "job_id": job_id,
