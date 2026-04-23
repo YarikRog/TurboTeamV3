@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 INACTIVE_DAYS_THRESHOLD = 3
+LAST_WARNING_DAYS_THRESHOLD = 7
 AUTO_REMOVE_DAYS_THRESHOLD = 8
 
 
@@ -573,6 +574,53 @@ async def get_inactive_users() -> List[str]:
 
     except Exception as e:
         logger.error(f"[DB] failed to get inactive users: {e}", exc_info=True)
+        return []
+
+
+async def get_users_for_last_warning() -> List[Dict[str, Any]]:
+    """
+    Returns users who had no real activity for exactly LAST_WARNING_DAYS_THRESHOLD days.
+    Used for final warning before auto-removal.
+    """
+    try:
+        users = await get_all_users()
+        today = get_kyiv_now().date()
+        warning_users: List[Dict[str, Any]] = []
+
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+            nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
+
+            if not telegram_user_id or not user_uuid:
+                continue
+
+            activities = await get_user_activities(str(user_uuid), limit=100)
+            last_activity_date = _get_last_real_activity_date(activities)
+
+            if last_activity_date is None:
+                silent_days = AUTO_REMOVE_DAYS_THRESHOLD
+            else:
+                silent_days = (today - last_activity_date).days
+
+            if silent_days != LAST_WARNING_DAYS_THRESHOLD:
+                continue
+
+            display_name = escape(nickname)
+            warning_users.append(
+                {
+                    "telegram_user_id": int(telegram_user_id),
+                    "user_uuid": str(user_uuid),
+                    "nickname": nickname,
+                    "mention_html": f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>',
+                    "silent_days": int(silent_days),
+                }
+            )
+
+        return warning_users
+
+    except Exception as e:
+        logger.error(f"[DB] failed to get users for last warning: {e}", exc_info=True)
         return []
 
 
