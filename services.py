@@ -212,6 +212,48 @@ class ActivityService:
         return granted_title
 
     @staticmethod
+    async def _has_non_rollback_activity_today_in_db(user_id: int, action_name: str) -> bool:
+        user_row = await get_user_by_telegram_id(user_id)
+        if not user_row:
+            return False
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            return False
+
+        activities = await get_user_activities(str(user_uuid), limit=200)
+        today = get_kyiv_now().date()
+
+        for activity in activities:
+            current_action_name = str(activity.get("action_name", "")).strip()
+
+            if current_action_name.endswith("Rollback"):
+                continue
+
+            if current_action_name != str(action_name):
+                continue
+
+            created_at_raw = activity.get("created_at")
+            if not created_at_raw:
+                continue
+
+            try:
+                if isinstance(created_at_raw, str):
+                    created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+                else:
+                    created_at = created_at_raw
+
+                if created_at.tzinfo is None:
+                    created_at = pytz.UTC.localize(created_at)
+
+                if created_at.astimezone(KYIV_TZ).date() == today:
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+    @staticmethod
     @handle_exceptions(default_return=False)
     async def can_user_log_activity(user_id: int, action_type: str) -> bool:
         """
@@ -234,6 +276,7 @@ class ActivityService:
     async def check_today_report(user_id: int, ignore_actions: Optional[list[str]] = None) -> bool:
         """
         Returns True if user already has a daily activity today.
+        Ignores rollback rows.
         """
         ignore_set = {
             str(item).strip().lower()
@@ -286,10 +329,10 @@ class ActivityService:
                         return True
 
         for action_name in cache_actions:
-            can_log = await ActivityService.can_user_log_activity(user_id, action_name)
-            if not can_log:
+            has_db_activity = await ActivityService._has_non_rollback_activity_today_in_db(user_id, action_name)
+            if has_db_activity:
                 logger.debug(
-                    "[check_today_report] GAS-hit: uid=%s action=%s date=%s",
+                    "[check_today_report] DB-hit: uid=%s action=%s date=%s",
                     user_id,
                     action_name,
                     today,
