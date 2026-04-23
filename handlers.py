@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
-from config import ADMIN_IDS, REPORTS_GROUP_ID
+from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
 from cache import get_data, set_flag, delete_data, KeyManager
 from database import get_user_stats, check_user_exists
 from referral import send_invite_prompt
@@ -260,6 +260,35 @@ async def handle_admin_help(message: Message):
         logger.error(f"[HANDLERS] handle_admin_help error: {e}", exc_info=True)
         sent = await message.answer("⚠️ Не вдалося відкрити список адмін-команд.")
         safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(F.text == "🏎️ ПОВЕРНУТИСЯ В ГРУПУ")
+async def handle_return_to_group(message: Message):
+    try:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="ВХІД У ГРУПУ 🏎️",
+                        url=GROUP_LINK,
+                    )
+                ]
+            ]
+        )
+
+        sent = await message.answer(
+            "Тисни кнопку нижче, щоб повернутися в групу 👇",
+            reply_markup=kb,
+        )
+        safe_create_task(auto_delete(sent, 120))
+
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_return_to_group error: {e}", exc_info=True)
 
 
 @router.message(F.text == "👤 Мій профіль")
