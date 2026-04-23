@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 INACTIVE_DAYS_THRESHOLD = 3
+AUTO_REMOVE_DAYS_THRESHOLD = 8
 
 
 def get_kyiv_now() -> datetime:
@@ -135,6 +136,28 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
         cursor -= timedelta(days=1)
 
     return streak
+
+
+def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:
+    """
+    Returns last real activity date ignoring rollback rows.
+    """
+    last_activity_date = None
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+        if action_name.endswith("Rollback"):
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        activity_date = created_at.date()
+        if last_activity_date is None or activity_date > last_activity_date:
+            last_activity_date = activity_date
+
+    return last_activity_date
 
 
 async def _has_activity_today(
@@ -529,20 +552,7 @@ async def get_inactive_users() -> List[str]:
                 continue
 
             activities = await get_user_activities(str(user_uuid), limit=50)
-
-            last_activity_date = None
-            for activity in activities:
-                action_name = str(activity.get("action_name", "")).strip()
-                if action_name.endswith("Rollback"):
-                    continue
-
-                created_at = _parse_activity_created_at(activity.get("created_at"))
-                if not created_at:
-                    continue
-
-                activity_date = created_at.date()
-                if last_activity_date is None or activity_date > last_activity_date:
-                    last_activity_date = activity_date
+            last_activity_date = _get_last_real_activity_date(activities)
 
             if last_activity_date is None:
                 display_name = escape(nickname)
@@ -563,6 +573,53 @@ async def get_inactive_users() -> List[str]:
 
     except Exception as e:
         logger.error(f"[DB] failed to get inactive users: {e}", exc_info=True)
+        return []
+
+
+async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
+    """
+    Returns users who had no real activity for AUTO_REMOVE_DAYS_THRESHOLD+ days.
+    Used for auto-removal from group.
+    """
+    try:
+        users = await get_all_users()
+        today = get_kyiv_now().date()
+        removable_users: List[Dict[str, Any]] = []
+
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+            nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
+
+            if not telegram_user_id or not user_uuid:
+                continue
+
+            activities = await get_user_activities(str(user_uuid), limit=100)
+            last_activity_date = _get_last_real_activity_date(activities)
+
+            if last_activity_date is None:
+                silent_days = AUTO_REMOVE_DAYS_THRESHOLD
+            else:
+                silent_days = (today - last_activity_date).days
+
+            if silent_days < AUTO_REMOVE_DAYS_THRESHOLD:
+                continue
+
+            display_name = escape(nickname)
+            removable_users.append(
+                {
+                    "telegram_user_id": int(telegram_user_id),
+                    "user_uuid": str(user_uuid),
+                    "nickname": nickname,
+                    "mention_html": f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>',
+                    "silent_days": int(silent_days),
+                }
+            )
+
+        return removable_users
+
+    except Exception as e:
+        logger.error(f"[DB] failed to get users for auto removal: {e}", exc_info=True)
         return []
 
 
