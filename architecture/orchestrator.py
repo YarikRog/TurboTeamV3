@@ -235,6 +235,47 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
+    today_has_rest_or_skip = await ActivityService.check_today_report(
+        event.user_id,
+        ignore_actions=["Gym", "Street"],
+    )
+    logger.info(
+        "[TRAIN] check_today_report(rest/skip) user_id=%s action=%s took %sms",
+        event.user_id,
+        action,
+        _ms(t),
+    )
+
+    if today_has_rest_or_skip:
+        back_to_group_kb = types.InlineKeyboardMarkup(
+            inline_keyboard=[[
+                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK)
+            ]]
+        )
+
+        rest_text = "💆‍♂️ Бро, ти сьогодні вже відпочиваєш. Нове тренування можна зафіксувати завтра."
+
+        if isinstance(source, CallbackQuery):
+            msg = await source.message.answer(rest_text, reply_markup=back_to_group_kb)
+            await source.answer()
+        else:
+            msg = await source.answer(rest_text, reply_markup=back_to_group_kb)
+
+        if msg is not None:
+            safe_create_task(
+                auto_delete(msg, 60),
+                name=f"auto_delete_rest_block_{event.user_id}_{action}",
+            )
+
+        logger.info(
+            "[TRAIN] blocked by rest/skip user_id=%s action=%s total=%sms",
+            event.user_id,
+            action,
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
     can_log = await ActivityService.can_user_log_activity(event.user_id, action)
     logger.info(
         "[TRAIN] can_user_log_activity user_id=%s action=%s took %sms",
