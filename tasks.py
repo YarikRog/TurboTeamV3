@@ -9,7 +9,12 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from config import REPORTS_GROUP_ID, GROUP_LINK
 from phrases import get_phrase
 from awards import sunday_final_logic
-from database import get_inactive_users, get_users_for_auto_removal, get_kyiv_now
+from database import (
+    get_inactive_users,
+    get_users_for_last_warning,
+    get_users_for_auto_removal,
+    get_kyiv_now,
+)
 from ratings import get_rating_data
 from cache import get_data, set_data, delete_data
 
@@ -198,19 +203,15 @@ async def send_last_day_warning(bot) -> None:
     """
     19:00 Kyiv every day — final warning for users with exactly 7 days without activity.
     """
-    removable_users = await get_users_for_auto_removal()
-    if not removable_users:
+    warning_users = await get_users_for_last_warning()
+    if not warning_users:
         logger.info("[TASKS] Last-day warning: no users")
         return
 
     warned_count = 0
 
-    for user in removable_users:
+    for user in warning_users:
         user_id = int(user["telegram_user_id"])
-        silent_days = int(user.get("silent_days") or 0)
-
-        if silent_days != 7:
-            continue
 
         removed_key = _get_auto_removed_key(user_id)
         already_removed = await get_data(removed_key)
@@ -423,6 +424,9 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
         send_morning_motivation, "cron", hour=8, minute=0, args=[bot]
     )
     scheduler.add_job(
+        auto_unban_inactive_users, "cron", hour=9, minute=0, args=[bot]
+    )
+    scheduler.add_job(
         inactive_reminder, "cron", hour=11, minute=0, args=[bot]
     )
     scheduler.add_job(
@@ -436,9 +440,6 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     )
     scheduler.add_job(
         send_evening_motivation, "cron", hour=21, minute=0, args=[bot]
-    )
-    scheduler.add_job(
-        auto_unban_inactive_users, "cron", hour=9, minute=0, args=[bot]
     )
     scheduler.add_job(
         run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot]
