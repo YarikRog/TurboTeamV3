@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import REPORTS_GROUP_ID
 from phrases import get_phrase
@@ -74,27 +75,61 @@ async def build_top3_text() -> str:
         return ""
 
 
+async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
+    """
+    Builds inline action buttons for motivation posts.
+    """
+    me = await bot.get_me()
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
+                InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
+            ],
+            [
+                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
+                InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
+            ],
+        ]
+    )
+
+
 # ==============================================================================
 # SCHEDULED TASKS
 # ==============================================================================
 
 @safe_job
 async def send_morning_motivation(bot) -> None:
-    """08:00 Kyiv — morning motivation + top-3."""
+    """08:00 Kyiv — morning motivation + top-3 + action buttons."""
     phrase = get_phrase("morning")
     top3 = await build_top3_text()
     text = phrase + top3
-    await bot.send_message(chat_id=REPORTS_GROUP_ID, text=text, parse_mode="Markdown")
+    keyboard = await build_training_action_keyboard(bot)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
     logger.info("[TASKS] Morning motivation sent")
 
 
 @safe_job
 async def send_day_motivation(bot) -> None:
-    """15:00 Kyiv — day motivation + top-3."""
+    """15:00 Kyiv — day motivation + top-3 + action buttons."""
     phrase = get_phrase("day")
     top3 = await build_top3_text()
     text = phrase + top3
-    await bot.send_message(chat_id=REPORTS_GROUP_ID, text=text, parse_mode="Markdown")
+    keyboard = await build_training_action_keyboard(bot)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
     logger.info("[TASKS] Day motivation sent")
 
 
