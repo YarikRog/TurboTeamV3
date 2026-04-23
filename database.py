@@ -144,6 +144,7 @@ async def _has_activity_today(
 ) -> bool:
     """
     Checks whether this activity already exists today in Kyiv timezone.
+    Ignores rollback rows.
     """
     user_row = await _get_supabase_user_row(user_id)
     if not user_row:
@@ -164,7 +165,12 @@ async def _has_activity_today(
     normalized_video_id = str(video_id or "").strip()
 
     for activity in activities:
-        if str(activity.get("action_name", "")) != str(action_name):
+        current_action_name = str(activity.get("action_name", "")).strip()
+
+        if current_action_name.endswith("Rollback"):
+            continue
+
+        if current_action_name != str(action_name):
             continue
 
         created_at = _parse_activity_created_at(activity.get("created_at"))
@@ -526,6 +532,10 @@ async def get_inactive_users() -> List[str]:
 
             last_activity_date = None
             for activity in activities:
+                action_name = str(activity.get("action_name", "")).strip()
+                if action_name.endswith("Rollback"):
+                    continue
+
                 created_at = _parse_activity_created_at(activity.get("created_at"))
                 if not created_at:
                     continue
