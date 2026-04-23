@@ -113,10 +113,17 @@ async def rollback_training_report(
         )
         return False
 
+    # Даємо юзеру другий шанс у цей самий день
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Street:{date_str}"))
+    await delete_data(KeyManager.get_action_lock_key(target_uid, f"Rest:{date_str}"))
+    await delete_data(KeyManager.get_action_lock_key(target_uid, f"Skipped:{date_str}"))
+
     await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Gym:{date_str}"))
     await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Street:{date_str}"))
+    await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Rest:{date_str}"))
+    await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Skipped:{date_str}"))
+
     await delete_data(rollback_key)
 
     if video_group_message_id:
