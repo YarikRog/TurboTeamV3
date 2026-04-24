@@ -25,9 +25,6 @@ from supabase_db import (
 
 logger = logging.getLogger(__name__)
 
-# ==============================================================================
-# TIMEZONE (single source of truth)
-# ==============================================================================
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 INACTIVE_DAYS_THRESHOLD = 3
 LAST_WARNING_DAYS_THRESHOLD = 7
@@ -39,10 +36,6 @@ def get_kyiv_now() -> datetime:
 
 
 def get_seconds_until_kyiv_midnight() -> int:
-    """
-    Returns TTL in seconds until next midnight in Kyiv timezone.
-    Minimum value is 1 second.
-    """
     now = get_kyiv_now()
     next_midnight = (now + timedelta(days=1)).replace(
         hour=0,
@@ -54,10 +47,6 @@ def get_seconds_until_kyiv_midnight() -> int:
 
 
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:
-    """
-    Safely parses Supabase created_at value into timezone-aware datetime.
-    Supports ISO strings with trailing Z.
-    """
     if not value:
         return None
 
@@ -78,10 +67,6 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
 
 
 def _get_current_week_period() -> tuple[str, str]:
-    """
-    Returns current week boundaries in ISO format.
-    TurboTeam week starts on Sunday at 20:00 Kyiv time.
-    """
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
         hour=20,
@@ -100,9 +85,6 @@ def _get_current_week_period() -> tuple[str, str]:
 
 
 async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Resolves Telegram user id -> Supabase users row.
-    """
     try:
         return await get_user_by_telegram_id(user_id)
     except Exception as e:
@@ -111,10 +93,6 @@ async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
 
 
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
-    """
-    Counts consecutive training days (Gym/Street) backward from today in Kyiv timezone.
-    Multiple trainings on the same day count as one streak day.
-    """
     training_actions = {"Gym", "Street"}
     training_dates = set()
 
@@ -140,9 +118,6 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:
-    """
-    Returns last real activity date ignoring rollback rows.
-    """
     last_activity_date = None
 
     for activity in activities:
@@ -166,10 +141,6 @@ async def _has_activity_today(
     action_name: str,
     video_id: str = "",
 ) -> bool:
-    """
-    Checks whether this activity already exists today in Kyiv timezone.
-    Ignores rollback rows.
-    """
     user_row = await _get_supabase_user_row(user_id)
     if not user_row:
         return False
@@ -213,9 +184,6 @@ async def _has_activity_today(
     return False
 
 
-# ==============================================================================
-# HTTP LAYER (ULTRA OPTIMIZED SINGLETON)
-# ==============================================================================
 API_SEMAPHORE = asyncio.Semaphore(20)
 
 _session: Optional[aiohttp.ClientSession] = None
@@ -223,12 +191,6 @@ _session_lock = asyncio.Lock()
 
 
 async def get_session() -> aiohttp.ClientSession:
-    """
-    High-load safe singleton session.
-    - avoids race condition
-    - reuses TCP pool
-    - minimal lock contention
-    """
     global _session
 
     if _session and not _session.closed:
@@ -272,13 +234,7 @@ async def close_db_session() -> None:
             logger.info("[DB] HTTP session closed")
 
 
-# ==============================================================================
-# INTERNAL CORE REQUEST (ALL TRAFFIC GOES HERE)
-# ==============================================================================
 async def _request(payload: dict, method: str = "POST") -> Any:
-    """
-    Legacy GAS request layer. Kept temporarily for compatibility.
-    """
     session = await get_session()
 
     async with API_SEMAPHORE:
@@ -303,9 +259,6 @@ async def _request(payload: dict, method: str = "POST") -> Any:
 
 
 async def _handle_response(resp: aiohttp.ClientResponse) -> Any:
-    """
-    Safe JSON parsing + fallback protection.
-    """
     try:
         text = await resp.text()
 
@@ -322,10 +275,6 @@ async def _handle_response(resp: aiohttp.ClientResponse) -> Any:
         logger.error(f"[DB] response error: {e}")
         return {"success": False}
 
-
-# ==============================================================================
-# PUBLIC API (FAST PATH FIRST)
-# ==============================================================================
 
 async def check_activity_limit(user_id: int, nickname: str, action_name: str) -> bool:
     key = KeyManager.get_action_lock_key(
@@ -388,9 +337,6 @@ async def get_user_stats(user_id: int) -> Optional[Dict]:
     return stats
 
 
-# ==============================================================================
-# CORE WRITE (ZERO LOSS + IDEMPOTENCY LOCK)
-# ==============================================================================
 async def update_user_activity(
     user_id: int,
     nickname: str,
@@ -455,9 +401,6 @@ async def update_user_activity(
     return False
 
 
-# ==============================================================================
-# USER SYSTEM
-# ==============================================================================
 async def check_user_exists(user_id: int) -> bool:
     cache_key = KeyManager.get_reg_key(user_id)
 
@@ -475,10 +418,6 @@ async def check_user_exists(user_id: int) -> bool:
 
 
 async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) -> bool:
-    """
-    Registration without duplicate pre-check.
-    Existence is already checked in orchestrator before this call.
-    """
     try:
         existing_user = await _get_supabase_user_row(user_id)
         if existing_user:
@@ -503,9 +442,6 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
         return False
 
 
-# ==============================================================================
-# ANALYTICS
-# ==============================================================================
 async def get_weekly_top_users():
     try:
         period_start, period_end = _get_current_week_period()
@@ -518,10 +454,6 @@ async def get_weekly_top_users():
 
 
 async def reset_weekly_stats() -> bool:
-    """
-    Supabase weekly rating is calculated by date range,
-    so no explicit reset is required anymore.
-    """
     return True
 
 
@@ -564,7 +496,7 @@ async def get_inactive_users() -> List[str]:
 
             silent_days = (today - last_activity_date).days
 
-            if silent_days >= INACTIVE_DAYS_THRESHOLD:
+            if silent_days == INACTIVE_DAYS_THRESHOLD:
                 display_name = escape(nickname)
                 inactive_users.append(
                     f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
@@ -578,10 +510,6 @@ async def get_inactive_users() -> List[str]:
 
 
 async def get_users_for_last_warning() -> List[Dict[str, Any]]:
-    """
-    Returns users who had no real activity for exactly LAST_WARNING_DAYS_THRESHOLD days.
-    Used for final warning before auto-removal.
-    """
     try:
         users = await get_all_users()
         today = get_kyiv_now().date()
@@ -625,10 +553,6 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
 
 
 async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
-    """
-    Returns users who had no real activity for AUTO_REMOVE_DAYS_THRESHOLD+ days.
-    Used for auto-removal from group.
-    """
     try:
         users = await get_all_users()
         today = get_kyiv_now().date()
