@@ -2,7 +2,9 @@ import asyncio
 import logging
 import time
 from html import escape
+from datetime import datetime, timedelta
 
+import pytz
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -24,14 +26,20 @@ from supabase_db import (
     get_user_achievements_count,
     get_last_user_achievement,
     get_all_users,
+    get_all_activities,
+    get_all_activities_in_period,
 )
 
 router = Router()
 logger = logging.getLogger(__name__)
 
+KYIV_TZ = pytz.timezone("Europe/Kyiv")
+
 PROFILE_COOLDOWN = 7200
 PROFILE_MESSAGE_TTL = 120
 ADMIN_HELP_TTL = 120
+
+REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
 
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
@@ -69,6 +77,31 @@ def get_next_training_goal(training_count: int) -> tuple[int | None, str]:
     return None, "MAX"
 
 
+def _get_current_week_period() -> tuple[datetime, datetime]:
+    """
+    TurboTeam week starts on Sunday at 20:00 Kyiv time.
+    """
+    now = datetime.now(KYIV_TZ)
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    if now < current_sunday_20:
+        week_start = current_sunday_20 - timedelta(days=7)
+    else:
+        week_start = current_sunday_20
+
+    week_end = week_start + timedelta(days=7)
+    return week_start, week_end
+
+
+def _format_period(dt: datetime) -> str:
+    return dt.strftime("%d.%m %H:%M")
+
+
 def _calc_percent(part: int, total: int) -> float:
     if total <= 0:
         return 0.0
@@ -97,6 +130,10 @@ def _count_filled(users: list[dict], field_name: str) -> int:
 
 def _word_users(count: int) -> str:
     return "юзер" if count == 1 else "юзери" if 2 <= count <= 4 else "юзерів"
+
+
+def _word_actions(count: int) -> str:
+    return "дія" if count == 1 else "дії" if 2 <= count <= 4 else "дій"
 
 
 def _format_stat_block(
@@ -135,6 +172,56 @@ def _build_admin_help_text() -> str:
         "📘 <b>ІНШЕ</b>\n"
         "/rules — текст правил"
     )
+
+
+def _is_real_activity(activity: dict) -> bool:
+    action_name = str(activity.get("action_name") or "").strip()
+    return action_name in REAL_ACTIVITY_ACTIONS
+
+
+def _build_activity_counter(activities: list[dict]) -> dict[str, int]:
+    result = {
+        "Gym": 0,
+        "Street": 0,
+        "Rest": 0,
+        "Skipped": 0,
+    }
+
+    for activity in activities:
+        action_name = str(activity.get("action_name") or "").strip()
+        if action_name in result:
+            result[action_name] += 1
+
+    return result
+
+
+def _sum_hp(activities: list[dict]) -> int:
+    total = 0
+
+    for activity in activities:
+        if not _is_real_activity(activity):
+            continue
+
+        try:
+            total += int(activity.get("hp_change") or 0)
+        except Exception:
+            continue
+
+    return total
+
+
+def _count_active_users(activities: list[dict]) -> int:
+    user_ids = set()
+
+    for activity in activities:
+        if not _is_real_activity(activity):
+            continue
+
+        user_id = str(activity.get("user_id") or "").strip()
+        if user_id:
+            user_ids.add(user_id)
+
+    return len(user_ids)
 
 
 async def _run_single_load_job(job_id: int) -> dict:
@@ -576,6 +663,75 @@ async def handle_quiz_stats(m: Message):
     except Exception as e:
         logger.error(f"[HANDLERS] handle_quiz_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати статистику квізу.")
+        safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(Command("activitystats"))
+async def handle_activity_stats(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        users = await get_all_users()
+        total_users = len(users)
+
+        week_start, week_end = _get_current_week_period()
+
+        all_activities_raw = await get_all_activities(limit=10000)
+        week_activities_raw = await get_all_activities_in_period(
+            created_at_from=week_start.isoformat(),
+            created_at_to=week_end.isoformat(),
+            limit=5000,
+        )
+
+        all_real_activities = [
+            activity for activity in all_activities_raw
+            if _is_real_activity(activity)
+        ]
+        week_real_activities = [
+            activity for activity in week_activities_raw
+            if _is_real_activity(activity)
+        ]
+
+        all_total = len(all_real_activities)
+        week_total = len(week_real_activities)
+
+        week_counts = _build_activity_counter(week_real_activities)
+
+        active_users_week = _count_active_users(week_real_activities)
+        week_hp = _sum_hp(week_real_activities)
+
+        avg_activity = 0.0
+        if active_users_week > 0:
+            avg_activity = round(week_total / active_users_week, 1)
+
+        text = (
+            f"📊 <b>СТАТИСТИКА АКТИВНОСТІ</b>\n\n"
+            f"📅 <b>TurboTeam-тиждень:</b>\n"
+            f"{_format_period(week_start)} — {_format_period(week_end)}\n\n"
+            f"👥 Усього юзерів у базі: <b>{total_users}</b>\n"
+            f"🔥 Активних юзерів за тиждень: <b>{active_users_week}</b>\n\n"
+            f"📦 Активностей за весь час: <b>{all_total}</b> {_word_actions(all_total)}\n"
+            f"📅 Активностей за тиждень: <b>{week_total}</b> {_word_actions(week_total)}\n\n"
+            f"🏋️ Gym: <b>{week_counts['Gym']}</b>\n"
+            f"🦾 Street: <b>{week_counts['Street']}</b>\n"
+            f"🧘 Rest: <b>{week_counts['Rest']}</b>\n"
+            f"🚫 Skip: <b>{week_counts['Skipped']}</b>\n\n"
+            f"⚡ HP за тиждень: <b>{week_hp}</b>\n"
+            f"📈 Середня активність: <b>{avg_activity}</b> дії на активного юзера"
+        )
+
+        sent = await m.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent, 180))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_activity_stats error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Не вдалося зібрати статистику активностей.")
         safe_create_task(auto_delete(sent, 10))
 
 
