@@ -36,6 +36,22 @@ STREAK_BONUS_5_DAYS = 100
 STREAK_BONUS_7_DAYS = 200
 
 # ==============================================================================
+# TRAINING STATUS LEVELS
+# ==============================================================================
+TRAINING_STATUS_LEVELS = [
+    (1, "Новачок"),
+    (5, "Вкатався"),
+    (10, "Боєць"),
+    (25, "Стабільний"),
+    (50, "Мотор"),
+    (100, "Турбо"),
+    (200, "Машина"),
+    (350, "Термінатор"),
+    (500, "Монстр"),
+    (1000, "Легенда TurboTeam"),
+]
+
+# ==============================================================================
 # ACHIEVEMENTS (TRAINING ONLY, V1)
 # ==============================================================================
 TRAINING_ACHIEVEMENTS = [
@@ -171,6 +187,60 @@ class ActivityService:
     }
 
     @staticmethod
+    async def get_training_count(user_id: int) -> int:
+        """
+        Counts user's real training activities: Gym + Street.
+        Ignores rollback rows.
+        """
+        user_row = await get_user_by_telegram_id(user_id)
+        if not user_row:
+            return 0
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            return 0
+
+        activities = await get_user_activities(str(user_uuid), limit=5000)
+
+        training_count = 0
+        for activity in activities:
+            action_name = str(activity.get("action_name", "")).strip()
+
+            if action_name.endswith("Rollback"):
+                continue
+
+            if action_name in {"Gym", "Street"}:
+                training_count += 1
+
+        return training_count
+
+    @staticmethod
+    def get_current_training_status(training_count: int) -> str:
+        """
+        Returns current status title for any training count.
+        """
+        status = "Без статусу"
+
+        for threshold, title in TRAINING_STATUS_LEVELS:
+            if training_count >= threshold:
+                status = title
+            else:
+                break
+
+        return status
+
+    @staticmethod
+    def get_new_training_status_by_exact_count(training_count: int) -> Optional[str]:
+        """
+        Returns new status title only when training_count exactly matches a threshold.
+        """
+        for threshold, title in TRAINING_STATUS_LEVELS:
+            if training_count == threshold:
+                return title
+
+        return None
+
+    @staticmethod
     async def maybe_grant_training_achievement(user_id: int) -> Optional[str]:
         """
         Grants a training achievement if the user has reached a new training milestone.
@@ -188,7 +258,11 @@ class ActivityService:
 
         training_count = 0
         for activity in activities:
-            action_name = str(activity.get("action_name", ""))
+            action_name = str(activity.get("action_name", "")).strip()
+
+            if action_name.endswith("Rollback"):
+                continue
+
             if action_name in {"Gym", "Street"}:
                 training_count += 1
 
@@ -525,6 +599,15 @@ class ActivityService:
                 parse_mode="HTML",
             )
 
+        training_count = 0
+        current_status_title = "Без статусу"
+        new_status_title = None
+
+        if action_type in ["Gym", "Street"]:
+            training_count = await ActivityService.get_training_count(user.id)
+            current_status_title = ActivityService.get_current_training_status(training_count)
+            new_status_title = ActivityService.get_new_training_status_by_exact_count(training_count)
+
         report_kb = build_report_keyboard(
             target_uid=user.id,
             action_type=action_type,
@@ -540,11 +623,39 @@ class ActivityService:
         except Exception as e:
             logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
+        report_nickname = f"@{user.username or user.first_name}"
+
+        report_text = (
+            f"{get_phrase('report', nickname=report_nickname)}\n"
+            f"+{hp} HP"
+        )
+
+        if action_type in ["Gym", "Street"]:
+            report_text += (
+                f"\n🎖️ Рівень: {escape(str(current_status_title))}"
+                f"\n📊 Тренувань: {training_count}"
+            )
+
         group_text_msg = await message.bot.send_message(
             REPORTS_GROUP_ID,
-            f"{get_phrase('report', nickname=f'@{user.username or user.first_name}')}\n+{hp} HP",
+            report_text,
             reply_markup=report_kb,
+            parse_mode="HTML",
         )
+
+        if new_status_title:
+            mention_text = f"@{user.username}" if user.username else escape(user.full_name)
+
+            await message.bot.send_message(
+                REPORTS_GROUP_ID,
+                (
+                    f"🎖️ <b>НОВИЙ РІВЕНЬ У TURBOTEAM!</b>\n\n"
+                    f"{mention_text} переходить на рівень:\n"
+                    f"🔥 <b>{escape(str(new_status_title))}</b>\n\n"
+                    f"Тренувань виконано: <b>{training_count}</b>"
+                ),
+                parse_mode="HTML",
+            )
 
         today = get_kyiv_now().strftime("%Y-%m-%d")
         rollback_key = KeyManager.get_training_rollback_key(
