@@ -195,6 +195,23 @@ async def get_user_activities_in_period(
     return response.data or []
 
 
+async def get_all_activities(
+    limit: int = 10000,
+) -> List[Dict[str, Any]]:
+    def _query():
+        sb = get_supabase()
+        return (
+            sb.table("activities")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+    response = await _run_sync(_query)
+    return response.data or []
+
+
 async def get_all_activities_in_period(
     created_at_from: str,
     created_at_to: str,
