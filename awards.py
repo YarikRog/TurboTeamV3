@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from html import escape
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
@@ -8,7 +9,6 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 
 from config import REPORTS_GROUP_ID
-from phrases import get_phrase
 from database import get_weekly_top_users, reset_weekly_stats
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def create_fifa_card(nickname: str, hp_score: int) -> Optional[str]:
             except Exception:
                 return ImageFont.load_default()
 
-        display_name = f"@{nickname}".upper()
+        display_name = f"@{str(nickname)}".upper()
 
         name_font_size = 44
         if len(display_name) > 12:
@@ -183,10 +183,13 @@ async def send_test_fifa_card(
             await bot.send_message(chat_id, "❌ Не вдалося згенерувати тестову грамоту.")
             return False
 
+        safe_nickname = escape(str(nickname))
+
         await bot.send_photo(
             chat_id=chat_id,
             photo=FSInputFile(card_path),
-            caption=f"🧪 Тест грамоти\n@{nickname} — {hp_score} HP",
+            caption=f"🧪 Тест грамоти\n@{safe_nickname} — <b>{int(hp_score)} HP</b>",
+            parse_mode="HTML",
         )
         return True
 
@@ -210,12 +213,13 @@ async def send_test_fifa_card(
 async def sunday_final_logic(bot: Bot) -> None:
     """
     Автоматизована логіка підбиття підсумків тижня.
+    Бере останній завершений TurboTeam-тиждень.
     """
     logger.info("🏁 [AWARDS] Початок фінальної обробки тижня...")
     card_path: Optional[str] = None
 
     try:
-        top_users = await get_weekly_top_users()
+        top_users = await get_weekly_top_users(finished_week=True)
 
         if not top_users or not isinstance(top_users, list):
             logger.warning("[AWARDS] Дані про лідерів порожні або невірні.")
@@ -229,21 +233,28 @@ async def sunday_final_logic(bot: Bot) -> None:
             logger.info("[AWARDS] Активності за тиждень не було. Пропускаємо.")
             return
 
-        card_path = create_fifa_card(nickname, hp_score)
-        caption = get_phrase("winner", mention=f"@{nickname}")
+        safe_nickname = escape(str(nickname))
+
+        caption = (
+            f"🏆 <b>ВІТАЄМО ЧЕМПІОНА ТИЖНЯ!</b>\n\n"
+            f"@{safe_nickname} забирає перемогу в TurboTeam 🔥\n"
+            f"💪 Результат: <b>{hp_score} HP</b>"
+        )
+
+        card_path = create_fifa_card(str(nickname), hp_score)
 
         if card_path and os.path.exists(card_path):
             await bot.send_photo(
                 chat_id=REPORTS_GROUP_ID,
                 photo=FSInputFile(card_path),
                 caption=caption,
-                parse_mode="Markdown"
+                parse_mode="HTML",
             )
         else:
             await bot.send_message(
                 REPORTS_GROUP_ID,
-                f"🏆 *ВІТАЄМО ЧЕМПІОНА!*\n\n{caption}\n💪 Результат: {hp_score} HP",
-                parse_mode="Markdown"
+                caption,
+                parse_mode="HTML",
             )
 
         success_reset = await reset_weekly_stats()
@@ -252,8 +263,11 @@ async def sunday_final_logic(bot: Bot) -> None:
             logger.info("[AWARDS] Weekly final completed successfully.")
             await bot.send_message(
                 REPORTS_GROUP_ID,
-                "🔄 *Новий тиждень розпочато!*\nРейтинг тижня оновлено. Час знову ставати монстром! 🦾🏎️💨",
-                parse_mode="Markdown"
+                (
+                    "🔄 <b>Новий тиждень розпочато!</b>\n"
+                    "Рейтинг тижня оновлено. Час знову ставати монстром! 🦾🏎️💨"
+                ),
+                parse_mode="HTML",
             )
         else:
             logger.error("[AWARDS] Weekly final completed, but reset step reported failure.")
