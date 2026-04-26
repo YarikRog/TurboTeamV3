@@ -165,6 +165,7 @@ def _build_admin_help_text() -> str:
         "/activitystats — статистика активностей\n\n"
         "🧪 <b>ТЕСТИ</b>\n"
         "/testaward — тестова FIFA-картка\n"
+        "/testref — тест реферального повідомлення\n"
         "/loadtest 50 — безпечний тест паралельного навантаження\n\n"
         "🧹 <b>АДМІН-ДІЇ</b>\n"
         "/wipeuser 123456789 — видалити юзера за Telegram ID\n"
@@ -732,6 +733,44 @@ async def handle_activity_stats(m: Message):
     except Exception as e:
         logger.error(f"[HANDLERS] handle_activity_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати статистику активностей.")
+        safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(Command("testref"))
+async def handle_test_referral_message(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        bad_newbie_name = "test_user_[bad]*name_with_underscore"
+        bad_referrer_name = "@bad_ref_[name]*test_user"
+
+        newbie_html = escape(bad_newbie_name)
+        referrer_html = escape(bad_referrer_name)
+
+        text = (
+            "🧪 <b>TEST REFERRAL MESSAGE</b>\n\n"
+            f"Новий гравець <b>{newbie_html}</b> (+50 HP)\n"
+            f"Прийшов за запрошенням від: <b>{referrer_html}</b> (+150 HP) 🔥\n\n"
+            "✅ Якщо ти бачиш це повідомлення — реферальні повідомлення не падають від спецсимволів."
+        )
+
+        sent = await m.bot.send_message(
+            chat_id=REPORTS_GROUP_ID,
+            text=text,
+            parse_mode="HTML",
+        )
+
+        safe_create_task(auto_delete(sent, 120))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_test_referral_message error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Test referral message failed. Дивись логи.")
         safe_create_task(auto_delete(sent, 10))
 
 
