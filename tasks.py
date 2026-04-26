@@ -1,6 +1,7 @@
 import logging
 import functools
 from datetime import datetime, timedelta
+from html import escape
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -62,6 +63,7 @@ def _get_last_warning_key(user_id: int) -> str:
 async def build_top3_text() -> str:
     """
     Builds TOP-3 rating block for scheduled messages.
+    HTML-safe version.
     Returns empty string if rating is unavailable.
     """
     try:
@@ -73,7 +75,7 @@ async def build_top3_text() -> str:
         if not top_list:
             return ""
 
-        lines = ["", "🏆 *ТОП-3 ЗАРАЗ:*", ""]
+        lines = ["", "🏆 <b>ТОП-3 ЗАРАЗ:</b>", ""]
 
         for i, player in enumerate(top_list[:3]):
             if i == 0:
@@ -83,9 +85,9 @@ async def build_top3_text() -> str:
             else:
                 icon = "🥉"
 
-            nick = player.get("nick", "Unknown")
-            hp = player.get("hp", 0)
-            lines.append(f"{icon} {nick} — {hp} HP")
+            nick = escape(str(player.get("nick", "Unknown")))
+            hp = int(player.get("hp", 0) or 0)
+            lines.append(f"{icon} {nick} — <b>{hp}</b> HP")
 
         return "\n".join(lines)
 
@@ -124,6 +126,15 @@ def build_return_group_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def build_motivation_text(phrase_key: str, top3: str) -> str:
+    """
+    Builds HTML-safe motivation text.
+    Escapes phrase text because phrases are plain text, not HTML.
+    """
+    phrase = escape(str(get_phrase(phrase_key)))
+    return phrase + top3
+
+
 # ==============================================================================
 # SCHEDULED TASKS
 # ==============================================================================
@@ -131,15 +142,14 @@ def build_return_group_keyboard() -> InlineKeyboardMarkup:
 @safe_job
 async def send_morning_motivation(bot) -> None:
     """08:00 Kyiv — morning motivation + top-3 + action buttons."""
-    phrase = get_phrase("morning")
     top3 = await build_top3_text()
-    text = phrase + top3
+    text = build_motivation_text("morning", top3)
     keyboard = await build_training_action_keyboard(bot)
 
     await bot.send_message(
         chat_id=REPORTS_GROUP_ID,
         text=text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
     logger.info("[TASKS] Morning motivation sent")
@@ -148,15 +158,14 @@ async def send_morning_motivation(bot) -> None:
 @safe_job
 async def send_day_motivation(bot) -> None:
     """15:00 Kyiv — day motivation + top-3 + action buttons."""
-    phrase = get_phrase("day")
     top3 = await build_top3_text()
-    text = phrase + top3
+    text = build_motivation_text("day", top3)
     keyboard = await build_training_action_keyboard(bot)
 
     await bot.send_message(
         chat_id=REPORTS_GROUP_ID,
         text=text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
     logger.info("[TASKS] Day motivation sent")
@@ -165,10 +174,14 @@ async def send_day_motivation(bot) -> None:
 @safe_job
 async def send_evening_motivation(bot) -> None:
     """21:00 Kyiv — evening motivation + top-3."""
-    phrase = get_phrase("evening")
     top3 = await build_top3_text()
-    text = phrase + top3
-    await bot.send_message(chat_id=REPORTS_GROUP_ID, text=text, parse_mode="Markdown")
+    text = build_motivation_text("evening", top3)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="HTML",
+    )
     logger.info("[TASKS] Evening motivation sent")
 
 
@@ -223,7 +236,7 @@ async def send_last_day_warning(bot) -> None:
         if already_warned is not None:
             continue
 
-        mention_html = str(user.get("mention_html") or user.get("nickname") or user_id)
+        mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
 
         try:
             await bot.send_message(
@@ -290,7 +303,7 @@ async def auto_remove_inactive_users(bot) -> None:
 
             await delete_data(_get_last_warning_key(user_id))
 
-            mention_html = str(user.get("mention_html") or user.get("nickname") or user_id)
+            mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
             silent_days = int(user.get("silent_days") or 0)
 
             await bot.send_message(
@@ -443,6 +456,21 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     )
     scheduler.add_job(
         run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot]
+    )
+
+    # Temporary one-time Sunday final rerun.
+    # Remove this block after 2026-04-26 23:00 Kyiv.
+    scheduler.add_job(
+        run_sunday_final,
+        "cron",
+        year=2026,
+        month=4,
+        day=26,
+        hour=23,
+        minute=0,
+        args=[bot],
+        id="manual_sunday_final_2026_04_26_23_00",
+        replace_existing=True,
     )
 
     scheduler.start()
