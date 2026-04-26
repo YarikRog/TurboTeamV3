@@ -65,6 +65,21 @@ bot = Bot(
 dp = Dispatcher(storage=storage)
 
 
+@dp.message(F.new_chat_members)
+async def delete_join_message(message: types.Message):
+    """
+    Deletes Telegram system message like:
+    'User joined the group'.
+    """
+    if message.chat.id != REPORTS_GROUP_ID:
+        return
+
+    try:
+        await message.delete()
+    except Exception as e:
+        logger.debug(f"[JOIN] Failed to delete join message: {e}")
+
+
 @dp.message(Command("rules"))
 async def cmd_rules(message: types.Message):
     await message.answer(get_phrase("rules_text"))
