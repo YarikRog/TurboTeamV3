@@ -28,6 +28,7 @@ from supabase_db import (
     get_all_users,
     get_all_activities,
     get_all_activities_in_period,
+    get_referrals_in_period,
 )
 
 router = Router()
@@ -40,6 +41,7 @@ PROFILE_MESSAGE_TTL = 120
 ADMIN_HELP_TTL = 120
 
 REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
+TRAINING_ACTIONS = {"Gym", "Street"}
 
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
@@ -78,9 +80,6 @@ def get_next_training_goal(training_count: int) -> tuple[int | None, str]:
 
 
 def _get_current_week_period() -> tuple[datetime, datetime]:
-    """
-    TurboTeam week starts on Sunday at 20:00 Kyiv time.
-    """
     now = datetime.now(KYIV_TZ)
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
         hour=20,
@@ -95,6 +94,24 @@ def _get_current_week_period() -> tuple[datetime, datetime]:
         week_start = current_sunday_20
 
     week_end = week_start + timedelta(days=7)
+    return week_start, week_end
+
+
+def _get_last_finished_week_period() -> tuple[datetime, datetime]:
+    now = datetime.now(KYIV_TZ)
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    if now >= current_sunday_20:
+        week_end = current_sunday_20
+    else:
+        week_end = current_sunday_20 - timedelta(days=7)
+
+    week_start = week_end - timedelta(days=7)
     return week_start, week_end
 
 
@@ -162,7 +179,9 @@ def _build_admin_help_text() -> str:
         "/rating — показати рейтинг\n"
         "/reject — скасувати тренування через reply\n"
         "/quizstats — статистика квізу\n"
-        "/activitystats — статистика активностей\n\n"
+        "/activitystats — статистика активностей\n"
+        "/promostats — короткий рекламний звіт\n"
+        "/impactstats — повний impact-звіт\n\n"
         "🧪 <b>ТЕСТИ</b>\n"
         "/testaward — тестова FIFA-картка\n"
         "/testref — тест реферального повідомлення\n"
@@ -178,6 +197,11 @@ def _build_admin_help_text() -> str:
 def _is_real_activity(activity: dict) -> bool:
     action_name = str(activity.get("action_name") or "").strip()
     return action_name in REAL_ACTIVITY_ACTIONS
+
+
+def _is_training_activity(activity: dict) -> bool:
+    action_name = str(activity.get("action_name") or "").strip()
+    return action_name in TRAINING_ACTIONS
 
 
 def _build_activity_counter(activities: list[dict]) -> dict[str, int]:
@@ -223,6 +247,157 @@ def _count_active_users(activities: list[dict]) -> int:
             user_ids.add(user_id)
 
     return len(user_ids)
+
+
+def _calculate_turbo_index(
+    total_users: int,
+    active_users: int,
+    training_count: int,
+    video_reports: int,
+    referrals_count: int,
+    avg_activity: float,
+) -> tuple[int, str]:
+    active_score = _calc_percent(active_users, total_users)
+
+    training_target = max(active_users * 3, 1)
+    training_score = min(100.0, round((training_count / training_target) * 100, 1))
+
+    if training_count > 0:
+        video_score = min(100.0, round((video_reports / training_count) * 100, 1))
+    else:
+        video_score = 0.0
+
+    referral_target = max(round(total_users * 0.2), 1)
+    referral_score = min(100.0, round((referrals_count / referral_target) * 100, 1))
+
+    avg_score = min(100.0, round((avg_activity / 5) * 100, 1))
+
+    turbo_index = round(
+        active_score * 0.40
+        + training_score * 0.30
+        + video_score * 0.15
+        + referral_score * 0.10
+        + avg_score * 0.05
+    )
+
+    if turbo_index >= 80:
+        level = "ДУЖЕ ВИСОКИЙ 🔥"
+    elif turbo_index >= 60:
+        level = "ВИСОКИЙ 🔥"
+    elif turbo_index >= 40:
+        level = "СЕРЕДНІЙ ⚡"
+    elif turbo_index > 0:
+        level = "НИЗЬКИЙ 💤"
+    else:
+        level = "СТАРТ ТИЖНЯ 🏁"
+
+    return turbo_index, level
+
+
+async def _build_weekly_impact_data(finished_week: bool = True) -> dict:
+    users = await get_all_users()
+    total_users = len(users)
+
+    if finished_week:
+        week_start, week_end = _get_last_finished_week_period()
+    else:
+        week_start, week_end = _get_current_week_period()
+
+    activities_raw = await get_all_activities_in_period(
+        created_at_from=week_start.isoformat(),
+        created_at_to=week_end.isoformat(),
+        limit=5000,
+    )
+
+    referrals_raw = await get_referrals_in_period(
+        created_at_from=week_start.isoformat(),
+        created_at_to=week_end.isoformat(),
+        limit=5000,
+    )
+
+    real_activities = [
+        activity for activity in activities_raw
+        if _is_real_activity(activity)
+    ]
+
+    training_activities = [
+        activity for activity in real_activities
+        if _is_training_activity(activity)
+    ]
+
+    counts = _build_activity_counter(real_activities)
+
+    active_users = _count_active_users(real_activities)
+    real_total = len(real_activities)
+    training_count = len(training_activities)
+    video_reports = training_count
+    referrals_count = len(referrals_raw)
+    hp_total = _sum_hp(real_activities)
+
+    avg_activity = 0.0
+    if active_users > 0:
+        avg_activity = round(real_total / active_users, 1)
+
+    active_percent = _calc_percent(active_users, total_users)
+
+    user_map = {
+        str(user.get("id")): user
+        for user in users
+        if user.get("id")
+    }
+
+    hp_by_user: dict[str, int] = {}
+    for activity in real_activities:
+        user_uuid = str(activity.get("user_id") or "").strip()
+        if not user_uuid:
+            continue
+
+        try:
+            hp_change = int(activity.get("hp_change") or 0)
+        except Exception:
+            hp_change = 0
+
+        hp_by_user[user_uuid] = hp_by_user.get(user_uuid, 0) + hp_change
+
+    champion_nickname = "Немає"
+    champion_hp = 0
+
+    if hp_by_user:
+        champion_uuid, champion_hp = max(hp_by_user.items(), key=lambda item: item[1])
+        champion_row = user_map.get(champion_uuid, {})
+        champion_nickname = (
+            champion_row.get("nickname")
+            or champion_row.get("telegram_user_id")
+            or "Невідомий"
+        )
+
+    turbo_index, turbo_level = _calculate_turbo_index(
+        total_users=total_users,
+        active_users=active_users,
+        training_count=training_count,
+        video_reports=video_reports,
+        referrals_count=referrals_count,
+        avg_activity=avg_activity,
+    )
+
+    return {
+        "week_start": week_start,
+        "week_end": week_end,
+        "total_users": total_users,
+        "active_users": active_users,
+        "active_percent": active_percent,
+        "real_total": real_total,
+        "training_count": training_count,
+        "video_reports": video_reports,
+        "referrals_count": referrals_count,
+        "hp_total": hp_total,
+        "avg_activity": avg_activity,
+        "champion_nickname": str(champion_nickname),
+        "champion_hp": int(champion_hp),
+        "turbo_index": turbo_index,
+        "turbo_level": turbo_level,
+        "counts": counts,
+    }
 
 
 async def _run_single_load_job(job_id: int) -> dict:
@@ -733,6 +908,107 @@ async def handle_activity_stats(m: Message):
     except Exception as e:
         logger.error(f"[HANDLERS] handle_activity_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати статистику активностей.")
+        safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(Command("promostats"))
+async def handle_promo_stats(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        data = await _build_weekly_impact_data(finished_week=True)
+
+        champion = escape(str(data["champion_nickname"]))
+        turbo_index = int(data["turbo_index"])
+        turbo_level = escape(str(data["turbo_level"]))
+
+        text = (
+            f"🔥 <b>TURBOTEAM WEEKLY IMPACT</b>\n\n"
+            f"🔥 <b>Turbo Index: {turbo_index}/100</b>\n"
+            f"Рівень залучення: <b>{turbo_level}</b>\n\n"
+            f"📅 Період:\n"
+            f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
+            f"👥 Учасників: <b>{data['total_users']}</b>\n"
+            f"⚡ Активних: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
+            f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
+            f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
+            f"🔁 Реферальних переходів: <b>{data['referrals_count']}</b>\n"
+            f"🏆 HP видано: <b>{data['hp_total']}</b>\n"
+            f"🔥 Середня активність: <b>{data['avg_activity']}</b> дії на активного учасника\n"
+            f"🥇 Чемпіон тижня: <b>@{champion}</b> — <b>{data['champion_hp']} HP</b>\n\n"
+            f"TurboTeam перетворює чат на гру: люди тренуються, звітують, змагаються і повертаються."
+        )
+
+        sent = await m.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent, 300))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_promo_stats error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Не вдалося зібрати promo-статистику.")
+        safe_create_task(auto_delete(sent, 10))
+
+
+@router.message(Command("impactstats"))
+async def handle_impact_stats(m: Message):
+    if m.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        data = await _build_weekly_impact_data(finished_week=True)
+
+        champion = escape(str(data["champion_nickname"]))
+        turbo_index = int(data["turbo_index"])
+        turbo_level = escape(str(data["turbo_level"]))
+        counts = data["counts"]
+
+        text = (
+            f"🔥 <b>TURBOTEAM WEEKLY IMPACT</b>\n\n"
+            f"<b>Turbo Index: {turbo_index}/100</b>\n"
+            f"Рівень залучення: <b>{turbo_level}</b>\n\n"
+            f"За минулий тиждень бот не просто рахував активність — він змушував учасників "
+            f"повертатися в гру, тренуватися, звітувати й змагатися.\n\n"
+            f"📅 <b>Період:</b>\n"
+            f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
+            f"👥 Учасників у базі: <b>{data['total_users']}</b>\n"
+            f"⚡ Активних за тиждень: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
+            f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
+            f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
+            f"🔁 Реферальних переходів: <b>{data['referrals_count']}</b>\n"
+            f"🏆 HP видано: <b>{data['hp_total']}</b>\n"
+            f"🔥 Середня активність: <b>{data['avg_activity']}</b> дії на активного учасника\n"
+            f"🥇 Чемпіон тижня: <b>@{champion}</b> — <b>{data['champion_hp']} HP</b>\n\n"
+            f"📊 <b>Розбивка дій:</b>\n"
+            f"🏋️ Gym: <b>{counts['Gym']}</b>\n"
+            f"🦾 Street: <b>{counts['Street']}</b>\n"
+            f"🧘 Rest: <b>{counts['Rest']}</b>\n"
+            f"🚫 Skip: <b>{counts['Skipped']}</b>\n\n"
+            f"<b>Що це означає:</b>\n"
+            f"• {data['active_percent']}% учасників не просто зайшли в чат, а виконали дію.\n"
+            f"• {data['training_count']} тренувань підтверджені через бота.\n"
+            f"• Рейтинг і HP створили змагання всередині комʼюніті.\n"
+            f"• Реферали показують органічний ріст без додаткової реклами.\n\n"
+            f"<b>Висновок:</b>\n"
+            f"TurboTeam перетворює Telegram-групу з пасивного чату на фітнес-гру, "
+            f"де люди тренуються, звітують, повертаються і тягнуть друзів."
+        )
+
+        sent = await m.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent, 300))
+
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_impact_stats error: {e}", exc_info=True)
+        sent = await m.answer("⚠️ Не вдалося зібрати impact-статистику.")
         safe_create_task(auto_delete(sent, 10))
 
 
