@@ -1,5 +1,6 @@
 import logging
 import random
+from html import escape
 from typing import Optional, Dict, Any
 from datetime import timedelta, datetime
 
@@ -107,6 +108,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 async def show_rating_for_user(message: Message, actor: User) -> Optional[Message]:
     """
     Формує та виводить рейтинг з рефералами під кожним гравцем і самознищенням.
+    HTML-safe version.
     """
     uid = actor.id
 
@@ -131,10 +133,10 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
 
     try:
         top_list = data.get("top", [])
-        user_rank = data.get("user_rank", "?")
-        user_hp = data.get("user_hp", 0)
+        user_rank = escape(str(data.get("user_rank", "?")))
+        user_hp = int(data.get("user_hp", 0) or 0)
 
-        text = "🏆 *РЕЙТИНГ ТИЖНЯ*\n\n"
+        text = "🏆 <b>РЕЙТИНГ ТИЖНЯ</b>\n\n"
 
         for i, player in enumerate(top_list):
             if i == 0:
@@ -146,16 +148,16 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
             else:
                 icon = f"{i + 1}."
 
-            nick = player.get("nick", "Unknown")
-            hp = player.get("hp", 0)
-            refs = player.get("referrals_count", 0)
+            nick = escape(str(player.get("nick", "Unknown")))
+            hp = int(player.get("hp", 0) or 0)
+            refs = int(player.get("referrals_count", 0) or 0)
 
-            text += f"{icon} {nick} — {hp} HP\n"
-            text += f"   Рефералів: {refs}\n\n"
+            text += f"{icon} {nick} — <b>{hp}</b> HP\n"
+            text += f"   Рефералів: <b>{refs}</b>\n\n"
 
         text += (
             "----------------\n"
-            f"Твоє місце: *{user_rank}* | Твої HP: *{user_hp}*"
+            f"Твоє місце: <b>{user_rank}</b> | Твої HP: <b>{user_hp}</b>"
         )
 
     except Exception as e:
@@ -163,12 +165,12 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
         return await message.answer("⚠️ Помилка формування рейтингу.")
 
     try:
-        sent_msg = await message.answer(text, parse_mode="Markdown")
+        sent_msg = await message.answer(text, parse_mode="HTML")
         safe_create_task(auto_delete(sent_msg, 30))
         return sent_msg
 
     except Exception as e:
-        logger.error(f"[RATINGS] Send error: {e}")
+        logger.error(f"[RATINGS] Send error: {e}", exc_info=True)
         return None
 
 
