@@ -458,21 +458,6 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
         run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot]
     )
 
-    # Temporary one-time Sunday final rerun.
-    # Remove this block after 2026-04-26 23:00 Kyiv.
-    scheduler.add_job(
-        run_sunday_final,
-        "cron",
-        year=2026,
-        month=4,
-        day=26,
-        hour=23,
-        minute=0,
-        args=[bot],
-        id="manual_sunday_final_2026_04_26_23_00",
-        replace_existing=True,
-    )
-
     scheduler.start()
 
     now_str = datetime.now(kyiv_tz).strftime("%H:%M:%S")
