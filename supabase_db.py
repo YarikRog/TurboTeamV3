@@ -288,6 +288,31 @@ async def get_referrals_count(referrer_user_id: str) -> int:
     return response.count or 0
 
 
+async def get_referrals_in_period(
+    created_at_from: str,
+    created_at_to: str,
+    limit: int = 5000,
+) -> List[Dict[str, Any]]:
+    """
+    Returns all referral rows created inside the selected period.
+    Used for promo/impact statistics.
+    """
+    def _query():
+        sb = get_supabase()
+        return (
+            sb.table("referrals")
+            .select("*")
+            .gte("created_at", created_at_from)
+            .lt("created_at", created_at_to)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+    response = await _run_sync(_query)
+    return response.data or []
+
+
 # ==============================================================================
 # ACHIEVEMENTS
 # ==============================================================================
