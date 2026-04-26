@@ -67,6 +67,12 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
 
 
 def _get_current_week_period() -> tuple[str, str]:
+    """
+    Current active TurboTeam week.
+    Used for live rating.
+
+    Week starts every Sunday at 20:00 Kyiv time.
+    """
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
         hour=20,
@@ -74,12 +80,39 @@ def _get_current_week_period() -> tuple[str, str]:
         second=0,
         microsecond=0,
     )
+
     if now < current_sunday_20:
         week_start = current_sunday_20 - timedelta(days=7)
     else:
         week_start = current_sunday_20
 
     week_end = week_start + timedelta(days=7)
+
+    return week_start.isoformat(), week_end.isoformat()
+
+
+def _get_last_finished_week_period() -> tuple[str, str]:
+    """
+    Last finished TurboTeam week.
+    Used for Sunday final card.
+
+    If now is Sunday after 20:00, returns:
+    previous Sunday 20:00 -> current Sunday 20:00.
+    """
+    now = get_kyiv_now()
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    if now >= current_sunday_20:
+        week_end = current_sunday_20
+    else:
+        week_end = current_sunday_20 - timedelta(days=7)
+
+    week_start = week_end - timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()
 
@@ -442,9 +475,20 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
         return False
 
 
-async def get_weekly_top_users():
+async def get_weekly_top_users(finished_week: bool = False):
     try:
-        period_start, period_end = _get_current_week_period()
+        if finished_week:
+            period_start, period_end = _get_last_finished_week_period()
+        else:
+            period_start, period_end = _get_current_week_period()
+
+        logger.info(
+            "[DB] weekly top period: start=%s end=%s finished_week=%s",
+            period_start,
+            period_end,
+            finished_week,
+        )
+
         ranking_rows = await get_weekly_rating(period_start, period_end)
         return ranking_rows[:10]
 
