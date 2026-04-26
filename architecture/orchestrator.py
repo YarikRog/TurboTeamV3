@@ -31,7 +31,9 @@ RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
 
 
 def mention(user: types.User) -> str:
-    return f"@{user.username or user.first_name}"
+    if user.username:
+        return f"@{user.username}"
+    return user.first_name or "Учасник"
 
 
 def _ms(start: float) -> int:
@@ -64,17 +66,35 @@ def _get_group_inline_keyboard() -> types.InlineKeyboardMarkup:
     )
 
 
+async def _safe_send_group_message(bot, text: str) -> bool:
+    """
+    Safe group send.
+    Important: parse_mode=None overrides bot default Markdown.
+    This prevents crashes from usernames/names with _, *, [, ], etc.
+    """
+    try:
+        await bot.send_message(
+            chat_id=REPORTS_GROUP_ID,
+            text=text,
+            parse_mode=None,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"[SAFE_SEND] Failed to send group message: {e}", exc_info=True)
+        return False
+
+
 async def _reply_transport(source: Message | CallbackQuery, text: str, show_alert: bool = False):
     if isinstance(source, CallbackQuery):
         if show_alert:
             await source.answer(text, show_alert=True)
             return None
 
-        sent = await source.message.answer(text)
+        sent = await source.message.answer(text, parse_mode=None)
         await source.answer()
         return sent
 
-    return await source.answer(text)
+    return await source.answer(text, parse_mode=None)
 
 
 async def on_user_registered(event: EventEnvelope) -> bool:
@@ -95,10 +115,12 @@ async def on_user_registered(event: EventEnvelope) -> bool:
         await message.answer(
             "⚠️ Ти вже в базі.",
             reply_markup=_get_return_to_group_reply_keyboard(),
+            parse_mode=None,
         )
         await message.answer(
             "Тримай перепустку в групу 👇",
             reply_markup=_get_group_inline_keyboard(),
+            parse_mode=None,
         )
         logger.info("[REG] user already exists user_id=%s total=%sms", user_id, _ms(total_started))
         return False
@@ -108,7 +130,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     logger.info("[REG] register_user_from_quiz user_id=%s took %sms", user_id, _ms(t))
 
     if not success:
-        await message.answer("⚠️ Не вдалося завершити реєстрацію. Спробуй ще раз.")
+        await message.answer("⚠️ Не вдалося завершити реєстрацію. Спробуй ще раз.", parse_mode=None)
         logger.info("[REG] registration failed user_id=%s total=%sms", user_id, _ms(total_started))
         return False
 
@@ -150,6 +172,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     await message.answer(
         f"✅ Реєстрацію завершено. Тобі нараховано +{WELCOME_HP_BONUS} HP",
         reply_markup=types.ReplyKeyboardRemove(),
+        parse_mode=None,
     )
     logger.info("[REG] registration success answer user_id=%s took %sms", user_id, _ms(t))
 
@@ -157,6 +180,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     await message.answer(
         "Тисни кнопку нижче, якщо треба швидко повернутися в групу 👇",
         reply_markup=_get_return_to_group_reply_keyboard(),
+        parse_mode=None,
     )
     logger.info("[REG] return reply keyboard user_id=%s took %sms", user_id, _ms(t))
 
@@ -164,6 +188,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     await message.answer(
         "Тримай перепустку в групу 👇",
         reply_markup=_get_group_inline_keyboard(),
+        parse_mode=None,
     )
     logger.info("[REG] onboarding answer user_id=%s took %sms", user_id, _ms(t))
 
@@ -178,12 +203,13 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     )
 
     t = time.perf_counter()
-    await message.bot.send_message(
-        REPORTS_GROUP_ID,
-        group_welcome_text,
-        parse_mode="Markdown",
+    group_sent = await _safe_send_group_message(message.bot, group_welcome_text)
+    logger.info(
+        "[REG] group welcome send user_id=%s took %sms ok=%s",
+        user_id,
+        _ms(t),
+        group_sent,
     )
-    logger.info("[REG] group welcome send user_id=%s took %sms", user_id, _ms(t))
 
     logger.info("[REG] Finished registration flow user_id=%s total=%sms", user_id, _ms(total_started))
     return True
@@ -256,10 +282,10 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         rest_text = "💆‍♂️ Бро, ти сьогодні вже відпочиваєш. Нове тренування можна зафіксувати завтра."
 
         if isinstance(source, CallbackQuery):
-            msg = await source.message.answer(rest_text, reply_markup=back_to_group_kb)
+            msg = await source.message.answer(rest_text, reply_markup=back_to_group_kb, parse_mode=None)
             await source.answer()
         else:
-            msg = await source.answer(rest_text, reply_markup=back_to_group_kb)
+            msg = await source.answer(rest_text, reply_markup=back_to_group_kb, parse_mode=None)
 
         if msg is not None:
             safe_create_task(
@@ -322,11 +348,11 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
         async def _send_with_button(text: str):
             if isinstance(source, CallbackQuery):
-                msg = await source.message.answer(text, reply_markup=back_to_group_kb)
+                msg = await source.message.answer(text, reply_markup=back_to_group_kb, parse_mode=None)
                 await source.answer()
                 return msg
 
-            return await source.answer(text, reply_markup=back_to_group_kb)
+            return await source.answer(text, reply_markup=back_to_group_kb, parse_mode=None)
 
         if next_count == 1:
             t = time.perf_counter()
@@ -521,12 +547,12 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     logger.info("[VIDEO] get_state user_id=%s took %sms", event.user_id, _ms(t))
 
     if current_state != UserFlowState.VIDEO_WAITING:
-        await message.answer("⏰ Спочатку вибери тренування в меню!")
+        await message.answer("⏰ Спочатку вибери тренування в меню!", parse_mode=None)
         logger.info("[VIDEO] wrong state user_id=%s total=%sms", event.user_id, _ms(total_started))
         return False
 
     if message.forward_from or message.forward_date:
-        await message.answer("❌ Тільки свіжі кружечки!")
+        await message.answer("❌ Тільки свіжі кружечки!", parse_mode=None)
         logger.info("[VIDEO] forwarded video rejected user_id=%s total=%sms", event.user_id, _ms(total_started))
         return False
 
@@ -535,7 +561,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     logger.info("[VIDEO] get_session user_id=%s took %sms", event.user_id, _ms(t))
 
     if not session_data:
-        await message.answer("⏰ Сесія вичерпана. Почни заново.")
+        await message.answer("⏰ Сесія вичерпана. Почни заново.", parse_mode=None)
         logger.info("[VIDEO] no session user_id=%s total=%sms", event.user_id, _ms(total_started))
         return False
 
@@ -567,7 +593,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     await state_machine.restore_video_waiting(event.user_id, ttl=60)
     logger.info("[VIDEO] restore_video_waiting user_id=%s took %sms", event.user_id, _ms(t))
 
-    await message.answer("⚠️ Помилка запису в таблицю. Спробуй ще раз.")
+    await message.answer("⚠️ Помилка запису в таблицю. Спробуй ще раз.", parse_mode=None)
     logger.info("[VIDEO] failed flow user_id=%s total=%sms", event.user_id, _ms(total_started))
     return False
 
