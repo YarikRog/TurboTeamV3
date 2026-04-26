@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from urllib.parse import quote
+from html import escape
 
 from aiogram import Router, F, Bot
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, User
@@ -18,6 +19,39 @@ logger = logging.getLogger(__name__)
 
 REF_COOLDOWN = 600
 REF_MESSAGE_TTL = 60
+
+
+# ==============================================================================
+# SAFE TELEGRAM SEND
+# ==============================================================================
+
+async def _safe_send_message(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: str | None = None,
+) -> bool:
+    """
+    Sends Telegram message safely.
+    Message errors must not break referral logic.
+    """
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+        return True
+    except Exception as e:
+        logger.error(
+            "[REFERRAL] Failed to send message chat_id=%s error=%s",
+            chat_id,
+            e,
+            exc_info=True,
+        )
+        return False
 
 
 # ==============================================================================
@@ -105,7 +139,8 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
         if (await get_data(warn_key)) is None:
             await set_flag(warn_key, ex=REF_COOLDOWN)
             sent_msg = await message.answer(
-                "⏳ Бро, запрошення друга можна відкривати раз на 10 хв. Спробуй пізніше."
+                "⏳ Бро, запрошення друга можна відкривати раз на 10 хв. Спробуй пізніше.",
+                parse_mode=None,
             )
             safe_create_task(auto_delete(sent_msg, 1))
         return
@@ -131,13 +166,15 @@ async def send_invite_prompt(message: Message, actor: User, delete_origin: bool 
     )
 
     sent_msg = await message.answer(
-        f"🚀 **ЧАС РОЗШИРЮВАТИ КОМАНДУ!**\n\n"
-        f"За кожного нового учасника:\n"
-        f"🏆 Тобі: **+{HP_REF_BATA} HP**\n"
-        f"💪 Новачку: **+{HP_REF_NEWBIE} HP**\n\n"
-        "Тисни кнопку нижче, щоб відправити запрошення 👇",
+        (
+            "🚀 ЧАС РОЗШИРЮВАТИ КОМАНДУ!\n\n"
+            "За кожного нового учасника:\n"
+            f"🏆 Тобі: +{HP_REF_BATA} HP\n"
+            f"💪 Новачку: +{HP_REF_NEWBIE} HP\n\n"
+            "Тисни кнопку нижче, щоб відправити запрошення 👇"
+        ),
         reply_markup=kb,
-        parse_mode="Markdown",
+        parse_mode=None,
     )
     safe_create_task(auto_delete(sent_msg, REF_MESSAGE_TTL))
 
@@ -161,11 +198,14 @@ async def process_referral_logic(
     Grants referral HP to both users, writes referral record to Supabase,
     and sends notifications.
 
-    Protection logic:
-    - dedupe key prevents duplicate processing
-    - if flow fails before completion, dedupe key is rolled back
+    Important:
+    - HP and Supabase record are the main logic.
+    - Telegram notification errors must NOT rollback referral after HP is granted.
+    - dedupe key prevents duplicate processing.
+    - if flow fails before HP is granted, dedupe key is rolled back.
     """
     anti_spam_key = KeyManager.get_ref_processed_key(new_user_id)
+
     if (await get_data(anti_spam_key)) is not None:
         logger.info(f"[REFERRAL] Duplicate referral for uid={new_user_id} ignored")
         return
@@ -179,21 +219,24 @@ async def process_referral_logic(
 
     try:
         ref_name = f"ID:{referrer_id}"
+
         try:
             member = await bot.get_chat_member(REPORTS_GROUP_ID, referrer_id)
-            ref_name = (
-                f"@{member.user.username}"
-                if member.user.username
-                else member.user.first_name
-            )
+            if member.user.username:
+                ref_name = f"@{member.user.username}"
+            else:
+                ref_name = member.user.first_name or ref_name
         except Exception as e:
             logger.debug(f"[REFERRAL] get_chat_member failed: {e}")
+
+        clean_new_nickname = str(new_nickname or f"ID:{new_user_id}").strip()
+        clean_ref_name = str(ref_name or f"ID:{referrer_id}").strip()
 
         referrer_action = f"Referral Bonus ({new_user_id})"
 
         referrer_granted, _, _ = await ActivityService.grant_hp(
             referrer_id,
-            ref_name,
+            clean_ref_name,
             referrer_action,
             HP_REF_BATA,
         )
@@ -202,7 +245,7 @@ async def process_referral_logic(
 
         newbie_granted, _, _ = await ActivityService.grant_hp(
             new_user_id,
-            new_nickname,
+            clean_new_nickname,
             "Referral Welcome Bonus",
             HP_REF_NEWBIE,
         )
@@ -220,40 +263,58 @@ async def process_referral_logic(
         referral_log_written = await add_referral_bonus(
             referrer_id=referrer_id,
             new_user_id=new_user_id,
-            new_user_name=new_nickname,
+            new_user_name=clean_new_nickname,
         )
+
         if not referral_log_written:
             logger.warning(
-                "[REFERRAL] Referral sheet write failed new_user_id=%s referrer_id=%s",
+                "[REFERRAL] Referral Supabase write failed new_user_id=%s referrer_id=%s",
                 new_user_id,
                 referrer_id,
             )
 
-        await bot.send_message(
+        # From this point referral is considered successful.
+        # Notification failures must not rollback the referral.
+        completed = True
+
+        new_display = escape(clean_new_nickname)
+        ref_display = escape(clean_ref_name)
+
+        await _safe_send_message(
+            bot=bot,
             chat_id=REPORTS_GROUP_ID,
             text=(
-                f"🏎️ **TURBO-ПОПОВНЕННЯ!**\n\n"
-                f"Новий гравець @{new_nickname} (+{HP_REF_NEWBIE} HP)\n"
-                f"Прийшов за запрошенням від: **{ref_name}** (+{HP_REF_BATA} HP) 🔥"
+                "🏎️ <b>TURBO-ПОПОВНЕННЯ!</b>\n\n"
+                f"Новий гравець <b>{new_display}</b> (+{HP_REF_NEWBIE} HP)\n"
+                f"Прийшов за запрошенням від: <b>{ref_display}</b> (+{HP_REF_BATA} HP) 🔥"
             ),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
 
         async def _notify_referrer():
-            try:
-                await bot.send_message(
-                    chat_id=referrer_id,
-                    text=(
-                        f"🔥 Твоє запрошення спрацювало!\n"
-                        f"@{new_nickname} приєднався до TurboTeam,\n"
-                        f"а тобі вже нараховано +{HP_REF_BATA} HP 💪"
-                    ),
-                )
-            except Exception as e:
-                logger.debug(f"[REFERRAL] Failed to notify uid={referrer_id}: {e}")
+            ref_text_newbie = escape(clean_new_nickname)
+
+            await _safe_send_message(
+                bot=bot,
+                chat_id=referrer_id,
+                text=(
+                    "🔥 Твоє запрошення спрацювало!\n"
+                    f"{ref_text_newbie} приєднався до TurboTeam,\n"
+                    f"а тобі вже нараховано +{HP_REF_BATA} HP 💪"
+                ),
+                parse_mode="HTML",
+            )
 
         safe_create_task(_notify_referrer(), name=f"notify_referrer_{referrer_id}")
-        completed = True
+
+        logger.info(
+            "[REFERRAL] Completed new_user_id=%s referrer_id=%s ref_hp=%s newbie_hp=%s db_written=%s",
+            new_user_id,
+            referrer_id,
+            HP_REF_BATA,
+            HP_REF_NEWBIE,
+            referral_log_written,
+        )
 
     except Exception as e:
         logger.error(f"[REFERRAL] process_referral_logic error: {e}", exc_info=True)
