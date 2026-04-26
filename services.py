@@ -105,6 +105,7 @@ def validate_quiz(data: dict) -> bool:
             return False
 
         return True
+
     except Exception as e:
         logger.error(f"[VALIDATE] Critical validation error: {e}", exc_info=True)
         return False
@@ -126,10 +127,12 @@ def handle_exceptions(default_return: Any = None):
             except Exception as e:
                 logger.error(
                     f"[SERVICE] Error in {func.__name__}: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 return default_return
+
         return wrapper
+
     return decorator
 
 
@@ -164,6 +167,7 @@ async def auto_delete(message: Any, delay: int = 5) -> None:
     Deletes message after delay seconds.
     """
     await asyncio.sleep(delay)
+
     try:
         await message.delete()
     except Exception as e:
@@ -191,7 +195,18 @@ class ActivityService:
         """
         Counts user's real training activities: Gym + Street.
         Ignores rollback rows.
+        Cached in Redis for 5 minutes to reduce Supabase load.
         """
+        cache_key = f"training_count:{user_id}"
+
+        if redis_client is not None:
+            try:
+                cached = await redis_client.get(cache_key)
+                if cached is not None:
+                    return int(cached)
+            except Exception as e:
+                logger.warning("[get_training_count] Redis get error: %s", e)
+
         user_row = await get_user_by_telegram_id(user_id)
         if not user_row:
             return 0
@@ -212,7 +227,26 @@ class ActivityService:
             if action_name in {"Gym", "Street"}:
                 training_count += 1
 
+        if redis_client is not None:
+            try:
+                await redis_client.set(cache_key, training_count, ex=300)
+            except Exception as e:
+                logger.warning("[get_training_count] Redis set error: %s", e)
+
         return training_count
+
+    @staticmethod
+    async def invalidate_training_count_cache(user_id: int) -> None:
+        """
+        Clears cached training_count after a new training.
+        """
+        if redis_client is None:
+            return
+
+        try:
+            await redis_client.delete(f"training_count:{user_id}")
+        except Exception as e:
+            logger.warning("[invalidate_training_count_cache] %s", e)
 
     @staticmethod
     def get_current_training_status(training_count: int) -> str:
@@ -245,6 +279,7 @@ class ActivityService:
         """
         Grants a training achievement if the user has reached a new training milestone.
         Returns achievement title if granted, otherwise None.
+        Uses cached training_count to avoid duplicate Supabase queries.
         """
         user_row = await get_user_by_telegram_id(user_id)
         if not user_row:
@@ -254,17 +289,7 @@ class ActivityService:
         if not user_uuid:
             return None
 
-        activities = await get_user_activities(str(user_uuid), limit=1000)
-
-        training_count = 0
-        for activity in activities:
-            action_name = str(activity.get("action_name", "")).strip()
-
-            if action_name.endswith("Rollback"):
-                continue
-
-            if action_name in {"Gym", "Street"}:
-                training_count += 1
+        training_count = await ActivityService.get_training_count(user_id)
 
         granted_title: Optional[str] = None
 
@@ -403,7 +428,10 @@ class ActivityService:
                         return True
 
         for action_name in cache_actions:
-            has_db_activity = await ActivityService._has_non_rollback_activity_today_in_db(user_id, action_name)
+            has_db_activity = await ActivityService._has_non_rollback_activity_today_in_db(
+                user_id,
+                action_name,
+            )
             if has_db_activity:
                 logger.debug(
                     "[check_today_report] DB-hit: uid=%s action=%s date=%s",
@@ -494,7 +522,10 @@ class ActivityService:
         streak_days = 0
 
         if action_type in ["Gym", "Street"]:
-            streak_bonus, streak_days = await ActivityService.check_and_grant_streak_bonus(user_id, nickname)
+            streak_bonus, streak_days = await ActivityService.check_and_grant_streak_bonus(
+                user_id,
+                nickname,
+            )
 
         logger.info(f"[SERVICE] HP GRANTED: uid={user_id} +{hp} HP for {action_type}")
         return True, streak_bonus, streak_days
@@ -525,6 +556,7 @@ class ActivityService:
         for key, value in ActivityService.ACTION_HP_MAPPING.items():
             if key in action_type:
                 return int(value)
+
         logger.warning(f"[SERVICE] Unknown action type: {action_type!r}, returning 0")
         return 0
 
@@ -542,7 +574,7 @@ class ActivityService:
             hour=0,
             minute=0,
             second=0,
-            microsecond=0
+            microsecond=0,
         )
         return max(1, int((next_midnight - now).total_seconds()))
 
@@ -571,11 +603,20 @@ class ActivityService:
         if not granted:
             return False
 
+        if action_type in ["Gym", "Street"]:
+            await ActivityService.invalidate_training_count_cache(user.id)
+
         back_to_group_kb = types.InlineKeyboardMarkup(
-            inline_keyboard=[[
-                types.InlineKeyboardButton(text="😎 Повертайся в банду", url=GROUP_LINK)
-            ]]
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text="😎 Повертайся в банду",
+                        url=GROUP_LINK,
+                    )
+                ]
+            ]
         )
+
         await message.answer(
             f"✅ {action_type} зафіксовано. +{hp} HP",
             reply_markup=back_to_group_kb,
@@ -617,16 +658,16 @@ class ActivityService:
         group_text_msg = None
 
         try:
-            group_video_msg = await message.copy_to(
-                REPORTS_GROUP_ID,
-            )
+            group_video_msg = await message.copy_to(REPORTS_GROUP_ID)
         except Exception as e:
             logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
-        report_nickname = f"@{user.username or user.first_name}"
+        safe_display_name = user.username or user.first_name or user.full_name or "Учасник"
+        report_nickname = f"@{safe_display_name}" if user.username else safe_display_name
+        report_nickname_html = escape(str(report_nickname))
 
         report_text = (
-            f"{get_phrase('report', nickname=report_nickname)}\n"
+            f"{get_phrase('report', nickname=report_nickname_html)}\n"
             f"+{hp} HP"
         )
 
@@ -644,7 +685,11 @@ class ActivityService:
         )
 
         if new_status_title:
-            mention_text = f"@{user.username}" if user.username else escape(user.full_name)
+            mention_text = (
+                f"@{escape(str(user.username))}"
+                if user.username
+                else escape(str(user.full_name or user.first_name or 'Учасник'))
+            )
 
             await message.bot.send_message(
                 REPORTS_GROUP_ID,
@@ -664,6 +709,7 @@ class ActivityService:
             action_type,
             video_id or "no_video_id",
         )
+
         report_meta = {
             "target_uid": user.id,
             "nickname": nickname,
