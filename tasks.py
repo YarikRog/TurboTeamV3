@@ -15,8 +15,8 @@ from database import (
     get_users_for_last_warning,
     get_users_for_auto_removal,
     get_kyiv_now,
+    get_weekly_top_users,
 )
-from ratings import get_rating_data
 from cache import get_data, set_data, delete_data
 
 logger = logging.getLogger(__name__)
@@ -64,14 +64,14 @@ async def build_top3_text() -> str:
     """
     Builds TOP-3 rating block for scheduled messages.
     HTML-safe version.
-    Returns empty string if rating is unavailable.
+
+    Important:
+    This uses the same weekly rating source as the main rating/final logic.
+    It includes all weekly HP from the rating RPC:
+    Gym, Street, Rest, Skip, referrals, bonuses, penalties, etc.
     """
     try:
-        data = await get_rating_data(0)
-        if not data or "top" not in data:
-            return ""
-
-        top_list = data.get("top", [])
+        top_list = await get_weekly_top_users(finished_week=False)
         if not top_list:
             return ""
 
@@ -85,9 +85,14 @@ async def build_top3_text() -> str:
             else:
                 icon = "🥉"
 
-            nick = escape(str(player.get("nick", "Unknown")))
+            nick = (
+                player.get("nick")
+                or player.get("nickname")
+                or f"ID:{player.get('telegram_user_id', 'unknown')}"
+            )
             hp = int(player.get("hp", 0) or 0)
-            lines.append(f"{icon} {nick} — <b>{hp}</b> HP")
+
+            lines.append(f"{icon} {escape(str(nick))} — <b>{hp}</b> HP")
 
         return "\n".join(lines)
 
