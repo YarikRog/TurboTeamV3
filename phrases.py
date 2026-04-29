@@ -229,7 +229,7 @@ START_PHRASES = [
 
 def get_phrase(category, **kwargs):
     """Універсальна функція для отримання рандомної фрази"""
-        phrase_map = {
+    phrase_map = {
         "welcome": WELCOME_PHRASES,
         "training": TRAINING_PHRASES,
         "rest": REST_PHRASES,
