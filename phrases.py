@@ -170,6 +170,11 @@ MORNING_MOTIVATION = [
     "Вставай, монстре! 🦁 Світ не чекає на слабких. Твоє тренування сьогодні — це твій квиток у ТОП-1 неділі. Роби бруд! 🦾🔥"
 ]
 
+# 12.5. ОБІДНЄ НАГАДУВАННЯ (12:00)
+MIDDAY_MOTIVATION = [
+    "Половина дня вже підкрадається 👀\nХто ще не рухався — не чекай вечора.\n\nGym, Street або хоча б Rest — головне не випасти з гри 🔥"
+]
+
 # 13. ВЕЧІРНЯ МОТИВАЦІЯ (21:00)
 EVENING_MOTIVATION = [
     "День добігає кінця. 🏁 Хто сьогодні єбашив — ви справжні машини, закидайте відновлення! 🥩 Ті, хто промовчав — сподіваюсь, ви просто берегли сили на завтра. 💪💤",
@@ -191,6 +196,11 @@ DAY_MOTIVATION = [
     "День любить дисципліну. Якщо ще не відмітився — саме час це виправити, бро. 🎯",
     "Невелике нагадування від TurboTeam: результат сам себе не зробить. Пора діяти! 🔥",
     "До вечора ще далеко. А значить, у тебе ще є повноцінний шанс увірватися в сьогоднішній рейтинг. 📈"
+]
+
+# 13.7. ВЕЧІРНІЙ ПІК (18:30)
+PEAK_MOTIVATION = [
+    "Вечірній контроль, банда 👀\nХто сьогодні ще нічого не зробив — ви серйозно?\n\nGym, Street або Rest. Не залишай день порожнім 🔥"
 ]
 
 # 14. РОЗДУПЛЯТОР
@@ -219,7 +229,7 @@ START_PHRASES = [
 
 def get_phrase(category, **kwargs):
     """Універсальна функція для отримання рандомної фрази"""
-    phrase_map = {
+        phrase_map = {
         "welcome": WELCOME_PHRASES,
         "training": TRAINING_PHRASES,
         "rest": REST_PHRASES,
@@ -232,7 +242,9 @@ def get_phrase(category, **kwargs):
         "fake_report": FAKE_REPORT_PHRASES,
         "winner": WEEKLY_WINNER_PHRASES,
         "morning": MORNING_MOTIVATION,
+        "midday": MIDDAY_MOTIVATION,
         "day": DAY_MOTIVATION,
+        "peak": PEAK_MOTIVATION,
         "evening": EVENING_MOTIVATION,
         "inactive": INACTIVE_PHRASES,
         "streak": STREAK_PHRASES,
