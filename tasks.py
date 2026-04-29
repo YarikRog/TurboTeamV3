@@ -17,6 +17,10 @@ from database import (
     get_kyiv_now,
     get_weekly_top_users,
 )
+from supabase_db import (
+    get_all_users,
+    get_user_activities,
+)
 from cache import get_data, set_data, delete_data
 
 logger = logging.getLogger(__name__)
@@ -25,6 +29,10 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 AUTO_REMOVE_BAN_DAYS = 7
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
+
+SECOND_DAY_REMINDER_DAYS = 2
+SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
+SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
 
 
 # ==============================================================================
@@ -58,6 +66,53 @@ def _get_auto_removed_key(user_id: int) -> str:
 
 def _get_last_warning_key(user_id: int) -> str:
     return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
+
+
+def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
+    return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
+
+
+def _parse_activity_created_at(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+
+    return dt.astimezone(KYIV_TZ)
+
+
+def _is_real_activity(activity: dict) -> bool:
+    action_name = str(activity.get("action_name") or "").strip()
+    return action_name in {"Gym", "Street", "Rest", "Skipped"}
+
+
+def _get_last_real_activity_date(activities: list[dict]):
+    last_activity_date = None
+
+    for activity in activities:
+        if not _is_real_activity(activity):
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        activity_date = created_at.date()
+        if last_activity_date is None or activity_date > last_activity_date:
+            last_activity_date = activity_date
+
+    return last_activity_date
 
 
 async def build_top3_text() -> str:
@@ -131,6 +186,19 @@ def build_return_group_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def build_second_day_reminder_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🏎️ Повернутися в групу",
+                    url=SECOND_DAY_REMINDER_LINK,
+                ),
+            ]
+        ]
+    )
+
+
 def build_motivation_text(phrase_key: str, top3: str) -> str:
     """
     Builds HTML-safe motivation text.
@@ -161,6 +229,22 @@ async def send_morning_motivation(bot) -> None:
 
 
 @safe_job
+async def send_midday_motivation(bot) -> None:
+    """12:00 Kyiv — midday motivation + top-3 + action buttons."""
+    top3 = await build_top3_text()
+    text = build_motivation_text("midday", top3)
+    keyboard = await build_training_action_keyboard(bot)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    logger.info("[TASKS] Midday motivation sent")
+
+
+@safe_job
 async def send_day_motivation(bot) -> None:
     """15:00 Kyiv — day motivation + top-3 + action buttons."""
     top3 = await build_top3_text()
@@ -177,6 +261,22 @@ async def send_day_motivation(bot) -> None:
 
 
 @safe_job
+async def send_peak_motivation(bot) -> None:
+    """18:30 Kyiv — peak evening motivation + top-3 + action buttons."""
+    top3 = await build_top3_text()
+    text = build_motivation_text("peak", top3)
+    keyboard = await build_training_action_keyboard(bot)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    logger.info("[TASKS] Peak motivation sent")
+
+
+@safe_job
 async def send_evening_motivation(bot) -> None:
     """21:00 Kyiv — evening motivation + top-3."""
     top3 = await build_top3_text()
@@ -188,6 +288,98 @@ async def send_evening_motivation(bot) -> None:
         parse_mode="HTML",
     )
     logger.info("[TASKS] Evening motivation sent")
+
+
+@safe_job
+async def send_second_day_private_reminder(bot) -> None:
+    """
+    19:30 Kyiv every day — private reminder for users with exactly 2 days
+    without real activity: Gym, Street, Rest, Skipped.
+    Sends once per user per Kyiv date.
+    """
+    try:
+        users = await get_all_users()
+        if not users:
+            logger.info("[TASKS] Second-day private reminder: no users")
+            return
+
+        today = get_kyiv_now().date()
+        today_str = today.strftime("%Y-%m-%d")
+        sent_count = 0
+        skipped_count = 0
+
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+
+            if not telegram_user_id or not user_uuid:
+                skipped_count += 1
+                continue
+
+            user_id = int(telegram_user_id)
+
+            reminder_key = _get_second_day_reminder_key(user_id, today_str)
+            already_sent = await get_data(reminder_key)
+            if already_sent is not None:
+                skipped_count += 1
+                continue
+
+            removed_key = _get_auto_removed_key(user_id)
+            already_removed = await get_data(removed_key)
+            if already_removed is not None:
+                skipped_count += 1
+                continue
+
+            try:
+                activities = await get_user_activities(str(user_uuid), limit=100)
+            except Exception as e:
+                logger.error(
+                    f"[TASKS] Failed to get activities for second-day reminder user_id={user_id}: {e}",
+                    exc_info=True,
+                )
+                skipped_count += 1
+                continue
+
+            last_activity_date = _get_last_real_activity_date(activities)
+
+            if last_activity_date is None:
+                silent_days = SECOND_DAY_REMINDER_DAYS
+            else:
+                silent_days = (today - last_activity_date).days
+
+            if silent_days != SECOND_DAY_REMINDER_DAYS:
+                skipped_count += 1
+                continue
+
+            text = (
+                "Бро, ти вже 2 дні без активності 👀\n\n"
+                "Ще не критично, але ти починаєш випадати з гри.\n"
+                "Зроби сьогодні хоча б мінімалку — Gym, Street або Rest, "
+                "щоб не зливати ритм 🔥"
+            )
+
+            try:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=build_second_day_reminder_keyboard(),
+                )
+                await set_data(reminder_key, "1", ex=172800)
+                sent_count += 1
+            except Exception as e:
+                logger.debug(
+                    f"[TASKS] Failed to send second-day private reminder user_id={user_id}: {e}"
+                )
+                skipped_count += 1
+
+        logger.info(
+            "[TASKS] Second-day private reminder finished. Sent: %s, skipped: %s",
+            sent_count,
+            skipped_count,
+        )
+
+    except Exception as e:
+        logger.error(f"[TASKS] Second-day private reminder failed: {e}", exc_info=True)
 
 
 @safe_job
@@ -448,13 +640,22 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
         inactive_reminder, "cron", hour=11, minute=0, args=[bot]
     )
     scheduler.add_job(
-        auto_remove_inactive_users, "cron", hour=12, minute=0, args=[bot]
+        send_midday_motivation, "cron", hour=12, minute=0, args=[bot]
+    )
+    scheduler.add_job(
+        auto_remove_inactive_users, "cron", hour=12, minute=5, args=[bot]
     )
     scheduler.add_job(
         send_day_motivation, "cron", hour=15, minute=0, args=[bot]
     )
     scheduler.add_job(
+        send_peak_motivation, "cron", hour=18, minute=30, args=[bot]
+    )
+    scheduler.add_job(
         send_last_day_warning, "cron", hour=19, minute=0, args=[bot]
+    )
+    scheduler.add_job(
+        send_second_day_private_reminder, "cron", hour=19, minute=30, args=[bot]
     )
     scheduler.add_job(
         send_evening_motivation, "cron", hour=21, minute=0, args=[bot]
