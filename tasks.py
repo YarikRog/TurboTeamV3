@@ -208,6 +208,15 @@ def build_motivation_text(phrase_key: str, top3: str) -> str:
     return phrase + top3
 
 
+def build_html_phrase_text(phrase_key: str, top3: str) -> str:
+    """
+    Builds text for phrase categories that intentionally contain safe HTML tags.
+    Use only for internally controlled phrases, not user-generated content.
+    """
+    phrase = str(get_phrase(phrase_key))
+    return phrase + top3
+
+
 # ==============================================================================
 # SCHEDULED TASKS
 # ==============================================================================
@@ -246,9 +255,9 @@ async def send_midday_motivation(bot) -> None:
 
 @safe_job
 async def send_day_motivation(bot) -> None:
-    """15:00 Kyiv — day motivation + top-3 + action buttons."""
+    """15:00 Kyiv — TurboFact + top-3 + action buttons."""
     top3 = await build_top3_text()
-    text = build_motivation_text("day", top3)
+    text = build_html_phrase_text("turbo_fact", top3)
     keyboard = await build_training_action_keyboard(bot)
 
     await bot.send_message(
@@ -257,7 +266,7 @@ async def send_day_motivation(bot) -> None:
         parse_mode="HTML",
         reply_markup=keyboard,
     )
-    logger.info("[TASKS] Day motivation sent")
+    logger.info("[TASKS] TurboFact sent")
 
 
 @safe_job
