@@ -524,7 +524,12 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     )
 
     if msg is not None:
-        safe_create_task(auto_delete(msg, 15), name=f"auto_delete_static_{event.user_id}_{action_name}")
+        delete_after = 300 if action_name == "Rest" else 60
+
+        safe_create_task(
+            auto_delete(msg, delete_after),
+            name=f"auto_delete_static_{event.user_id}_{action_name}",
+        )
 
     return True
 
