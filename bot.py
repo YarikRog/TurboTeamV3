@@ -124,6 +124,9 @@ async def test_award(message: types.Message):
 
 @dp.message(Command("sbtest"))
 async def supabase_test(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
     try:
         sb = get_supabase()
         response = sb.table("users").select("id", count="exact").limit(1).execute()
@@ -139,6 +142,9 @@ async def supabase_test(message: types.Message):
 
 @dp.message(Command("sbadd"))
 async def supabase_add_user(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
     try:
         telegram_user_id = message.from_user.id
         nickname = message.from_user.username or message.from_user.first_name
@@ -170,6 +176,9 @@ async def supabase_add_user(message: types.Message):
 
 @dp.message(Command("sbaddactivity"))
 async def supabase_add_activity(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
     try:
         telegram_user_id = message.from_user.id
         existing_user = await get_user_by_telegram_id(telegram_user_id)
@@ -194,6 +203,9 @@ async def supabase_add_activity(message: types.Message):
 
 @dp.message(Command("sbaddref"))
 async def supabase_add_ref(message: types.Message, command: CommandObject):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
     try:
         args = (command.args or "").strip()
         if not args.isdigit():
@@ -229,6 +241,9 @@ async def supabase_add_ref(message: types.Message, command: CommandObject):
 
 @dp.message(Command("sbme"))
 async def supabase_me(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
     try:
         telegram_user_id = message.from_user.id
         user = await get_user_by_telegram_id(telegram_user_id)
