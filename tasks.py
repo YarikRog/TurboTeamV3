@@ -409,10 +409,13 @@ async def inactive_reminder(bot) -> None:
         f"Бро, ти де зник? Вже 3 дні тиші! "
         f"Повертайся в стрій, HP самі себе не зароблять! 🔥"
     )
+    keyboard = await build_training_action_keyboard(bot)
+
     await bot.send_message(
         chat_id=REPORTS_GROUP_ID,
         text=text,
         parse_mode="HTML",
+        reply_markup=keyboard,
     )
     logger.info(f"[TASKS] Inactive reminder triggered for {len(inactive_list)} users")
 
