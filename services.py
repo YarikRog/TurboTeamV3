@@ -31,9 +31,11 @@ REPORT_META_TTL = 172800  # 48 hours
 # ==============================================================================
 # STREAK PARAMETERS
 # ==============================================================================
-STREAK_BONUS_3_DAYS = 50
-STREAK_BONUS_5_DAYS = 100
+STREAK_BONUS_3_DAYS = 100
+STREAK_BONUS_5_DAYS = 150
 STREAK_BONUS_7_DAYS = 200
+
+STREAK_BONUS_REDIS_PREFIX = "turbo:streak_bonus"
 
 # ==============================================================================
 # TRAINING STATUS LEVELS
@@ -172,6 +174,55 @@ async def auto_delete(message: Any, delay: int = 5) -> None:
         await message.delete()
     except Exception as e:
         logger.debug(f"[AUTO_DELETE] Failed to delete message: {e}")
+
+
+def _get_current_turbo_week_period() -> tuple[datetime, datetime]:
+    """
+    Current TurboTeam week.
+    Same logic as rating:
+    Sunday 20:00 Kyiv -> next Sunday 20:00 Kyiv.
+    """
+    now = get_kyiv_now()
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    if now < current_sunday_20:
+        week_start = current_sunday_20 - timedelta(days=7)
+    else:
+        week_start = current_sunday_20
+
+    week_end = week_start + timedelta(days=7)
+    return week_start, week_end
+
+
+def _get_streak_bonus_key(user_id: int, week_start: datetime, streak: int) -> str:
+    week_key = week_start.strftime("%Y-%m-%d_%H-%M")
+    return f"{STREAK_BONUS_REDIS_PREFIX}:{user_id}:{week_key}:{streak}"
+
+
+def _get_seconds_until_datetime(target_dt: datetime) -> int:
+    now = get_kyiv_now()
+
+    if target_dt.tzinfo is None:
+        target_dt = KYIV_TZ.localize(target_dt)
+    else:
+        target_dt = target_dt.astimezone(KYIV_TZ)
+
+    return max(1, int((target_dt - now).total_seconds()))
+
+
+def _format_days_uk(days: int) -> str:
+    if days % 10 == 1 and days % 100 != 11:
+        return "день"
+
+    if 2 <= days % 10 <= 4 and not (12 <= days % 100 <= 14):
+        return "дні"
+
+    return "днів"
 
 
 # ==============================================================================
@@ -447,7 +498,7 @@ class ActivityService:
     @handle_exceptions(default_return=(0, 0))
     async def check_and_grant_streak_bonus(user_id: int, nickname: str) -> tuple[int, int]:
         """
-        Checks streak and grants bonus.
+        Checks streak and grants bonus once per Turbo-week for 3/5/7-day milestones.
         Returns (bonus, streak).
         """
         from database import get_user_stats
@@ -463,13 +514,50 @@ class ActivityService:
             bonus = STREAK_BONUS_3_DAYS
         elif streak == 5:
             bonus = STREAK_BONUS_5_DAYS
-        elif streak >= 7 and streak % 7 == 0:
+        elif streak == 7:
             bonus = STREAK_BONUS_7_DAYS
 
-        if bonus > 0:
-            action_label = f"🔥 Streak Bonus ({streak} days)"
-            await add_activity(user_id, nickname, action_label, bonus)
-            logger.info(f"[STREAK] Bonus +{bonus} HP granted to {nickname} for {streak} days")
+        if bonus <= 0:
+            return 0, streak
+
+        week_start, week_end = _get_current_turbo_week_period()
+        bonus_key = _get_streak_bonus_key(user_id, week_start, streak)
+
+        already_granted = await get_data(bonus_key)
+        if already_granted is not None:
+            logger.info(
+                "[STREAK] Bonus already granted this Turbo-week: uid=%s streak=%s",
+                user_id,
+                streak,
+            )
+            return 0, streak
+
+        ex_seconds = _get_seconds_until_datetime(week_end)
+
+        await set_data(
+            bonus_key,
+            {
+                "user_id": user_id,
+                "nickname": str(nickname),
+                "streak": streak,
+                "bonus": bonus,
+                "week_start": week_start.isoformat(),
+                "week_end": week_end.isoformat(),
+            },
+            ex=ex_seconds,
+        )
+
+        action_label = f"🔥 Streak Bonus ({streak} days)"
+        await add_activity(user_id, nickname, action_label, bonus)
+
+        logger.info(
+            "[STREAK] Bonus +%s HP granted to %s for %s days. key=%s ex=%s",
+            bonus,
+            nickname,
+            streak,
+            bonus_key,
+            ex_seconds,
+        )
 
         return bonus, streak
 
@@ -623,10 +711,29 @@ class ActivityService:
         )
 
         if streak_bonus > 0:
+            days_word = _format_days_uk(streak_days)
+
             await message.answer(
                 f"🔥 <b>STREAK BONUS!</b>\n"
-                f"Серія: {streak_days} дні\n"
-                f"+{streak_bonus} HP",
+                f"Серія: <b>{streak_days}</b> {days_word}\n"
+                f"+<b>{streak_bonus}</b> HP",
+                parse_mode="HTML",
+            )
+
+            mention_text = (
+                f"@{escape(str(user.username))}"
+                if user.username
+                else escape(str(user.full_name or user.first_name or "Учасник"))
+            )
+
+            await message.bot.send_message(
+                REPORTS_GROUP_ID,
+                (
+                    f"🔥 <b>STREAK BONUS!</b>\n\n"
+                    f"{mention_text} тримає серію: <b>{streak_days}</b> {days_word} підряд\n"
+                    f"+<b>{streak_bonus}</b> HP за дисципліну.\n\n"
+                    f"Оце вже не випадковість — це система 🏎️🔥"
+                ),
                 parse_mode="HTML",
             )
 
@@ -676,6 +783,9 @@ class ActivityService:
                 f"\n🎖️ Рівень: {escape(str(current_status_title))}"
                 f"\n📊 Тренувань: {training_count}"
             )
+
+            if streak_days > 0:
+                report_text += f"\n🔥 Streak: {streak_days} {_format_days_uk(streak_days)}"
 
         group_text_msg = await message.bot.send_message(
             REPORTS_GROUP_ID,
