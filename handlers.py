@@ -153,6 +153,16 @@ def _word_actions(count: int) -> str:
     return "дія" if count == 1 else "дії" if 2 <= count <= 4 else "дій"
 
 
+def _word_days(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return "день"
+
+    if 2 <= count % 10 <= 4 and not (12 <= count % 100 <= 14):
+        return "дні"
+
+    return "днів"
+
+
 def _format_stat_block(
     title: str,
     stats: dict[str, int],
