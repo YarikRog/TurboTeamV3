@@ -9,7 +9,7 @@ from aiogram.types import Message, User
 
 from cache import get_data, set_data, set_flag, KeyManager
 from services import safe_create_task, auto_delete
-from supabase_db import get_weekly_rating
+from supabase_db import get_weekly_rating, get_user_by_telegram_id, get_user_activities
 
 logger = logging.getLogger(__name__)
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
@@ -42,6 +42,84 @@ def _get_current_week_period() -> tuple[str, str]:
     return week_start.isoformat(), week_end.isoformat()
 
 
+def _parse_activity_created_at(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+
+    return dt.astimezone(KYIV_TZ)
+
+
+def _calculate_training_streak(activities: list[dict]) -> int:
+    training_actions = {"Gym", "Street"}
+    training_dates = set()
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+        if action_name not in training_actions:
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        training_dates.add(created_at.date())
+
+    streak = 0
+    cursor = datetime.now(KYIV_TZ).date()
+
+    while cursor in training_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return streak
+
+
+def _format_days_uk(days: int) -> str:
+    if days % 10 == 1 and days % 100 != 11:
+        return "день"
+
+    if 2 <= days % 10 <= 4 and not (12 <= days % 100 <= 14):
+        return "дні"
+
+    return "днів"
+
+
+async def _get_user_streak_by_telegram_id(telegram_user_id: int) -> int:
+    try:
+        user_row = await get_user_by_telegram_id(int(telegram_user_id))
+        if not user_row:
+            return 0
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            return 0
+
+        activities = await get_user_activities(str(user_uuid), limit=500)
+        return _calculate_training_streak(activities)
+
+    except Exception as e:
+        logger.error(
+            "[RATINGS] Failed to calculate streak for telegram_user_id=%s: %s",
+            telegram_user_id,
+            e,
+            exc_info=True,
+        )
+        return 0
+
+
 # ==============================================================================
 # ОТРИМАННЯ ДАНИХ РЕЙТИНГУ (ULTRA SAFE)
 # ==============================================================================
@@ -66,29 +144,39 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 
         normalized_rows = []
         for row in ranking_rows:
+            telegram_user_id = row.get("telegram_user_id")
+            streak = 0
+
+            if telegram_user_id:
+                streak = await _get_user_streak_by_telegram_id(int(telegram_user_id))
+
             normalized_rows.append({
-                "telegram_user_id": row.get("telegram_user_id"),
+                "telegram_user_id": telegram_user_id,
                 "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
                 "hp": int(row.get("hp", 0) or 0),
                 "referrals_count": int(row.get("referrals_count", 0) or 0),
                 "rank": int(row.get("rank", 0) or 0),
+                "streak": int(streak),
             })
 
         top_list = normalized_rows[:3]
 
         user_rank = "?"
         user_hp = 0
+        user_streak = 0
 
         for player in normalized_rows:
             if int(player.get("telegram_user_id", 0) or 0) == int(user_id):
                 user_rank = int(player.get("rank", 0) or 0) or "?"
                 user_hp = int(player.get("hp", 0) or 0)
+                user_streak = int(player.get("streak", 0) or 0)
                 break
 
         result = {
             "top": top_list,
             "user_rank": user_rank,
             "user_hp": user_hp,
+            "user_streak": user_streak,
         }
 
         ttl = random.randint(60, 120)
@@ -107,7 +195,7 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
 
 async def show_rating_for_user(message: Message, actor: User) -> Optional[Message]:
     """
-    Формує та виводить рейтинг з рефералами під кожним гравцем і самознищенням.
+    Формує та виводить рейтинг з рефералами й streak під кожним гравцем.
     HTML-safe version.
     """
     uid = actor.id
@@ -135,6 +223,7 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
         top_list = data.get("top", [])
         user_rank = escape(str(data.get("user_rank", "?")))
         user_hp = int(data.get("user_hp", 0) or 0)
+        user_streak = int(data.get("user_streak", 0) or 0)
 
         text = "🏆 <b>РЕЙТИНГ ТИЖНЯ</b>\n\n"
 
@@ -151,13 +240,16 @@ async def show_rating_for_user(message: Message, actor: User) -> Optional[Messag
             nick = escape(str(player.get("nick", "Unknown")))
             hp = int(player.get("hp", 0) or 0)
             refs = int(player.get("referrals_count", 0) or 0)
+            streak = int(player.get("streak", 0) or 0)
 
             text += f"{icon} {nick} — <b>{hp}</b> HP\n"
-            text += f"   Рефералів: <b>{refs}</b>\n\n"
+            text += f"   Рефералів: <b>{refs}</b>\n"
+            text += f"   Streak: <b>{streak}</b> {_format_days_uk(streak)} 🔥\n\n"
 
         text += (
             "----------------\n"
             f"Твоє місце: <b>{user_rank}</b> | Твої HP: <b>{user_hp}</b>"
+            f"\nТвій Streak: <b>{user_streak}</b> {_format_days_uk(user_streak)} 🔥"
         )
 
     except Exception as e:
