@@ -645,7 +645,7 @@ async def handle_my_profile(message: Message):
             f"🏷️ Нік: <b>{nickname_html}</b>\n"
             f"🎖️ Статус: <b>{status_title_html}</b>\n"
             f"⚡ Загальний HP: <b>{hp_total}</b>\n"
-            f"🔥 Streak: <b>{streak}</b>\n\n"
+            f"🔥 Streak: <b>{streak}</b> {_word_days(streak)}\n\n"
             f"📊 <b>АКТИВНІСТЬ</b>\n"
             f"🏋️ Gym: <b>{gym_count}</b>\n"
             f"🦾 Street: <b>{street_count}</b>\n"
