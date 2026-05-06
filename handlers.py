@@ -115,6 +115,14 @@ def _get_last_finished_week_period() -> tuple[datetime, datetime]:
     return week_start, week_end
 
 
+def _get_previous_finished_week_period() -> tuple[datetime, datetime]:
+    last_week_start, _ = _get_last_finished_week_period()
+    previous_week_end = last_week_start
+    previous_week_start = previous_week_end - timedelta(days=7)
+
+    return previous_week_start, previous_week_end
+
+
 def _format_period(dt: datetime) -> str:
     return dt.strftime("%d.%m %H:%M")
 
@@ -161,6 +169,93 @@ def _word_days(count: int) -> str:
         return "дні"
 
     return "днів"
+
+
+def _format_delta(current_value, previous_value, suffix: str = "") -> str:
+    try:
+        diff = current_value - previous_value
+    except Exception:
+        return "—"
+
+    if isinstance(diff, float):
+        diff_text = f"{diff:+.1f}"
+    else:
+        diff_text = f"{int(diff):+d}"
+
+    if suffix:
+        return f"{diff_text}{suffix}"
+
+    return diff_text
+
+
+def _build_promo_stats_text(data: dict) -> str:
+    champion = escape(str(data["champion_nickname"]))
+    turbo_index = int(data["turbo_index"])
+    turbo_level = escape(str(data["turbo_level"]))
+
+    return (
+        f"🔥 <b>TURBOTEAM WEEKLY IMPACT</b>\n\n"
+        f"🔥 <b>Turbo Index: {turbo_index}/100</b>\n"
+        f"Рівень залучення: <b>{turbo_level}</b>\n\n"
+        f"📅 Період:\n"
+        f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
+        f"👥 Учасників: <b>{data['total_users']}</b>\n"
+        f"⚡ Активних: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
+        f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
+        f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
+        f"🔁 Реферальних переходів: <b>{data['referrals_count']}</b>\n"
+        f"🏆 HP видано: <b>{data['hp_total']}</b>\n"
+        f"🔥 Середня активність: <b>{data['avg_activity']}</b> дії на активного учасника\n"
+        f"🥇 Чемпіон тижня: <b>@{champion}</b> — <b>{data['champion_hp']} HP</b>\n\n"
+        f"TurboTeam перетворює чат на гру: люди тренуються, звітують, змагаються і повертаються."
+    )
+
+
+def _build_promo_compare_text(current: dict, previous: dict) -> str:
+    current_text = _build_promo_stats_text(current)
+    previous_champion = escape(str(previous["champion_nickname"]))
+
+    compare_text = (
+        f"\n\n━━━━━━━━━━━━━━\n\n"
+        f"📊 <b>ПОРІВНЯННЯ З МИНУЛИМ ТИЖНЕМ</b>\n\n"
+        f"📅 Минулий період:\n"
+        f"{_format_period(previous['week_start'])} — {_format_period(previous['week_end'])}\n\n"
+        f"🔥 Turbo Index: <b>{previous['turbo_index']}</b> → <b>{current['turbo_index']}</b> "
+        f"({_format_delta(current['turbo_index'], previous['turbo_index'])})\n"
+        f"⚡ Активних: <b>{previous['active_users']}</b> → <b>{current['active_users']}</b> "
+        f"({_format_delta(current['active_users'], previous['active_users'])})\n"
+        f"🏋️ Тренувань: <b>{previous['training_count']}</b> → <b>{current['training_count']}</b> "
+        f"({_format_delta(current['training_count'], previous['training_count'])})\n"
+        f"🔁 Рефералів: <b>{previous['referrals_count']}</b> → <b>{current['referrals_count']}</b> "
+        f"({_format_delta(current['referrals_count'], previous['referrals_count'])})\n"
+        f"🏆 HP: <b>{previous['hp_total']}</b> → <b>{current['hp_total']}</b> "
+        f"({_format_delta(current['hp_total'], previous['hp_total'])})\n"
+        f"🔥 Середня активність: <b>{previous['avg_activity']}</b> → <b>{current['avg_activity']}</b> "
+        f"({_format_delta(float(current['avg_activity']), float(previous['avg_activity']))})\n\n"
+        f"🥇 Чемпіон минулого тижня: <b>@{previous_champion}</b> — <b>{previous['champion_hp']} HP</b>"
+    )
+
+    if int(current["turbo_index"]) > int(previous["turbo_index"]):
+        conclusion = "Висновок: тиждень сильніший за попередній. Є ріст, банда прокидається 🔥"
+    elif int(current["turbo_index"]) < int(previous["turbo_index"]):
+        conclusion = "Висновок: тиждень просів. Треба підсилювати мотивацію й повертати людей у гру 👀"
+    else:
+        conclusion = "Висновок: рівень тримається стабільно. Тепер задача — зробити наступний тиждень сильнішим 🏎️"
+
+    return current_text + compare_text + "\n\n" + conclusion
+
+
+def _build_promo_compare_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📊 Минулий тиждень",
+                    callback_data="promo_compare_previous",
+                )
+            ]
+        ]
+    )
 
 
 def _format_stat_block(
