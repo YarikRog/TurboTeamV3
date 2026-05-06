@@ -399,11 +399,13 @@ def _calculate_turbo_index(
     return turbo_index, level
 
 
-async def _build_weekly_impact_data(finished_week: bool = True) -> dict:
+async def _build_weekly_impact_data(finished_week: bool = True, previous_week: bool = False) -> dict:
     users = await get_all_users()
     total_users = len(users)
 
-    if finished_week:
+    if previous_week:
+        week_start, week_end = _get_previous_finished_week_period()
+    elif finished_week:
         week_start, week_end = _get_last_finished_week_period()
     else:
         week_start, week_end = _get_current_week_period()
