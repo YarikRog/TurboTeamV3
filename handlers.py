@@ -1032,7 +1032,7 @@ async def handle_promo_stats(m: Message):
             parse_mode="HTML",
             reply_markup=_build_promo_compare_keyboard(),
         )
-        safe_create_task(auto_delete(sent, 300))
+        safe_create_task(auto_delete(sent, 900))
 
         try:
             await m.delete()
