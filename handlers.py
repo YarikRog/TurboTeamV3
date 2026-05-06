@@ -928,29 +928,13 @@ async def handle_promo_stats(m: Message):
 
     try:
         data = await _build_weekly_impact_data(finished_week=True)
+        text = _build_promo_stats_text(data)
 
-        champion = escape(str(data["champion_nickname"]))
-        turbo_index = int(data["turbo_index"])
-        turbo_level = escape(str(data["turbo_level"]))
-
-        text = (
-            f"🔥 <b>TURBOTEAM WEEKLY IMPACT</b>\n\n"
-            f"🔥 <b>Turbo Index: {turbo_index}/100</b>\n"
-            f"Рівень залучення: <b>{turbo_level}</b>\n\n"
-            f"📅 Період:\n"
-            f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
-            f"👥 Учасників: <b>{data['total_users']}</b>\n"
-            f"⚡ Активних: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
-            f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
-            f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
-            f"🔁 Реферальних переходів: <b>{data['referrals_count']}</b>\n"
-            f"🏆 HP видано: <b>{data['hp_total']}</b>\n"
-            f"🔥 Середня активність: <b>{data['avg_activity']}</b> дії на активного учасника\n"
-            f"🥇 Чемпіон тижня: <b>@{champion}</b> — <b>{data['champion_hp']} HP</b>\n\n"
-            f"TurboTeam перетворює чат на гру: люди тренуються, звітують, змагаються і повертаються."
+        sent = await m.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=_build_promo_compare_keyboard(),
         )
-
-        sent = await m.answer(text, parse_mode="HTML")
         safe_create_task(auto_delete(sent, 300))
 
         try:
@@ -962,6 +946,32 @@ async def handle_promo_stats(m: Message):
         logger.error(f"[HANDLERS] handle_promo_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати promo-статистику.")
         safe_create_task(auto_delete(sent, 10))
+
+
+@router.callback_query(F.data == "promo_compare_previous")
+async def handle_promo_compare_previous(callback: CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer()
+        return
+
+    try:
+        current_data = await _build_weekly_impact_data(finished_week=True)
+        previous_data = await _build_weekly_impact_data(
+            finished_week=True,
+            previous_week=True,
+        )
+
+        text = _build_promo_compare_text(current_data, previous_data)
+
+        await callback.message.edit_text(
+            text,
+            parse_mode="HTML",
+        )
+        await callback.answer("Порівняння додано ✅")
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_promo_compare_previous error: {e}", exc_info=True)
+        await callback.answer("⚠️ Не вдалося зібрати порівняння.", show_alert=True)
 
 
 @router.message(Command("impactstats"))
