@@ -213,22 +213,20 @@ async def _has_activity_today(
         return False
 
     try:
-        activities = await get_user_activities(str(supabase_user_id), limit=200)
+        activities = await get_user_activities(str(supabase_user_id), limit=1000)
     except Exception as e:
         logger.error(f"[DB] failed to read activities: user_id={user_id}, error={e}")
         return False
 
     today = get_kyiv_now().date()
+    normalized_action = str(action_name).strip()
     normalized_video_id = str(video_id or "").strip()
+
+    action_count = 0
+    rollback_count = 0
 
     for activity in activities:
         current_action_name = str(activity.get("action_name", "")).strip()
-
-        if current_action_name.endswith("Rollback"):
-            continue
-
-        if current_action_name != str(action_name):
-            continue
 
         created_at = _parse_activity_created_at(activity.get("created_at"))
         if not created_at or created_at.date() != today:
@@ -236,14 +234,17 @@ async def _has_activity_today(
 
         existing_video_id = str(activity.get("video_id") or "").strip()
 
-        if normalized_video_id:
-            if existing_video_id == normalized_video_id:
-                return True
-            continue
+        if current_action_name == normalized_action:
+            if normalized_video_id:
+                if existing_video_id == normalized_video_id:
+                    action_count += 1
+            else:
+                action_count += 1
 
-        return True
+        elif current_action_name == f"{normalized_action} Rollback":
+            rollback_count += 1
 
-    return False
+    return action_count > rollback_count
 
 
 API_SEMAPHORE = asyncio.Semaphore(20)
