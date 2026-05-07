@@ -7,6 +7,7 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from alerts import notify_admins_about_error
 from config import REPORTS_GROUP_ID, GROUP_LINK
 from phrases import get_phrase
 from awards import sunday_final_logic
@@ -39,10 +40,25 @@ SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
 # SAFE DECORATOR FOR SCHEDULED JOBS
 # ==============================================================================
 
+def _extract_bot_from_args(args, kwargs):
+    """
+    Scheduled jobs in this file usually receive bot as the first argument.
+    This helper keeps alerts safe if a job signature changes later.
+    """
+    if args:
+        return args[0]
+
+    if kwargs and "bot" in kwargs:
+        return kwargs["bot"]
+
+    return None
+
+
 def safe_job(func):
     """
     Wrapper for APScheduler jobs.
     Ensures one failed job does not break the scheduler.
+    Sends short Telegram alert to admins for critical scheduled job errors.
     """
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
@@ -53,6 +69,14 @@ def safe_job(func):
                 f"[SCHEDULER] Error in job {func.__name__}: {e}",
                 exc_info=True,
             )
+
+            bot = _extract_bot_from_args(args, kwargs)
+            await notify_admins_about_error(
+                bot=bot,
+                place=f"tasks.{func.__name__}",
+                error=e,
+            )
+
     return wrapper
 
 
@@ -346,6 +370,11 @@ async def send_second_day_private_reminder(bot) -> None:
                     f"[TASKS] Failed to get activities for second-day reminder user_id={user_id}: {e}",
                     exc_info=True,
                 )
+                await notify_admins_about_error(
+                    bot=bot,
+                    place="tasks.send_second_day_private_reminder.get_user_activities",
+                    error=e,
+                )
                 skipped_count += 1
                 continue
 
@@ -389,6 +418,11 @@ async def send_second_day_private_reminder(bot) -> None:
 
     except Exception as e:
         logger.error(f"[TASKS] Second-day private reminder failed: {e}", exc_info=True)
+        await notify_admins_about_error(
+            bot=bot,
+            place="tasks.send_second_day_private_reminder",
+            error=e,
+        )
 
 
 @safe_job
@@ -464,6 +498,11 @@ async def send_last_day_warning(bot) -> None:
                 f"[TASKS] Failed to send last-day warning user_id={user_id}: {e}",
                 exc_info=True,
             )
+            await notify_admins_about_error(
+                bot=bot,
+                place=f"tasks.send_last_day_warning.user_id_{user_id}",
+                error=e,
+            )
 
     logger.info(f"[TASKS] Last-day warning finished. Warned: {warned_count}")
 
@@ -533,6 +572,11 @@ async def auto_remove_inactive_users(bot) -> None:
                 f"[TASKS] Failed to auto-remove user_id={user_id}: {e}",
                 exc_info=True,
             )
+            await notify_admins_about_error(
+                bot=bot,
+                place=f"tasks.auto_remove_inactive_users.user_id_{user_id}",
+                error=e,
+            )
 
     logger.info(f"[TASKS] Auto-removal finished. Removed: {removed_count}")
 
@@ -596,6 +640,11 @@ async def auto_unban_inactive_users(bot) -> None:
                 )
             except Exception as e:
                 logger.error(f"[TASKS] Failed to unban user_id={user_id}: {e}", exc_info=True)
+                await notify_admins_about_error(
+                    bot=bot,
+                    place=f"tasks.auto_unban_inactive_users.unban_user_id_{user_id}",
+                    error=e,
+                )
                 continue
 
             try:
