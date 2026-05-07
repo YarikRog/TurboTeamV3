@@ -30,6 +30,10 @@ INACTIVE_DAYS_THRESHOLD = 3
 LAST_WARNING_DAYS_THRESHOLD = 7
 AUTO_REMOVE_DAYS_THRESHOLD = 8
 
+REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
+TRAINING_ACTIVITY_ACTIONS = {"Gym", "Street"}
+INACTIVITY_ACTIVITY_LIMIT = 1000
+
 
 def get_kyiv_now() -> datetime:
     return datetime.now(KYIV_TZ)
@@ -64,6 +68,14 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
         dt = pytz.UTC.localize(dt)
 
     return dt.astimezone(KYIV_TZ)
+
+
+def _is_real_activity(action_name: str) -> bool:
+    return str(action_name or "").strip() in REAL_ACTIVITY_ACTIONS
+
+
+def _is_training_activity(action_name: str) -> bool:
+    return str(action_name or "").strip() in TRAINING_ACTIVITY_ACTIONS
 
 
 def _get_current_week_period() -> tuple[str, str]:
@@ -126,12 +138,11 @@ async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
 
 
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
-    training_actions = {"Gym", "Street"}
     training_dates = set()
 
     for activity in activities:
-        action_name = str(activity.get("action_name", ""))
-        if action_name not in training_actions:
+        action_name = str(activity.get("action_name", "")).strip()
+        if not _is_training_activity(action_name):
             continue
 
         created_at = _parse_activity_created_at(activity.get("created_at"))
@@ -151,11 +162,29 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:
+    """
+    Returns the last Kyiv date of a real daily action.
+
+    Counts only:
+    - Gym
+    - Street
+    - Rest
+    - Skipped
+
+    Ignores service rows:
+    - Welcome Bonus
+    - Referral Bonus
+    - Streak Bonus
+    - Penalty
+    - Rollback
+    - any other technical rows
+    """
     last_activity_date = None
 
     for activity in activities:
         action_name = str(activity.get("action_name", "")).strip()
-        if action_name.endswith("Rollback"):
+
+        if not _is_real_activity(action_name):
             continue
 
         created_at = _parse_activity_created_at(activity.get("created_at"))
@@ -351,7 +380,14 @@ async def get_user_stats(user_id: int) -> Optional[Dict]:
         return None
 
     hp_total = 0
+    real_activities_count = 0
+
     for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+
+        if _is_real_activity(action_name):
+            real_activities_count += 1
+
         try:
             hp_total += int(activity.get("hp_change", 0) or 0)
         except Exception:
@@ -363,7 +399,7 @@ async def get_user_stats(user_id: int) -> Optional[Dict]:
         "nickname": user_row.get("nickname", ""),
         "hp": hp_total,
         "hp_total": hp_total,
-        "activities_count": len(activities),
+        "activities_count": real_activities_count,
         "streak": _calculate_training_streak(activities),
     }
 
@@ -528,23 +564,24 @@ async def get_inactive_users() -> List[str]:
             if not telegram_user_id or not user_uuid:
                 continue
 
-            activities = await get_user_activities(str(user_uuid), limit=50)
+            activities = await get_user_activities(
+                str(user_uuid),
+                limit=INACTIVITY_ACTIVITY_LIMIT,
+            )
             last_activity_date = _get_last_real_activity_date(activities)
 
             if last_activity_date is None:
-                display_name = escape(nickname)
-                inactive_users.append(
-                    f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
-                )
+                silent_days = INACTIVE_DAYS_THRESHOLD
+            else:
+                silent_days = (today - last_activity_date).days
+
+            if silent_days != INACTIVE_DAYS_THRESHOLD:
                 continue
 
-            silent_days = (today - last_activity_date).days
-
-            if silent_days == INACTIVE_DAYS_THRESHOLD:
-                display_name = escape(nickname)
-                inactive_users.append(
-                    f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
-                )
+            display_name = escape(nickname)
+            inactive_users.append(
+                f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
+            )
 
         return inactive_users
 
@@ -567,11 +604,14 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
             if not telegram_user_id or not user_uuid:
                 continue
 
-            activities = await get_user_activities(str(user_uuid), limit=100)
+            activities = await get_user_activities(
+                str(user_uuid),
+                limit=INACTIVITY_ACTIVITY_LIMIT,
+            )
             last_activity_date = _get_last_real_activity_date(activities)
 
             if last_activity_date is None:
-                silent_days = AUTO_REMOVE_DAYS_THRESHOLD
+                silent_days = LAST_WARNING_DAYS_THRESHOLD
             else:
                 silent_days = (today - last_activity_date).days
 
@@ -610,7 +650,10 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
             if not telegram_user_id or not user_uuid:
                 continue
 
-            activities = await get_user_activities(str(user_uuid), limit=100)
+            activities = await get_user_activities(
+                str(user_uuid),
+                limit=INACTIVITY_ACTIVITY_LIMIT,
+            )
             last_activity_date = _get_last_real_activity_date(activities)
 
             if last_activity_date is None:
