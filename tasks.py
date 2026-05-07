@@ -30,10 +30,12 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 AUTO_REMOVE_BAN_DAYS = 7
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
+LAST_WARNING_TTL_SECONDS = int(timedelta(days=10).total_seconds())
 
 SECOND_DAY_REMINDER_DAYS = 2
 SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
 SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
+SECOND_DAY_REMINDER_TTL_SECONDS = int(timedelta(days=14).total_seconds())
 
 
 # ==============================================================================
@@ -92,8 +94,8 @@ def _get_last_warning_key(user_id: int) -> str:
     return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
 
 
-def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
-    return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
+def _get_second_day_reminder_key(user_id: int, last_activity_marker: str) -> str:
+    return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{last_activity_marker}"
 
 
 def _parse_activity_created_at(value):
@@ -137,6 +139,56 @@ def _get_last_real_activity_date(activities: list[dict]):
             last_activity_date = activity_date
 
     return last_activity_date
+
+
+def _get_last_activity_marker(last_activity_date) -> str:
+    if last_activity_date is None:
+        return "no_activity"
+
+    return last_activity_date.isoformat()
+
+
+async def _send_final_warning_message(bot, user: dict, place: str) -> bool:
+    user_id = int(user["telegram_user_id"])
+    mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
+    silent_days = int(user.get("silent_days") or 0)
+
+    try:
+        await bot.send_message(
+            chat_id=REPORTS_GROUP_ID,
+            text=(
+                f"⚠️ {mention_html}, фінальне попередження перед вилученням.\n"
+                f"У тебе вже <b>{silent_days} днів тиші</b>.\n"
+                f"Якщо сьогодні не буде жодної дії, завтра бот автоматично вилучить тебе з TurboTeam."
+            ),
+            parse_mode="HTML",
+        )
+
+        await set_data(
+            _get_last_warning_key(user_id),
+            "1",
+            ex=LAST_WARNING_TTL_SECONDS,
+        )
+
+        logger.info(
+            "[TASKS] Final warning sent. place=%s user_id=%s silent_days=%s",
+            place,
+            user_id,
+            silent_days,
+        )
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"[TASKS] Failed to send final warning user_id={user_id}: {e}",
+            exc_info=True,
+        )
+        await notify_admins_about_error(
+            bot=bot,
+            place=f"{place}.send_final_warning.user_id_{user_id}",
+            error=e,
+        )
+        return False
 
 
 async def build_top3_text() -> str:
@@ -328,7 +380,9 @@ async def send_second_day_private_reminder(bot) -> None:
     """
     19:30 Kyiv every day — private reminder for users with exactly 2 days
     without real activity: Gym, Street, Rest, Skipped.
-    Sends once per user per Kyiv date.
+
+    Sends once per inactivity cycle.
+    Cycle marker is based on last real activity date, not current date.
     """
     try:
         users = await get_all_users()
@@ -337,7 +391,6 @@ async def send_second_day_private_reminder(bot) -> None:
             return
 
         today = get_kyiv_now().date()
-        today_str = today.strftime("%Y-%m-%d")
         sent_count = 0
         skipped_count = 0
 
@@ -351,12 +404,6 @@ async def send_second_day_private_reminder(bot) -> None:
 
             user_id = int(telegram_user_id)
 
-            reminder_key = _get_second_day_reminder_key(user_id, today_str)
-            already_sent = await get_data(reminder_key)
-            if already_sent is not None:
-                skipped_count += 1
-                continue
-
             removed_key = _get_auto_removed_key(user_id)
             already_removed = await get_data(removed_key)
             if already_removed is not None:
@@ -364,7 +411,7 @@ async def send_second_day_private_reminder(bot) -> None:
                 continue
 
             try:
-                activities = await get_user_activities(str(user_uuid), limit=100)
+                activities = await get_user_activities(str(user_uuid), limit=1000)
             except Exception as e:
                 logger.error(
                     f"[TASKS] Failed to get activities for second-day reminder user_id={user_id}: {e}",
@@ -389,6 +436,14 @@ async def send_second_day_private_reminder(bot) -> None:
                 skipped_count += 1
                 continue
 
+            last_activity_marker = _get_last_activity_marker(last_activity_date)
+            reminder_key = _get_second_day_reminder_key(user_id, last_activity_marker)
+
+            already_sent = await get_data(reminder_key)
+            if already_sent is not None:
+                skipped_count += 1
+                continue
+
             text = (
                 "Бро, ти вже 2 дні без активності 👀\n\n"
                 "Ще не критично, але ти починаєш випадати з гри.\n"
@@ -402,8 +457,19 @@ async def send_second_day_private_reminder(bot) -> None:
                     text=text,
                     reply_markup=build_second_day_reminder_keyboard(),
                 )
-                await set_data(reminder_key, "1", ex=172800)
+                await set_data(
+                    reminder_key,
+                    "1",
+                    ex=SECOND_DAY_REMINDER_TTL_SECONDS,
+                )
                 sent_count += 1
+
+                logger.info(
+                    "[TASKS] Second-day private reminder sent. user_id=%s silent_days=%s marker=%s",
+                    user_id,
+                    silent_days,
+                    last_activity_marker,
+                )
             except Exception as e:
                 logger.debug(
                     f"[TASKS] Failed to send second-day private reminder user_id={user_id}: {e}"
@@ -428,7 +494,7 @@ async def send_second_day_private_reminder(bot) -> None:
 @safe_job
 async def inactive_reminder(bot) -> None:
     """
-    11:00 Kyiv every day — mention users inactive for 3+ days.
+    11:00 Kyiv every day — mention users inactive for 3 days.
     Actual filtering is handled in database.get_inactive_users().
     """
     inactive_list = await get_inactive_users()
@@ -457,7 +523,8 @@ async def inactive_reminder(bot) -> None:
 @safe_job
 async def send_last_day_warning(bot) -> None:
     """
-    19:00 Kyiv every day — final warning for users with exactly 7 days without activity.
+    19:00 Kyiv every day — final warning for users with 7+ days without activity.
+    Repeats are blocked by Redis key.
     """
     warning_users = await get_users_for_last_warning()
     if not warning_users:
@@ -479,30 +546,13 @@ async def send_last_day_warning(bot) -> None:
         if already_warned is not None:
             continue
 
-        mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
-
-        try:
-            await bot.send_message(
-                chat_id=REPORTS_GROUP_ID,
-                text=(
-                    f"⚠️ {mention_html}, це останній день без активності.\n"
-                    f"У тебе вже <b>7 днів тиші</b>.\n"
-                    f"Якщо сьогодні не буде жодної дії, завтра бот автоматично вилучить тебе з TurboTeam."
-                ),
-                parse_mode="HTML",
-            )
-            await set_data(_get_last_warning_key(user_id), "1", ex=172800)
+        ok = await _send_final_warning_message(
+            bot=bot,
+            user=user,
+            place="tasks.send_last_day_warning",
+        )
+        if ok:
             warned_count += 1
-        except Exception as e:
-            logger.error(
-                f"[TASKS] Failed to send last-day warning user_id={user_id}: {e}",
-                exc_info=True,
-            )
-            await notify_admins_about_error(
-                bot=bot,
-                place=f"tasks.send_last_day_warning.user_id_{user_id}",
-                error=e,
-            )
 
     logger.info(f"[TASKS] Last-day warning finished. Warned: {warned_count}")
 
@@ -511,7 +561,10 @@ async def send_last_day_warning(bot) -> None:
 async def auto_remove_inactive_users(bot) -> None:
     """
     Daily auto-removal for users with 8+ days without real activity.
-    Bans user for 7 days and stores unban info in Redis.
+
+    Safety rule:
+    User cannot be removed if final warning was not sent before.
+    If user is removable but warning key is missing, bot sends warning first and skips removal.
     """
     removable_users = await get_users_for_auto_removal()
     if not removable_users:
@@ -521,6 +574,7 @@ async def auto_remove_inactive_users(bot) -> None:
     now = get_kyiv_now()
     ban_until = now + timedelta(days=AUTO_REMOVE_BAN_DAYS)
     removed_count = 0
+    postponed_count = 0
 
     for user in removable_users:
         user_id = int(user["telegram_user_id"])
@@ -528,6 +582,26 @@ async def auto_remove_inactive_users(bot) -> None:
 
         existing = await get_data(user_key)
         if existing is not None:
+            continue
+
+        warned_key = _get_last_warning_key(user_id)
+        already_warned = await get_data(warned_key)
+
+        if already_warned is None:
+            ok = await _send_final_warning_message(
+                bot=bot,
+                user=user,
+                place="tasks.auto_remove_inactive_users.postponed",
+            )
+
+            if ok:
+                postponed_count += 1
+                logger.info(
+                    "[TASKS] Auto-removal postponed. Warning sent first. user_id=%s silent_days=%s",
+                    user_id,
+                    int(user.get("silent_days") or 0),
+                )
+
             continue
 
         try:
@@ -548,8 +622,6 @@ async def auto_remove_inactive_users(bot) -> None:
                 payload,
                 ex=int(timedelta(days=AUTO_REMOVE_BAN_DAYS + 2).total_seconds()),
             )
-
-            await delete_data(_get_last_warning_key(user_id))
 
             mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
             silent_days = int(user.get("silent_days") or 0)
@@ -578,7 +650,11 @@ async def auto_remove_inactive_users(bot) -> None:
                 error=e,
             )
 
-    logger.info(f"[TASKS] Auto-removal finished. Removed: {removed_count}")
+    logger.info(
+        "[TASKS] Auto-removal finished. Removed: %s, postponed: %s",
+        removed_count,
+        postponed_count,
+    )
 
 
 @safe_job
