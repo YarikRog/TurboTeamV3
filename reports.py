@@ -26,12 +26,16 @@ class ReportCallback(CallbackData, prefix="rep"):
     action_type: str
 
 
-def build_report_keyboard(target_uid: int, action_type: str) -> InlineKeyboardMarkup:
+def build_report_keyboard(
+    target_uid: int,
+    action_type: str,
+    reports_count: int = 0,
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🚩 Поскаржитись",
+                    text=f"🚩 Поскаржитись ({reports_count}/{REPORT_THRESHOLD})",
                     callback_data=ReportCallback(
                         target_uid=target_uid,
                         action_type=action_type,
@@ -113,7 +117,6 @@ async def rollback_training_report(
         )
         return False
 
-    # Даємо юзеру другий шанс у цей самий день
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Street:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Rest:{date_str}"))
@@ -181,12 +184,6 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
         await callback.answer("❌ Не можна скаржитися на себе.", show_alert=True)
         return
 
-    vote_key = KeyManager.get_report_vote_key(target_uid, report_msg_id, voter.id)
-    vote_lock = await acquire_lock(vote_key, ex=REPORT_TTL)
-    if not vote_lock:
-        await callback.answer("⚠️ Ти вже скаржився на це відео.", show_alert=True)
-        return
-
     penalty_key = KeyManager.get_report_penalty_key(target_uid, report_msg_id)
     if (await get_data(penalty_key)) is not None:
         await callback.answer("⚠️ Штраф за це відео вже застосовано.", show_alert=True)
@@ -200,13 +197,33 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
     else:
         voters = []
 
-    if voter.id not in voters:
-        voters.append(voter.id)
+    if voter.id in voters:
+        await callback.answer("⚠️ Ти вже скаржився на це відео.", show_alert=True)
+        return
+
+    vote_key = KeyManager.get_report_vote_key(target_uid, report_msg_id, voter.id)
+    vote_lock = await acquire_lock(vote_key, ex=REPORT_TTL)
+    if not vote_lock:
+        await callback.answer("⚠️ Ти вже скаржився на це відео.", show_alert=True)
+        return
+
+    voters.append(voter.id)
 
     await set_data(report_key, voters, ex=REPORT_TTL)
     current_count = len(voters)
 
     if current_count < REPORT_THRESHOLD:
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=build_report_keyboard(
+                    target_uid=target_uid,
+                    action_type=action_type,
+                    reports_count=current_count,
+                )
+            )
+        except Exception as e:
+            logger.debug(f"[REPORTS] Failed to update report counter: {e}")
+
         await callback.answer(
             f"🚩 Скаргу зараховано ({current_count}/{REPORT_THRESHOLD})",
             show_alert=True,
@@ -217,6 +234,17 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
     if not penalty_lock:
         await callback.answer("⚠️ Штраф за це відео вже обробляється.", show_alert=True)
         return
+
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=build_report_keyboard(
+                target_uid=target_uid,
+                action_type=action_type,
+                reports_count=current_count,
+            )
+        )
+    except Exception as e:
+        logger.debug(f"[REPORTS] Failed to update final report counter: {e}")
 
     rollback_ok = await rollback_training_report(
         bot=callback.bot,
