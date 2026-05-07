@@ -1,5 +1,6 @@
 import logging
 import time
+from html import escape
 
 from aiogram import types
 from aiogram.types import CallbackQuery, Message
@@ -36,6 +37,16 @@ def mention(user: types.User) -> str:
     return user.first_name or "Учасник"
 
 
+def mention_html(user: types.User) -> str:
+    display_name = user.username or user.full_name or user.first_name or "Учасник"
+    display_name = escape(str(display_name))
+
+    if user.username:
+        return f'<a href="https://t.me/{escape(str(user.username))}">@{display_name}</a>'
+
+    return f'<a href="tg://user?id={user.id}">{display_name}</a>'
+
+
 def _ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
 
@@ -66,17 +77,12 @@ def _get_group_inline_keyboard() -> types.InlineKeyboardMarkup:
     )
 
 
-async def _safe_send_group_message(bot, text: str) -> bool:
-    """
-    Safe group send.
-    Important: parse_mode=None overrides bot default Markdown.
-    This prevents crashes from usernames/names with _, *, [, ], etc.
-    """
+async def _safe_send_group_message(bot, text: str, parse_mode: str | None = None) -> bool:
     try:
         await bot.send_message(
             chat_id=REPORTS_GROUP_ID,
             text=text,
-            parse_mode=None,
+            parse_mode=parse_mode,
         )
         return True
     except Exception as e:
@@ -84,17 +90,22 @@ async def _safe_send_group_message(bot, text: str) -> bool:
         return False
 
 
-async def _reply_transport(source: Message | CallbackQuery, text: str, show_alert: bool = False):
+async def _reply_transport(
+    source: Message | CallbackQuery,
+    text: str,
+    show_alert: bool = False,
+    parse_mode: str | None = None,
+):
     if isinstance(source, CallbackQuery):
         if show_alert:
             await source.answer(text, show_alert=True)
             return None
 
-        sent = await source.message.answer(text, parse_mode=None)
+        sent = await source.message.answer(text, parse_mode=parse_mode)
         await source.answer()
         return sent
 
-    return await source.answer(text, parse_mode=None)
+    return await source.answer(text, parse_mode=parse_mode)
 
 
 async def on_user_registered(event: EventEnvelope) -> bool:
@@ -192,7 +203,7 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     )
     logger.info("[REG] onboarding answer user_id=%s took %sms", user_id, _ms(t))
 
-    user_mention = mention(message.from_user)
+    user_mention = mention_html(message.from_user)
 
     group_welcome_text = (
         get_phrase("welcome", mention=user_mention)
@@ -203,7 +214,11 @@ async def on_user_registered(event: EventEnvelope) -> bool:
     )
 
     t = time.perf_counter()
-    group_sent = await _safe_send_group_message(message.bot, group_welcome_text)
+    group_sent = await _safe_send_group_message(
+        message.bot,
+        group_welcome_text,
+        parse_mode="HTML",
+    )
     logger.info(
         "[REG] group welcome send user_id=%s took %sms ok=%s",
         user_id,
@@ -346,13 +361,21 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             ]]
         )
 
-        async def _send_with_button(text: str):
+        async def _send_with_button(text: str, parse_mode: str | None = None):
             if isinstance(source, CallbackQuery):
-                msg = await source.message.answer(text, reply_markup=back_to_group_kb, parse_mode=None)
+                msg = await source.message.answer(
+                    text,
+                    reply_markup=back_to_group_kb,
+                    parse_mode=parse_mode,
+                )
                 await source.answer()
                 return msg
 
-            return await source.answer(text, reply_markup=back_to_group_kb, parse_mode=None)
+            return await source.answer(
+                text,
+                reply_markup=back_to_group_kb,
+                parse_mode=parse_mode,
+            )
 
         if next_count == 1:
             t = time.perf_counter()
@@ -376,7 +399,10 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
         if next_count == 2:
             t = time.perf_counter()
-            msg = await _send_with_button(get_phrase("spam", nickname=mention(user)))
+            msg = await _send_with_button(
+                get_phrase("spam", nickname=mention_html(user)),
+                parse_mode="HTML",
+            )
             logger.info(
                 "[TRAIN] duplicate spam warning user_id=%s action=%s took %sms total=%sms",
                 event.user_id,
@@ -514,7 +540,11 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     )
 
     t = time.perf_counter()
-    msg = await _reply_transport(source, get_phrase(phrase_key, nickname=mention(user)))
+    msg = await _reply_transport(
+        source,
+        get_phrase(phrase_key, nickname=mention_html(user)),
+        parse_mode="HTML",
+    )
     logger.info(
         "[STATIC] success reply user_id=%s action=%s took %sms total=%sms",
         event.user_id,
