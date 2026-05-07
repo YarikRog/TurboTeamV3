@@ -1,5 +1,8 @@
 import logging
+from datetime import datetime
+from typing import Any, Optional
 
+import pytz
 from aiogram import Bot, Router
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -7,12 +10,18 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from cache import KeyManager, acquire_lock, get_data, set_data, delete_data
 from config import REPORTS_GROUP_ID
 from database import get_kyiv_now, update_user_activity
+from supabase_db import get_user_by_telegram_id, get_user_activities
 
 router = Router()
 logger = logging.getLogger(__name__)
 
+KYIV_TZ = pytz.timezone("Europe/Kyiv")
+
 REPORT_THRESHOLD = 3
 REPORT_TTL = 172800  # 48 hours
+
+STREAK_BONUS_ACTION_PREFIX = "🔥 Streak Bonus"
+STREAK_BONUS_ROLLBACK_PREFIX = "🔥 Streak Bonus Rollback"
 
 USER_WARNING_TEXT = (
     "⚠️ Твоє останнє тренування не було зараховане.\n"
@@ -44,6 +53,152 @@ def build_report_keyboard(
             ]
         ]
     )
+
+
+def _parse_activity_created_at(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+
+    return dt.astimezone(KYIV_TZ)
+
+
+def _is_streak_bonus_action(action_name: str) -> bool:
+    action = str(action_name or "").strip()
+    return action.startswith(STREAK_BONUS_ACTION_PREFIX)
+
+
+def _is_streak_bonus_rollback_action(action_name: str) -> bool:
+    action = str(action_name or "").strip()
+    return action.startswith(STREAK_BONUS_ROLLBACK_PREFIX)
+
+
+async def _rollback_today_streak_bonus_if_needed(
+    *,
+    target_uid: int,
+    date_str: str,
+) -> int:
+    """
+    Rolls back one positive streak bonus for target user on selected Kyiv date.
+
+    Returns rolled back HP amount:
+    - 0 if no bonus was found or rollback was already done
+    - positive number if rollback activity was created
+    """
+    try:
+        user_row = await get_user_by_telegram_id(target_uid)
+        if not user_row:
+            logger.warning("[REPORTS] streak rollback skipped: user not found target_uid=%s", target_uid)
+            return 0
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            logger.warning("[REPORTS] streak rollback skipped: user uuid missing target_uid=%s", target_uid)
+            return 0
+
+        activities = await get_user_activities(str(user_uuid), limit=1000)
+
+        bonus_rows = []
+        rollback_rows = []
+
+        for activity in activities:
+            action_name = str(activity.get("action_name") or "").strip()
+            created_at = _parse_activity_created_at(activity.get("created_at"))
+
+            if not created_at:
+                continue
+
+            if created_at.strftime("%Y-%m-%d") != date_str:
+                continue
+
+            if _is_streak_bonus_action(action_name):
+                try:
+                    hp_change = int(activity.get("hp_change") or 0)
+                except Exception:
+                    hp_change = 0
+
+                if hp_change > 0:
+                    bonus_rows.append(activity)
+
+            elif _is_streak_bonus_rollback_action(action_name):
+                rollback_rows.append(activity)
+
+        if not bonus_rows:
+            return 0
+
+        if len(rollback_rows) >= len(bonus_rows):
+            logger.info(
+                "[REPORTS] streak rollback skipped: already rolled back target_uid=%s date=%s bonuses=%s rollbacks=%s",
+                target_uid,
+                date_str,
+                len(bonus_rows),
+                len(rollback_rows),
+            )
+            return 0
+
+        bonus_row = bonus_rows[0]
+        bonus_action_name = str(bonus_row.get("action_name") or "Streak Bonus").strip()
+
+        try:
+            bonus_hp = int(bonus_row.get("hp_change") or 0)
+        except Exception:
+            bonus_hp = 0
+
+        if bonus_hp <= 0:
+            return 0
+
+        rollback_video_id = f"streak_rollback:{target_uid}:{date_str}:{bonus_action_name}:{bonus_hp}"
+
+        rollback_ok = await update_user_activity(
+            user_id=target_uid,
+            nickname="system",
+            action_name=f"{STREAK_BONUS_ROLLBACK_PREFIX} ({bonus_action_name})",
+            hp_change=-abs(bonus_hp),
+            video_id=rollback_video_id,
+            is_check=False,
+            skip_lock=True,
+        )
+
+        if not rollback_ok or rollback_ok == "already_done":
+            logger.warning(
+                "[REPORTS] streak rollback write failed target_uid=%s date=%s bonus_hp=%s",
+                target_uid,
+                date_str,
+                bonus_hp,
+            )
+            return 0
+
+        logger.info(
+            "[REPORTS] streak bonus rolled back target_uid=%s date=%s bonus_hp=%s bonus_action=%s",
+            target_uid,
+            date_str,
+            bonus_hp,
+            bonus_action_name,
+        )
+
+        return abs(bonus_hp)
+
+    except Exception as e:
+        logger.error(
+            "[REPORTS] _rollback_today_streak_bonus_if_needed failed target_uid=%s date=%s error=%s",
+            target_uid,
+            date_str,
+            e,
+            exc_info=True,
+        )
+        return 0
 
 
 async def rollback_training_report(
@@ -117,6 +272,11 @@ async def rollback_training_report(
         )
         return False
 
+    streak_rollback_hp = await _rollback_today_streak_bonus_if_needed(
+        target_uid=target_uid,
+        date_str=date_str,
+    )
+
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Street:{date_str}"))
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Rest:{date_str}"))
@@ -147,12 +307,26 @@ async def rollback_training_report(
         logger.debug(f"[REPORTS] Failed to delete group text msg: {e}")
 
     try:
-        await bot.send_message(chat_id=target_uid, text=USER_WARNING_TEXT)
+        if streak_rollback_hp > 0:
+            await bot.send_message(
+                chat_id=target_uid,
+                text=(
+                    USER_WARNING_TEXT
+                    + "\n\n"
+                    + f"🔥 Також скасовано streak bonus: -{streak_rollback_hp} HP."
+                ),
+            )
+        else:
+            await bot.send_message(chat_id=target_uid, text=USER_WARNING_TEXT)
     except Exception as e:
         logger.debug(f"[REPORTS] Failed to notify target_uid={target_uid}: {e}")
 
     if send_group_status:
         try:
+            extra = ""
+            if streak_rollback_hp > 0:
+                extra = f"\n🔥 Streak bonus також скасовано: -{streak_rollback_hp} HP"
+
             await bot.send_message(
                 chat_id=group_chat_id,
                 text=(
@@ -160,6 +334,7 @@ async def rollback_training_report(
                     f"Причина: {reason}\n"
                     f"Модератор: {moderator_name}\n"
                     f"Користувач може перездати тренування ще раз сьогодні."
+                    f"{extra}"
                 ),
             )
         except Exception as e:
