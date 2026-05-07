@@ -578,6 +578,15 @@ async def get_inactive_users() -> List[str]:
             if silent_days != INACTIVE_DAYS_THRESHOLD:
                 continue
 
+            logger.info(
+                "[INACTIVE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                telegram_user_id,
+                nickname,
+                last_activity_date,
+                today,
+                silent_days,
+            )
+
             display_name = escape(nickname)
             inactive_users.append(
                 f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>'
@@ -615,8 +624,17 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
             else:
                 silent_days = (today - last_activity_date).days
 
-            if silent_days != LAST_WARNING_DAYS_THRESHOLD:
+            if silent_days < LAST_WARNING_DAYS_THRESHOLD:
                 continue
+
+            logger.info(
+                "[LAST_WARNING_CANDIDATE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                telegram_user_id,
+                nickname,
+                last_activity_date,
+                today,
+                silent_days,
+            )
 
             display_name = escape(nickname)
             warning_users.append(
@@ -663,6 +681,15 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
 
             if silent_days < AUTO_REMOVE_DAYS_THRESHOLD:
                 continue
+
+            logger.info(
+                "[AUTO_REMOVE_CANDIDATE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                telegram_user_id,
+                nickname,
+                last_activity_date,
+                today,
+                silent_days,
+            )
 
             display_name = escape(nickname)
             removable_users.append(
