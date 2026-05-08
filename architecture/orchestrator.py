@@ -430,7 +430,11 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
-    started = await state_machine.begin_training(event.user_id, action, ttl=120)
+
+    # FIX:
+    # прибрано ttl=120, щоб використовувався дефолтний ttl зі state_machine
+    started = await state_machine.begin_training(event.user_id, action)
+
     logger.info(
         "[TRAIN] begin_training user_id=%s action=%s took %sms",
         event.user_id,
@@ -450,7 +454,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
     training_instruction = (
         f"Ти обрав {action} 💪\n\n"
-        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 2 хвилин 🤳\n\n"
+        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 10 хвилин 🤳\n\n"
         "Кружечок потрібен як підтвердження, що ти реально тренувався 🔥\n\n"
         "Після цього тренування зарахується, і ти отримаєш HP ⚡️"
     )
