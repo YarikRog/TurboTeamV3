@@ -3,7 +3,11 @@ import logging
 import os
 import json
 
-import sentry_sdk
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
@@ -45,13 +49,15 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
+if SENTRY_DSN and sentry_sdk:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         traces_sample_rate=0.1,
         profiles_sample_rate=0.1,
     )
     logger.info("🛡️ [MONITORING] Sentry initialized")
+elif SENTRY_DSN and not sentry_sdk:
+    logger.warning("⚠️ [MONITORING] SENTRY_DSN is set, but sentry_sdk is not installed")
 
 storage = RedisStorage(
     redis=redis_client,
@@ -380,13 +386,13 @@ async def start_handler(message: types.Message, command: CommandObject):
                     logger.info("[START] Self-referral blocked for user_id=%s", user_id)
 
             welcome_text = (
-                f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
+                f"Привіт, {message.from_user.first_name}! 💪\n\n"
                 "Ти потрапив у TurboTeam. Пройди опитування: 👇"
             )
 
             kb = get_quiz_reply_keyboard(WEB_APP_URL)
             await progress_message.delete()
-            return await message.answer(welcome_text, reply_markup=kb)
+            return await message.answer(welcome_text, reply_markup=kb, parse_mode=None)
 
         await progress_message.delete()
 
@@ -404,7 +410,8 @@ async def start_handler(message: types.Message, command: CommandObject):
 
             return await message.answer(
                 f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥",
-                reply_markup=group_return_kb
+                reply_markup=group_return_kb,
+                parse_mode=None,
             )
 
     except Exception as e:
