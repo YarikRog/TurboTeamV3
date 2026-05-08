@@ -120,6 +120,51 @@ async def _get_user_streak_by_telegram_id(telegram_user_id: int) -> int:
         return 0
 
 
+async def _get_cached_rating_rows(cache_key: str) -> Optional[list[dict]]:
+    try:
+        cached = await get_data(cache_key)
+        if isinstance(cached, dict) and isinstance(cached.get("rows"), list):
+            return cached["rows"]
+    except Exception as e:
+        logger.error(f"[RATINGS] Redis read error: {e}")
+
+    return None
+
+
+async def _load_rating_rows() -> list[dict]:
+    period_start, period_end = _get_current_week_period()
+    ranking_rows = await get_weekly_rating(period_start, period_end)
+
+    normalized_rows = []
+    for row in ranking_rows:
+        normalized_rows.append({
+            "telegram_user_id": row.get("telegram_user_id"),
+            "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
+            "hp": int(row.get("hp", 0) or 0),
+            "referrals_count": int(row.get("referrals_count", 0) or 0),
+            "rank": int(row.get("rank", 0) or 0),
+        })
+
+    return normalized_rows
+
+
+async def _add_streaks_for_top_players(top_list: list[dict]) -> list[dict]:
+    result = []
+
+    for player in top_list:
+        player_with_streak = dict(player)
+        telegram_user_id = player_with_streak.get("telegram_user_id")
+        streak = 0
+
+        if telegram_user_id:
+            streak = await _get_user_streak_by_telegram_id(int(telegram_user_id))
+
+        player_with_streak["streak"] = int(streak)
+        result.append(player_with_streak)
+
+    return result
+
+
 # ==============================================================================
 # ОТРИМАННЯ ДАНИХ РЕЙТИНГУ (ULTRA SAFE)
 # ==============================================================================
@@ -128,60 +173,41 @@ async def get_rating_data(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Отримує рейтингові дані з багаторівневим захистом.
     Redis cache (60-120s) -> Supabase weekly rating RPC.
+
+    Important:
+    cache stores only global rating rows.
+    User-specific fields are calculated per current user and are not stored
+    in the shared global cache.
     """
     cache_key = KeyManager.get_rating_cache_key()
 
     try:
-        cached = await get_data(cache_key)
-        if cached:
-            return cached
-    except Exception as e:
-        logger.error(f"[RATINGS] Redis read error: {e}")
+        normalized_rows = await _get_cached_rating_rows(cache_key)
 
-    try:
-        period_start, period_end = _get_current_week_period()
-        ranking_rows = await get_weekly_rating(period_start, period_end)
+        if normalized_rows is None:
+            normalized_rows = await _load_rating_rows()
+            ttl = random.randint(60, 120)
+            await set_data(cache_key, {"rows": normalized_rows}, ex=ttl)
 
-        normalized_rows = []
-        for row in ranking_rows:
-            telegram_user_id = row.get("telegram_user_id")
-            streak = 0
-
-            if telegram_user_id:
-                streak = await _get_user_streak_by_telegram_id(int(telegram_user_id))
-
-            normalized_rows.append({
-                "telegram_user_id": telegram_user_id,
-                "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
-                "hp": int(row.get("hp", 0) or 0),
-                "referrals_count": int(row.get("referrals_count", 0) or 0),
-                "rank": int(row.get("rank", 0) or 0),
-                "streak": int(streak),
-            })
-
-        top_list = normalized_rows[:3]
+        top_list = await _add_streaks_for_top_players(normalized_rows[:3])
 
         user_rank = "?"
         user_hp = 0
-        user_streak = 0
 
         for player in normalized_rows:
             if int(player.get("telegram_user_id", 0) or 0) == int(user_id):
                 user_rank = int(player.get("rank", 0) or 0) or "?"
                 user_hp = int(player.get("hp", 0) or 0)
-                user_streak = int(player.get("streak", 0) or 0)
                 break
 
-        result = {
+        user_streak = await _get_user_streak_by_telegram_id(int(user_id))
+
+        return {
             "top": top_list,
             "user_rank": user_rank,
             "user_hp": user_hp,
             "user_streak": user_streak,
         }
-
-        ttl = random.randint(60, 120)
-        await set_data(cache_key, result, ex=ttl)
-        return result
 
     except Exception as e:
         logger.error(f"[RATINGS] Supabase weekly rating RPC failed for uid={user_id}: {e}", exc_info=True)
