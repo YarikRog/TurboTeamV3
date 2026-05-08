@@ -85,23 +85,16 @@ def _is_streak_bonus_rollback_action(action_name: str) -> bool:
     return action.startswith(STREAK_BONUS_ROLLBACK_PREFIX)
 
 
-def _is_valid_training_action(action_name: str) -> bool:
-    action = str(action_name or "").strip()
-    return action in {"Gym", "Street"}
-
-
 async def _rollback_today_streak_bonus_if_needed(
     *,
     target_uid: int,
     date_str: str,
-    rejected_action_type: str,
 ) -> int:
     """
-    Rolls back one positive streak bonus for target user on selected Kyiv date
-    only if rejected training was the last valid Gym/Street training for that date.
+    Rolls back one positive streak bonus for target user on selected Kyiv date.
 
     Returns rolled back HP amount:
-    - 0 if no bonus was found, rollback was already done, or another valid training remains
+    - 0 if no bonus was found or rollback was already done
     - positive number if rollback activity was created
     """
     try:
@@ -117,7 +110,6 @@ async def _rollback_today_streak_bonus_if_needed(
 
         activities = await get_user_activities(str(user_uuid), limit=1000)
 
-        valid_training_count = 0
         bonus_rows = []
         rollback_rows = []
 
@@ -131,9 +123,6 @@ async def _rollback_today_streak_bonus_if_needed(
             if created_at.strftime("%Y-%m-%d") != date_str:
                 continue
 
-            if _is_valid_training_action(action_name):
-                valid_training_count += 1
-
             if _is_streak_bonus_action(action_name):
                 try:
                     hp_change = int(activity.get("hp_change") or 0)
@@ -145,16 +134,6 @@ async def _rollback_today_streak_bonus_if_needed(
 
             elif _is_streak_bonus_rollback_action(action_name):
                 rollback_rows.append(activity)
-
-        if valid_training_count > 1:
-            logger.info(
-                "[REPORTS] streak rollback skipped: another valid training exists target_uid=%s date=%s rejected_action=%s valid_count=%s",
-                target_uid,
-                date_str,
-                rejected_action_type,
-                valid_training_count,
-            )
-            return 0
 
         if not bonus_rows:
             return 0
@@ -296,7 +275,6 @@ async def rollback_training_report(
     streak_rollback_hp = await _rollback_today_streak_bonus_if_needed(
         target_uid=target_uid,
         date_str=date_str,
-        rejected_action_type=action_type,
     )
 
     await delete_data(KeyManager.get_action_lock_key(target_uid, f"Gym:{date_str}"))
@@ -449,7 +427,6 @@ async def handle_report(callback: CallbackQuery, callback_data: ReportCallback):
         moderator_name=f"community:{current_count}_reports",
         reason="community_reports",
     )
-
     if not rollback_ok:
         await delete_data(penalty_key)
         await callback.answer("⚠️ Не вдалося скасувати тренування. Спробуй ще раз.", show_alert=True)

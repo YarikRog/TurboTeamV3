@@ -3,11 +3,7 @@ import logging
 import os
 import json
 
-try:
-    import sentry_sdk
-except ImportError:
-    sentry_sdk = None
-
+import sentry_sdk
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
@@ -17,7 +13,10 @@ from architecture.events import EventEnvelope, TRAINING_SELECTED, USER_REGISTERE
 from architecture.orchestrator import flow_event_bus
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
 from database import check_user_exists, close_db_session, get_kyiv_now
-from handlers import router as action_router
+from handlers.common import router as common_router
+from handlers.profile import router as profile_router
+from handlers.actions import router as actions_router
+from handlers.admin import router as admin_router
 from phrases import get_phrase
 from referral import router as ref_router
 from reports import router as reports_router
@@ -49,15 +48,13 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN and sentry_sdk:
+if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         traces_sample_rate=0.1,
         profiles_sample_rate=0.1,
     )
     logger.info("🛡️ [MONITORING] Sentry initialized")
-elif SENTRY_DSN and not sentry_sdk:
-    logger.warning("⚠️ [MONITORING] SENTRY_DSN is set, but sentry_sdk is not installed")
 
 storage = RedisStorage(
     redis=redis_client,
@@ -386,13 +383,13 @@ async def start_handler(message: types.Message, command: CommandObject):
                     logger.info("[START] Self-referral blocked for user_id=%s", user_id)
 
             welcome_text = (
-                f"Привіт, {message.from_user.first_name}! 💪\n\n"
+                f"Привіт, *{message.from_user.first_name}*! 💪\n\n"
                 "Ти потрапив у TurboTeam. Пройди опитування: 👇"
             )
 
             kb = get_quiz_reply_keyboard(WEB_APP_URL)
             await progress_message.delete()
-            return await message.answer(welcome_text, reply_markup=kb, parse_mode=None)
+            return await message.answer(welcome_text, reply_markup=kb)
 
         await progress_message.delete()
 
@@ -410,8 +407,7 @@ async def start_handler(message: types.Message, command: CommandObject):
 
             return await message.answer(
                 f"Вітаю, {message.from_user.first_name}! Ти вже в команді. 🔥",
-                reply_markup=group_return_kb,
-                parse_mode=None,
+                reply_markup=group_return_kb
             )
 
     except Exception as e:
@@ -470,7 +466,10 @@ async def web_app_receive(message: types.Message):
 
 dp.include_router(reports_router)
 dp.include_router(ref_router)
-dp.include_router(action_router)
+dp.include_router(common_router)
+dp.include_router(profile_router)
+dp.include_router(actions_router)
+dp.include_router(admin_router)
 
 
 async def on_startup():
