@@ -30,6 +30,8 @@ INACTIVE_DAYS_THRESHOLD = 3
 LAST_WARNING_DAYS_THRESHOLD = 7
 AUTO_REMOVE_DAYS_THRESHOLD = 8
 
+AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
+
 REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
 TRAINING_ACTIVITY_ACTIONS = {"Gym", "Street"}
 INACTIVITY_ACTIVITY_LIMIT = 1000
@@ -48,6 +50,16 @@ def get_seconds_until_kyiv_midnight() -> int:
         microsecond=0,
     )
     return max(1, int((next_midnight - now).total_seconds()))
+
+
+def _get_auto_removed_key(user_id: int) -> str:
+    return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
+
+
+async def _is_auto_removed_user(telegram_user_id: int) -> bool:
+    removed_key = _get_auto_removed_key(int(telegram_user_id))
+    already_removed = await get_data(removed_key)
+    return already_removed is not None
 
 
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:
@@ -79,12 +91,6 @@ def _is_training_activity(action_name: str) -> bool:
 
 
 def _get_current_week_period() -> tuple[str, str]:
-    """
-    Current active TurboTeam week.
-    Used for live rating.
-
-    Week starts every Sunday at 20:00 Kyiv time.
-    """
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
         hour=20,
@@ -104,13 +110,6 @@ def _get_current_week_period() -> tuple[str, str]:
 
 
 def _get_last_finished_week_period() -> tuple[str, str]:
-    """
-    Last finished TurboTeam week.
-    Used for Sunday final card.
-
-    If now is Sunday after 20:00, returns:
-    previous Sunday 20:00 -> current Sunday 20:00.
-    """
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
         hour=20,
@@ -162,23 +161,6 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:
-    """
-    Returns the last Kyiv date of a real daily action.
-
-    Counts only:
-    - Gym
-    - Street
-    - Rest
-    - Skipped
-
-    Ignores service rows:
-    - Welcome Bonus
-    - Referral Bonus
-    - Streak Bonus
-    - Penalty
-    - Rollback
-    - any other technical rows
-    """
     last_activity_date = None
 
     for activity in activities:
@@ -565,6 +547,14 @@ async def get_inactive_users() -> List[str]:
             if not telegram_user_id or not user_uuid:
                 continue
 
+            if await _is_auto_removed_user(int(telegram_user_id)):
+                logger.info(
+                    "[INACTIVE] skipped auto-removed user_id=%s nickname=%s",
+                    telegram_user_id,
+                    nickname,
+                )
+                continue
+
             activities = await get_user_activities(
                 str(user_uuid),
                 limit=INACTIVITY_ACTIVITY_LIMIT,
@@ -612,6 +602,14 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
             nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
 
             if not telegram_user_id or not user_uuid:
+                continue
+
+            if await _is_auto_removed_user(int(telegram_user_id)):
+                logger.info(
+                    "[LAST_WARNING] skipped auto-removed user_id=%s nickname=%s",
+                    telegram_user_id,
+                    nickname,
+                )
                 continue
 
             activities = await get_user_activities(
@@ -667,6 +665,14 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
             nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
 
             if not telegram_user_id or not user_uuid:
+                continue
+
+            if await _is_auto_removed_user(int(telegram_user_id)):
+                logger.info(
+                    "[AUTO_REMOVE] skipped already auto-removed user_id=%s nickname=%s",
+                    telegram_user_id,
+                    nickname,
+                )
                 continue
 
             activities = await get_user_activities(
