@@ -77,7 +77,7 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
 
 def _is_streak_bonus_action(action_name: str) -> bool:
     action = str(action_name or "").strip()
-    return action.startswith(STREAK_BONUS_ACTION_PREFIX)
+    return action.startswith(STREAK_BONUS_ACTION_PREFIX) and not action.startswith(STREAK_BONUS_ROLLBACK_PREFIX)
 
 
 def _is_streak_bonus_rollback_action(action_name: str) -> bool:
@@ -98,7 +98,12 @@ async def _rollback_today_streak_bonus_if_needed(
 ) -> int:
     """
     Rolls back one positive streak bonus for target user on selected Kyiv date
-    only if rejected training was the last valid Gym/Street training for that date.
+    only if rejected training was the only valid Gym/Street training for that date.
+
+    Supports new weekly streak bonus names:
+    - 🔥 Streak Bonus (3/14)
+    - 🔥 Streak Bonus (7/14)
+    - 🔥 Streak Bonus (14/14)
 
     Returns rolled back HP amount:
     - 0 if no bonus was found, rollback was already done, or another valid training remains
@@ -169,7 +174,7 @@ async def _rollback_today_streak_bonus_if_needed(
             )
             return 0
 
-        bonus_row = bonus_rows[0]
+        bonus_row = bonus_rows[-1]
         bonus_action_name = str(bonus_row.get("action_name") or "Streak Bonus").strip()
 
         try:
@@ -309,6 +314,7 @@ async def rollback_training_report(
     await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Rest:{date_str}"))
     await delete_data(KeyManager.get_training_repeat_key(target_uid, f"Skipped:{date_str}"))
 
+    await delete_data(f"training_count:{target_uid}")
     await delete_data(rollback_key)
 
     if video_group_message_id:
