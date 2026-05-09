@@ -32,9 +32,20 @@ AUTO_REMOVE_DAYS_THRESHOLD = 8
 
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 
-REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
+REAL_ACTIVITY_ACTIONS = {
+    "Gym",
+    "Street",
+    "Rest",
+    "Skipped",
+    "Welcome Bonus",
+    "Returned",
+}
+
 TRAINING_ACTIVITY_ACTIONS = {"Gym", "Street"}
+TRAINING_ROLLBACK_ACTIONS = {"Gym Rollback", "Street Rollback"}
+
 INACTIVITY_ACTIVITY_LIMIT = 1000
+WEEKLY_STREAK_MAX = 14
 
 
 def get_kyiv_now() -> datetime:
@@ -90,6 +101,10 @@ def _is_training_activity(action_name: str) -> bool:
     return str(action_name or "").strip() in TRAINING_ACTIVITY_ACTIONS
 
 
+def _is_training_rollback_activity(action_name: str) -> bool:
+    return str(action_name or "").strip() in TRAINING_ROLLBACK_ACTIONS
+
+
 def _get_current_week_period() -> tuple[str, str]:
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
@@ -107,6 +122,25 @@ def _get_current_week_period() -> tuple[str, str]:
     week_end = week_start + timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()
+
+
+def _get_current_week_period_dt() -> tuple[datetime, datetime]:
+    now = get_kyiv_now()
+    current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
+        hour=20,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    if now < current_sunday_20:
+        week_start = current_sunday_20 - timedelta(days=7)
+    else:
+        week_start = current_sunday_20
+
+    week_end = week_start + timedelta(days=7)
+
+    return week_start, week_end
 
 
 def _get_last_finished_week_period() -> tuple[str, str]:
@@ -137,27 +171,40 @@ async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
 
 
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
-    training_dates = set()
+    """
+    Weekly TurboTeam streak.
+
+    Counts only valid Gym/Street trainings inside current Turbo-week:
+    Sunday 20:00 Kyiv -> next Sunday 20:00 Kyiv.
+
+    Rollback logic:
+    - Gym Rollback cancels one Gym.
+    - Street Rollback cancels one Street.
+    - Returned / Welcome Bonus / Rest / Skipped do not count as training streak.
+    - Max visible streak is 14.
+    """
+    week_start, week_end = _get_current_week_period_dt()
+
+    training_count = 0
+    rollback_count = 0
 
     for activity in activities:
         action_name = str(activity.get("action_name", "")).strip()
-        if not _is_training_activity(action_name):
-            continue
-
         created_at = _parse_activity_created_at(activity.get("created_at"))
+
         if not created_at:
             continue
 
-        training_dates.add(created_at.date())
+        if created_at < week_start or created_at >= week_end:
+            continue
 
-    streak = 0
-    cursor = get_kyiv_now().date()
+        if _is_training_activity(action_name):
+            training_count += 1
+        elif _is_training_rollback_activity(action_name):
+            rollback_count += 1
 
-    while cursor in training_dates:
-        streak += 1
-        cursor -= timedelta(days=1)
-
-    return streak
+    valid_training_count = max(0, training_count - rollback_count)
+    return min(valid_training_count, WEEKLY_STREAK_MAX)
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:
@@ -376,6 +423,8 @@ async def get_user_stats(user_id: int) -> Optional[Dict]:
         except Exception:
             continue
 
+    streak = _calculate_training_streak(activities)
+
     stats = {
         "user_id": str(supabase_user_id),
         "telegram_user_id": user_row.get("telegram_user_id"),
@@ -383,7 +432,9 @@ async def get_user_stats(user_id: int) -> Optional[Dict]:
         "hp": hp_total,
         "hp_total": hp_total,
         "activities_count": real_activities_count,
-        "streak": _calculate_training_streak(activities),
+        "streak": streak,
+        "weekly_streak": streak,
+        "weekly_streak_max": WEEKLY_STREAK_MAX,
     }
 
     return stats
