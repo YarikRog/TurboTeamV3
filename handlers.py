@@ -599,6 +599,54 @@ async def _run_loadtest_batch(total_jobs: int) -> dict:
     }
 
 
+AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
+LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
+
+
+def _get_auto_removed_key(user_id: int) -> str:
+    return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
+
+
+def _get_last_warning_key(user_id: int) -> str:
+    return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
+
+
+@router.message(F.new_chat_members)
+async def handle_new_chat_members(message: Message):
+    if message.chat.id != REPORTS_GROUP_ID:
+        return
+
+    for member in message.new_chat_members:
+        if member.is_bot:
+            continue
+
+        user_id = int(member.id)
+
+        removed_key = _get_auto_removed_key(user_id)
+        removed_payload = await get_data(removed_key)
+
+        if removed_payload is None:
+            continue
+
+        await delete_data(removed_key)
+        await delete_data(_get_last_warning_key(user_id))
+
+        name = escape(member.username or member.full_name or "Учасник")
+
+        try:
+            await message.answer(
+                f"🏎️ <b>{name}</b> повернувся в TurboTeam.\n"
+                f"Доступ відновлено. Тепер головне — не випадати з гри 🔥",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.error(
+                f"[HANDLERS] failed to send return message user_id={user_id}: {e}",
+                exc_info=True,
+            )
+
+
+
 @router.message(F.text == "🏆 Рейтинг ТОП")
 async def handle_show_rating_message(message: Message):
     await show_rating_for_user(message, message.from_user)
