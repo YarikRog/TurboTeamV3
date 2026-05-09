@@ -11,7 +11,6 @@ from config import REPORTS_GROUP_ID, GROUP_LINK
 from phrases import get_phrase
 from awards import sunday_final_logic
 from database import (
-    get_inactive_users,
     get_users_for_last_warning,
     get_users_for_auto_removal,
     get_kyiv_now,
@@ -30,6 +29,7 @@ AUTO_REMOVE_BAN_DAYS = 7
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
 
+INACTIVE_DAYS_THRESHOLD = 3
 SECOND_DAY_REMINDER_DAYS = 2
 SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
 SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
@@ -102,6 +102,25 @@ def _get_last_real_activity_date(activities: list[dict]):
             last_activity_date = activity_date
 
     return last_activity_date
+
+
+async def _is_user_in_group(bot, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(REPORTS_GROUP_ID, user_id)
+        status = str(member.status)
+
+        if status in {"left", "kicked"}:
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.info(
+            "[TASKS] User is not available in group or get_chat_member failed: user_id=%s error=%s",
+            user_id,
+            e,
+        )
+        return False
 
 
 async def build_top3_text() -> str:
@@ -277,15 +296,15 @@ async def send_second_day_private_reminder(bot) -> None:
 
             user_id = int(telegram_user_id)
 
-            reminder_key = _get_second_day_reminder_key(user_id, today_str)
-            already_sent = await get_data(reminder_key)
-            if already_sent is not None:
-                skipped_count += 1
-                continue
-
             removed_key = _get_auto_removed_key(user_id)
             already_removed = await get_data(removed_key)
             if already_removed is not None:
+                skipped_count += 1
+                continue
+
+            reminder_key = _get_second_day_reminder_key(user_id, today_str)
+            already_sent = await get_data(reminder_key)
+            if already_sent is not None:
                 skipped_count += 1
                 continue
 
@@ -343,27 +362,110 @@ async def send_second_day_private_reminder(bot) -> None:
 
 @safe_job
 async def inactive_reminder(bot) -> None:
-    inactive_list = await get_inactive_users()
-    if not inactive_list:
-        logger.info("[TASKS] Inactive reminder: everyone is active")
-        return
+    try:
+        users = await get_all_users()
+        if not users:
+            logger.info("[TASKS] Inactive reminder: no users")
+            return
 
-    mentions = " ".join(inactive_list)
-    text = (
-        f"🚨 <b>РОЗДУПЛЯТОР ТУРБОТІМ</b> 🚨\n\n"
-        f"{mentions}\n\n"
-        f"Бро, ти де зник? Вже 3 дні тиші! "
-        f"Повертайся в стрій, HP самі себе не зароблять! 🔥"
-    )
-    keyboard = await build_training_action_keyboard(bot)
+        today = get_kyiv_now().date()
+        inactive_mentions = []
+        skipped_not_in_group = 0
+        skipped_removed = 0
+        skipped_active = 0
 
-    await bot.send_message(
-        chat_id=REPORTS_GROUP_ID,
-        text=text,
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
-    logger.info(f"[TASKS] Inactive reminder triggered for {len(inactive_list)} users")
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+            nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
+
+            if not telegram_user_id or not user_uuid:
+                continue
+
+            user_id = int(telegram_user_id)
+
+            removed_key = _get_auto_removed_key(user_id)
+            already_removed = await get_data(removed_key)
+            if already_removed is not None:
+                skipped_removed += 1
+                continue
+
+            in_group = await _is_user_in_group(bot, user_id)
+            if not in_group:
+                skipped_not_in_group += 1
+                continue
+
+            try:
+                activities = await get_user_activities(str(user_uuid), limit=1000)
+            except Exception as e:
+                logger.error(
+                    "[TASKS] Failed to get activities for inactive reminder user_id=%s error=%s",
+                    user_id,
+                    e,
+                    exc_info=True,
+                )
+                continue
+
+            last_activity_date = _get_last_real_activity_date(activities)
+
+            if last_activity_date is None:
+                silent_days = INACTIVE_DAYS_THRESHOLD
+            else:
+                silent_days = (today - last_activity_date).days
+
+            if silent_days != INACTIVE_DAYS_THRESHOLD:
+                skipped_active += 1
+                continue
+
+            logger.info(
+                "[TASKS] Inactive reminder candidate user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                user_id,
+                nickname,
+                last_activity_date,
+                today,
+                silent_days,
+            )
+
+            display_name = escape(nickname)
+            inactive_mentions.append(
+                f'<a href="tg://user?id={user_id}">{display_name}</a>'
+            )
+
+        if not inactive_mentions:
+            logger.info(
+                "[TASKS] Inactive reminder: no valid users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s",
+                skipped_removed,
+                skipped_not_in_group,
+                skipped_active,
+            )
+            return
+
+        mentions = " ".join(inactive_mentions)
+        text = (
+            f"🚨 <b>РОЗДУПЛЯТОР ТУРБОТІМ</b> 🚨\n\n"
+            f"{mentions}\n\n"
+            f"Бро, ти де зник? Вже 3 дні тиші! "
+            f"Повертайся в стрій, HP самі себе не зароблять! 🔥"
+        )
+        keyboard = await build_training_action_keyboard(bot)
+
+        await bot.send_message(
+            chat_id=REPORTS_GROUP_ID,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+        logger.info(
+            "[TASKS] Inactive reminder triggered for %s users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s",
+            len(inactive_mentions),
+            skipped_removed,
+            skipped_not_in_group,
+            skipped_active,
+        )
+
+    except Exception as e:
+        logger.error(f"[TASKS] Inactive reminder failed: {e}", exc_info=True)
 
 
 @safe_job
@@ -381,6 +483,10 @@ async def send_last_day_warning(bot) -> None:
         removed_key = _get_auto_removed_key(user_id)
         already_removed = await get_data(removed_key)
         if already_removed is not None:
+            continue
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
             continue
 
         warned_key = _get_last_warning_key(user_id)
@@ -429,6 +535,21 @@ async def auto_remove_inactive_users(bot) -> None:
 
         existing = await get_data(user_key)
         if existing is not None:
+            continue
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            await set_data(
+                user_key,
+                {
+                    "telegram_user_id": user_id,
+                    "nickname": str(user.get("nickname") or ""),
+                    "silent_days": int(user.get("silent_days") or 0),
+                    "unban_at": ban_until.isoformat(),
+                    "reason": "already_not_in_group",
+                },
+                ex=int(timedelta(days=AUTO_REMOVE_BAN_DAYS + 2).total_seconds()),
+            )
             continue
 
         try:
