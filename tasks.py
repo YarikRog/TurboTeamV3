@@ -528,6 +528,8 @@ async def auto_remove_inactive_users(bot) -> None:
     now = get_kyiv_now()
     ban_until = now + timedelta(days=AUTO_REMOVE_BAN_DAYS)
     removed_count = 0
+    skipped_not_in_group = 0
+    skipped_existing_key = 0
 
     for user in removable_users:
         user_id = int(user["telegram_user_id"])
@@ -535,7 +537,10 @@ async def auto_remove_inactive_users(bot) -> None:
 
         existing = await get_data(user_key)
         if existing is not None:
+            skipped_existing_key += 1
             continue
+
+        silent_days = int(user.get("silent_days") or 0)
 
         in_group = await _is_user_in_group(bot, user_id)
         if not in_group:
@@ -544,12 +549,13 @@ async def auto_remove_inactive_users(bot) -> None:
                 {
                     "telegram_user_id": user_id,
                     "nickname": str(user.get("nickname") or ""),
-                    "silent_days": int(user.get("silent_days") or 0),
+                    "silent_days": silent_days,
                     "unban_at": ban_until.isoformat(),
-                    "reason": "already_not_in_group",
+                    "status": "already_not_in_group",
+                    "created_at": now.isoformat(),
                 },
-                ex=int(timedelta(days=AUTO_REMOVE_BAN_DAYS + 2).total_seconds()),
             )
+            skipped_not_in_group += 1
             continue
 
         try:
@@ -562,19 +568,16 @@ async def auto_remove_inactive_users(bot) -> None:
             payload = {
                 "telegram_user_id": user_id,
                 "nickname": str(user.get("nickname") or ""),
-                "silent_days": int(user.get("silent_days") or 0),
+                "silent_days": silent_days,
                 "unban_at": ban_until.isoformat(),
+                "status": "banned",
+                "created_at": now.isoformat(),
             }
-            await set_data(
-                user_key,
-                payload,
-                ex=int(timedelta(days=AUTO_REMOVE_BAN_DAYS + 2).total_seconds()),
-            )
+            await set_data(user_key, payload)
 
             await delete_data(_get_last_warning_key(user_id))
 
             mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
-            silent_days = int(user.get("silent_days") or 0)
 
             await bot.send_message(
                 chat_id=REPORTS_GROUP_ID,
@@ -582,7 +585,7 @@ async def auto_remove_inactive_users(bot) -> None:
                     f"🚪 {mention_html} вилучений із TurboTeam.\n"
                     f"Причина: <b>{silent_days} днів</b> без жодної активності.\n"
                     f"Бан: <b>{AUTO_REMOVE_BAN_DAYS} днів</b>.\n"
-                    f"Після завершення блокування бот сам повідомить, що доступ знову відкритий."
+                    f"Після завершення блокування бот напише в приват, що можна повернутися."
                 ),
                 parse_mode="HTML",
             )
@@ -595,7 +598,12 @@ async def auto_remove_inactive_users(bot) -> None:
                 exc_info=True,
             )
 
-    logger.info(f"[TASKS] Auto-removal finished. Removed: {removed_count}")
+    logger.info(
+        "[TASKS] Auto-removal finished. Removed: %s, skipped_existing_key=%s, skipped_not_in_group=%s",
+        removed_count,
+        skipped_existing_key,
+        skipped_not_in_group,
+    )
 
 
 @safe_job
@@ -610,6 +618,8 @@ async def auto_unban_inactive_users(bot) -> None:
 
     cursor = 0
     unbanned_count = 0
+    notified_count = 0
+    skipped_waiting_return = 0
     now = get_kyiv_now()
 
     while True:
@@ -627,9 +637,15 @@ async def auto_unban_inactive_users(bot) -> None:
 
             user_id = int(payload.get("telegram_user_id") or 0)
             unban_at_raw = str(payload.get("unban_at") or "").strip()
+            status = str(payload.get("status") or "").strip()
+            unban_notified = bool(payload.get("unban_notified"))
 
             if not user_id or not unban_at_raw:
                 await delete_data(key)
+                continue
+
+            if status == "waiting_return" and unban_notified:
+                skipped_waiting_return += 1
                 continue
 
             try:
@@ -651,30 +667,41 @@ async def auto_unban_inactive_users(bot) -> None:
                     user_id=user_id,
                     only_if_banned=True,
                 )
+                unbanned_count += 1
             except Exception as e:
                 logger.error(f"[TASKS] Failed to unban user_id={user_id}: {e}", exc_info=True)
                 continue
 
-            try:
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        "🏎️ Доступ до TurboTeam знову відкритий. "
-                        "Якщо хочеш повернутись у стрій — залітай назад і не випадай із гри."
-                    ),
-                    reply_markup=build_return_group_keyboard(),
-                )
-            except Exception as e:
-                logger.debug(f"[TASKS] Failed to notify unbanned user_id={user_id}: {e}")
+            if not unban_notified:
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            "🏎️ Доступ до TurboTeam знову відкритий.\n\n"
+                            "Якщо хочеш повернутись у стрій — залітай назад і не випадай із гри."
+                        ),
+                        reply_markup=build_return_group_keyboard(),
+                    )
+                    notified_count += 1
+                except Exception as e:
+                    logger.debug(f"[TASKS] Failed to notify unbanned user_id={user_id}: {e}")
 
-            await delete_data(key)
+            payload["status"] = "waiting_return"
+            payload["unbanned_at"] = now.isoformat()
+            payload["unban_notified"] = True
+
+            await set_data(key, payload)
             await delete_data(_get_last_warning_key(user_id))
-            unbanned_count += 1
 
         if cursor == 0:
             break
 
-    logger.info(f"[TASKS] Auto-unban finished. Unbanned: {unbanned_count}")
+    logger.info(
+        "[TASKS] Auto-unban finished. Unbanned: %s, notified: %s, skipped_waiting_return=%s",
+        unbanned_count,
+        notified_count,
+        skipped_waiting_return,
+    )
 
 
 @safe_job
