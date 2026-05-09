@@ -31,15 +31,21 @@ REPORT_META_TTL = 172800  # 48 hours
 # ==============================================================================
 # STREAK PARAMETERS
 # ==============================================================================
-STREAK_BONUS_3_DAYS = 100
-STREAK_BONUS_5_DAYS = 150
-STREAK_BONUS_7_DAYS = 200
+
+WEEKLY_STREAK_MAX = 14
+
+STREAK_BONUS_MILESTONES: dict[int, int] = {
+    3: 50,
+    7: 75,
+    14: 125,
+}
 
 STREAK_BONUS_REDIS_PREFIX = "turbo:streak_bonus"
 
 # ==============================================================================
 # TRAINING STATUS LEVELS
 # ==============================================================================
+
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
     (5, "Вкатався"),
@@ -56,6 +62,7 @@ TRAINING_STATUS_LEVELS = [
 # ==============================================================================
 # ACHIEVEMENTS (TRAINING ONLY, V1)
 # ==============================================================================
+
 TRAINING_ACHIEVEMENTS = [
     (1, "training_1", "Перший крок"),
     (5, "training_5", "Розігрів"),
@@ -269,27 +276,30 @@ class ActivityService:
         activities = await get_user_activities(str(user_uuid), limit=5000)
 
         training_count = 0
+        rollback_count = 0
+
         for activity in activities:
             action_name = str(activity.get("action_name", "")).strip()
 
-            if action_name.endswith("Rollback"):
-                continue
-
             if action_name in {"Gym", "Street"}:
                 training_count += 1
+            elif action_name in {"Gym Rollback", "Street Rollback"}:
+                rollback_count += 1
+
+        result = max(0, training_count - rollback_count)
 
         if redis_client is not None:
             try:
-                await redis_client.set(cache_key, training_count, ex=300)
+                await redis_client.set(cache_key, result, ex=300)
             except Exception as e:
                 logger.warning("[get_training_count] Redis set error: %s", e)
 
-        return training_count
+        return result
 
     @staticmethod
     async def invalidate_training_count_cache(user_id: int) -> None:
         """
-        Clears cached training_count after a new training.
+        Clears cached training_count after a new training or rollback.
         """
         if redis_client is None:
             return
@@ -374,16 +384,13 @@ class ActivityService:
         activities = await get_user_activities(str(user_uuid), limit=200)
         today = get_kyiv_now().date()
 
+        action_count = 0
+        rollback_count = 0
+
         for activity in activities:
             current_action_name = str(activity.get("action_name", "")).strip()
-
-            if current_action_name.endswith("Rollback"):
-                continue
-
-            if current_action_name != str(action_name):
-                continue
-
             created_at_raw = activity.get("created_at")
+
             if not created_at_raw:
                 continue
 
@@ -396,12 +403,17 @@ class ActivityService:
                 if created_at.tzinfo is None:
                     created_at = pytz.UTC.localize(created_at)
 
-                if created_at.astimezone(KYIV_TZ).date() == today:
-                    return True
+                if created_at.astimezone(KYIV_TZ).date() != today:
+                    continue
             except Exception:
                 continue
 
-        return False
+            if current_action_name == str(action_name):
+                action_count += 1
+            elif current_action_name == f"{action_name} Rollback":
+                rollback_count += 1
+
+        return action_count > rollback_count
 
     @staticmethod
     @handle_exceptions(default_return=False)
@@ -498,7 +510,7 @@ class ActivityService:
     @handle_exceptions(default_return=(0, 0))
     async def check_and_grant_streak_bonus(user_id: int, nickname: str) -> tuple[int, int]:
         """
-        Checks streak and grants bonus once per Turbo-week for 3/5/7-day milestones.
+        Checks weekly streak and grants bonus once per Turbo-week for 3/7/14 milestones.
         Returns (bonus, streak).
         """
         from database import get_user_stats
@@ -507,16 +519,10 @@ class ActivityService:
         if not stats:
             return 0, 0
 
-        streak = int(stats.get("streak", 0))
+        streak = int(stats.get("streak", 0) or 0)
+        streak = min(streak, WEEKLY_STREAK_MAX)
 
-        bonus = 0
-        if streak == 3:
-            bonus = STREAK_BONUS_3_DAYS
-        elif streak == 5:
-            bonus = STREAK_BONUS_5_DAYS
-        elif streak == 7:
-            bonus = STREAK_BONUS_7_DAYS
-
+        bonus = int(STREAK_BONUS_MILESTONES.get(streak, 0) or 0)
         if bonus <= 0:
             return 0, streak
 
@@ -540,6 +546,7 @@ class ActivityService:
                 "user_id": user_id,
                 "nickname": str(nickname),
                 "streak": streak,
+                "streak_max": WEEKLY_STREAK_MAX,
                 "bonus": bonus,
                 "week_start": week_start.isoformat(),
                 "week_end": week_end.isoformat(),
@@ -547,14 +554,15 @@ class ActivityService:
             ex=ex_seconds,
         )
 
-        action_label = f"🔥 Streak Bonus ({streak} days)"
+        action_label = f"🔥 Streak Bonus ({streak}/{WEEKLY_STREAK_MAX})"
         await add_activity(user_id, nickname, action_label, bonus)
 
         logger.info(
-            "[STREAK] Bonus +%s HP granted to %s for %s days. key=%s ex=%s",
+            "[STREAK] Bonus +%s HP granted to %s for %s/%s. key=%s ex=%s",
             bonus,
             nickname,
             streak,
+            WEEKLY_STREAK_MAX,
             bonus_key,
             ex_seconds,
         )
@@ -711,11 +719,9 @@ class ActivityService:
         )
 
         if streak_bonus > 0:
-            days_word = _format_days_uk(streak_days)
-
             await message.answer(
                 f"🔥 <b>STREAK BONUS!</b>\n"
-                f"Серія: <b>{streak_days}</b> {days_word}\n"
+                f"Серія: <b>{streak_days}/{WEEKLY_STREAK_MAX}</b>\n"
                 f"+<b>{streak_bonus}</b> HP",
                 parse_mode="HTML",
             )
@@ -730,7 +736,7 @@ class ActivityService:
                 REPORTS_GROUP_ID,
                 (
                     f"🔥 <b>STREAK BONUS!</b>\n\n"
-                    f"{mention_text} тримає серію: <b>{streak_days}</b> {days_word} підряд\n"
+                    f"{mention_text} тримає серію: <b>{streak_days}/{WEEKLY_STREAK_MAX}</b>\n"
                     f"+<b>{streak_bonus}</b> HP за дисципліну.\n\n"
                     f"Оце вже не випадковість — це система 🏎️🔥"
                 ),
@@ -782,10 +788,8 @@ class ActivityService:
             report_text += (
                 f"\n🎖️ Рівень: {escape(str(current_status_title))}"
                 f"\n📊 Тренувань: {training_count}"
+                f"\n🔥 Streak: {streak_days}/{WEEKLY_STREAK_MAX}"
             )
-
-            if streak_days > 0:
-                report_text += f"\n🔥 Streak: {streak_days} {_format_days_uk(streak_days)}"
 
         group_text_msg = await message.bot.send_message(
             REPORTS_GROUP_ID,
