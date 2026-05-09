@@ -14,7 +14,7 @@ from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
 from cache import get_data, set_flag, delete_data, KeyManager
-from database import get_user_stats, check_user_exists
+from database import get_user_stats, check_user_exists, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
 from reports import rollback_training_report
@@ -40,8 +40,17 @@ PROFILE_COOLDOWN = 7200
 PROFILE_MESSAGE_TTL = 120
 ADMIN_HELP_TTL = 120
 
-REAL_ACTIVITY_ACTIONS = {"Gym", "Street", "Rest", "Skipped"}
+REAL_ACTIVITY_ACTIONS = {
+    "Gym",
+    "Street",
+    "Rest",
+    "Skipped",
+    "Welcome Bonus",
+    "Returned",
+}
+
 TRAINING_ACTIONS = {"Gym", "Street"}
+WEEKLY_STREAK_MAX = 14
 
 TRAINING_STATUS_LEVELS = [
     (1, "Новачок"),
@@ -57,6 +66,9 @@ TRAINING_STATUS_LEVELS = [
 ]
 
 TRAINING_GOALS = [1, 5, 10, 25, 50, 100, 200, 500, 1000]
+
+AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
+LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
 
 
 def get_training_status(training_count: int) -> str:
@@ -188,6 +200,14 @@ def _format_delta(current_value, previous_value, suffix: str = "") -> str:
     return diff_text
 
 
+def _get_auto_removed_key(user_id: int) -> str:
+    return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
+
+
+def _get_last_warning_key(user_id: int) -> str:
+    return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
+
+
 def _build_promo_stats_text(data: dict) -> str:
     champion = escape(str(data["champion_nickname"]))
     turbo_index = int(data["turbo_index"])
@@ -315,6 +335,8 @@ def _build_activity_counter(activities: list[dict]) -> dict[str, int]:
         "Street": 0,
         "Rest": 0,
         "Skipped": 0,
+        "Welcome Bonus": 0,
+        "Returned": 0,
     }
 
     for activity in activities:
@@ -599,18 +621,6 @@ async def _run_loadtest_batch(total_jobs: int) -> dict:
     }
 
 
-AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
-LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
-
-
-def _get_auto_removed_key(user_id: int) -> str:
-    return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
-
-
-def _get_last_warning_key(user_id: int) -> str:
-    return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
-
-
 @router.message(F.new_chat_members)
 async def handle_new_chat_members(message: Message):
     if message.chat.id != REPORTS_GROUP_ID:
@@ -621,9 +631,29 @@ async def handle_new_chat_members(message: Message):
             continue
 
         user_id = int(member.id)
-
         removed_key = _get_auto_removed_key(user_id)
         removed_payload = await get_data(removed_key)
+
+        name_raw = f"@{member.username}" if member.username else (member.full_name or "Учасник")
+        name_html = escape(str(name_raw))
+
+        try:
+            await update_user_activity(
+                user_id=user_id,
+                nickname=str(name_raw),
+                action_name="Returned",
+                hp_change=0,
+                video_id=f"returned:{user_id}:{message.message_id}",
+                is_check=False,
+                skip_lock=True,
+            )
+        except Exception as e:
+            logger.error(
+                "[HANDLERS] failed to write Returned activity user_id=%s error=%s",
+                user_id,
+                e,
+                exc_info=True,
+            )
 
         if removed_payload is None:
             continue
@@ -631,11 +661,9 @@ async def handle_new_chat_members(message: Message):
         await delete_data(removed_key)
         await delete_data(_get_last_warning_key(user_id))
 
-        name = escape(member.username or member.full_name or "Учасник")
-
         try:
             await message.answer(
-                f"🏎️ <b>{name}</b> повернувся в TurboTeam.\n"
+                f"🏎️ <b>{name_html}</b> повернувся в TurboTeam.\n"
                 f"Доступ відновлено. Тепер головне — не випадати з гри 🔥",
                 parse_mode="HTML",
             )
@@ -644,7 +672,6 @@ async def handle_new_chat_members(message: Message):
                 f"[HANDLERS] failed to send return message user_id={user_id}: {e}",
                 exc_info=True,
             )
-
 
 
 @router.message(F.text == "🏆 Рейтинг ТОП")
@@ -779,6 +806,7 @@ async def handle_my_profile(message: Message):
         nickname = user_row.get("nickname") or message.from_user.first_name
         hp_total = int(stats.get("hp_total", 0) or 0)
         streak = int(stats.get("streak", 0) or 0)
+        streak_max = int(stats.get("weekly_streak_max", WEEKLY_STREAK_MAX) or WEEKLY_STREAK_MAX)
 
         nickname_html = escape(str(nickname))
         status_title_html = escape(str(status_title))
@@ -790,7 +818,7 @@ async def handle_my_profile(message: Message):
             f"🏷️ Нік: <b>{nickname_html}</b>\n"
             f"🎖️ Статус: <b>{status_title_html}</b>\n"
             f"⚡ Загальний HP: <b>{hp_total}</b>\n"
-            f"🔥 Streak: <b>{streak}</b> {_word_days(streak)}\n\n"
+            f"🔥 Streak: <b>{streak}/{streak_max}</b>\n\n"
             f"📊 <b>АКТИВНІСТЬ</b>\n"
             f"🏋️ Gym: <b>{gym_count}</b>\n"
             f"🦾 Street: <b>{street_count}</b>\n"
@@ -1047,7 +1075,9 @@ async def handle_activity_stats(m: Message):
             f"🏋️ Gym: <b>{week_counts['Gym']}</b>\n"
             f"🦾 Street: <b>{week_counts['Street']}</b>\n"
             f"🧘 Rest: <b>{week_counts['Rest']}</b>\n"
-            f"🚫 Skip: <b>{week_counts['Skipped']}</b>\n\n"
+            f"🚫 Skip: <b>{week_counts['Skipped']}</b>\n"
+            f"🎁 Welcome Bonus: <b>{week_counts['Welcome Bonus']}</b>\n"
+            f"🏎️ Returned: <b>{week_counts['Returned']}</b>\n\n"
             f"⚡ HP за тиждень: <b>{week_hp}</b>\n"
             f"📈 Середня активність: <b>{avg_activity}</b> дії на активного юзера"
         )
@@ -1152,7 +1182,9 @@ async def handle_impact_stats(m: Message):
             f"🏋️ Gym: <b>{counts['Gym']}</b>\n"
             f"🦾 Street: <b>{counts['Street']}</b>\n"
             f"🧘 Rest: <b>{counts['Rest']}</b>\n"
-            f"🚫 Skip: <b>{counts['Skipped']}</b>\n\n"
+            f"🚫 Skip: <b>{counts['Skipped']}</b>\n"
+            f"🎁 Welcome Bonus: <b>{counts['Welcome Bonus']}</b>\n"
+            f"🏎️ Returned: <b>{counts['Returned']}</b>\n\n"
             f"<b>Що це означає:</b>\n"
             f"• {data['active_percent']}% учасників не просто зайшли в чат, а виконали дію.\n"
             f"• {data['training_count']} тренувань підтверджені через бота.\n"
