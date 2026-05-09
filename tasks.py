@@ -34,6 +34,15 @@ SECOND_DAY_REMINDER_DAYS = 2
 SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
 SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
 
+REAL_ACTIVITY_ACTIONS = {
+    "Gym",
+    "Street",
+    "Rest",
+    "Skipped",
+    "Welcome Bonus",
+    "Returned",
+}
+
 
 def safe_job(func):
     @functools.wraps(func)
@@ -83,7 +92,7 @@ def _parse_activity_created_at(value):
 
 def _is_real_activity(activity: dict) -> bool:
     action_name = str(activity.get("action_name") or "").strip()
-    return action_name in {"Gym", "Street", "Rest", "Skipped"}
+    return action_name in REAL_ACTIVITY_ACTIONS
 
 
 def _get_last_real_activity_date(activities: list[dict]):
