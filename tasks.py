@@ -294,6 +294,8 @@ async def send_second_day_private_reminder(bot) -> None:
         today_str = today.strftime("%Y-%m-%d")
         sent_count = 0
         skipped_count = 0
+        skipped_not_in_group = 0
+        skipped_removed = 0
 
         for user in users:
             telegram_user_id = user.get("telegram_user_id")
@@ -308,6 +310,13 @@ async def send_second_day_private_reminder(bot) -> None:
             removed_key = _get_auto_removed_key(user_id)
             already_removed = await get_data(removed_key)
             if already_removed is not None:
+                skipped_removed += 1
+                skipped_count += 1
+                continue
+
+            in_group = await _is_user_in_group(bot, user_id)
+            if not in_group:
+                skipped_not_in_group += 1
                 skipped_count += 1
                 continue
 
@@ -360,9 +369,11 @@ async def send_second_day_private_reminder(bot) -> None:
                 skipped_count += 1
 
         logger.info(
-            "[TASKS] Second-day private reminder finished. Sent: %s, skipped: %s",
+            "[TASKS] Second-day private reminder finished. Sent: %s, skipped: %s, skipped_removed=%s, skipped_not_in_group=%s",
             sent_count,
             skipped_count,
+            skipped_removed,
+            skipped_not_in_group,
         )
 
     except Exception as e:
@@ -485,6 +496,8 @@ async def send_last_day_warning(bot) -> None:
         return
 
     warned_count = 0
+    skipped_not_in_group = 0
+    skipped_removed = 0
 
     for user in warning_users:
         user_id = int(user["telegram_user_id"])
@@ -492,10 +505,12 @@ async def send_last_day_warning(bot) -> None:
         removed_key = _get_auto_removed_key(user_id)
         already_removed = await get_data(removed_key)
         if already_removed is not None:
+            skipped_removed += 1
             continue
 
         in_group = await _is_user_in_group(bot, user_id)
         if not in_group:
+            skipped_not_in_group += 1
             continue
 
         warned_key = _get_last_warning_key(user_id)
@@ -524,7 +539,12 @@ async def send_last_day_warning(bot) -> None:
                 exc_info=True,
             )
 
-    logger.info(f"[TASKS] Last-day warning finished. Warned: {warned_count}")
+    logger.info(
+        "[TASKS] Last-day warning finished. Warned: %s, skipped_removed=%s, skipped_not_in_group=%s",
+        warned_count,
+        skipped_removed,
+        skipped_not_in_group,
+    )
 
 
 @safe_job
@@ -562,6 +582,7 @@ async def auto_remove_inactive_users(bot) -> None:
                     "unban_at": ban_until.isoformat(),
                     "status": "already_not_in_group",
                     "created_at": now.isoformat(),
+                    "unban_notified": True,
                 },
             )
             skipped_not_in_group += 1
@@ -581,6 +602,7 @@ async def auto_remove_inactive_users(bot) -> None:
                 "unban_at": ban_until.isoformat(),
                 "status": "banned",
                 "created_at": now.isoformat(),
+                "unban_notified": False,
             }
             await set_data(user_key, payload)
 
@@ -629,6 +651,7 @@ async def auto_unban_inactive_users(bot) -> None:
     unbanned_count = 0
     notified_count = 0
     skipped_waiting_return = 0
+    skipped_already_not_in_group = 0
     now = get_kyiv_now()
 
     while True:
@@ -651,6 +674,10 @@ async def auto_unban_inactive_users(bot) -> None:
 
             if not user_id or not unban_at_raw:
                 await delete_data(key)
+                continue
+
+            if status == "already_not_in_group":
+                skipped_already_not_in_group += 1
                 continue
 
             if status == "waiting_return" and unban_notified:
@@ -706,10 +733,11 @@ async def auto_unban_inactive_users(bot) -> None:
             break
 
     logger.info(
-        "[TASKS] Auto-unban finished. Unbanned: %s, notified: %s, skipped_waiting_return=%s",
+        "[TASKS] Auto-unban finished. Unbanned: %s, notified: %s, skipped_waiting_return=%s, skipped_already_not_in_group=%s",
         unbanned_count,
         notified_count,
         skipped_waiting_return,
+        skipped_already_not_in_group,
     )
 
 
