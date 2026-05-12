@@ -30,6 +30,12 @@ flow_event_bus = EventBus()
 WELCOME_HP_BONUS = 50
 RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
 
+NOT_REGISTERED_TEXT = (
+    "⚠️ Тебе ще немає в базі TurboTeam.\n\n"
+    "Натисни /start у боті, пройди коротку реєстрацію — "
+    "і тоді зможеш отримувати HP."
+)
+
 
 def mention(user: types.User) -> str:
     if user.username:
@@ -77,6 +83,22 @@ def _get_group_inline_keyboard() -> types.InlineKeyboardMarkup:
     )
 
 
+def _get_start_inline_keyboard(bot_username: str | None) -> types.InlineKeyboardMarkup | None:
+    if not bot_username:
+        return None
+
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🚀 Зареєструватися",
+                    url=f"https://t.me/{bot_username}?start=register",
+                )
+            ]
+        ]
+    )
+
+
 async def _safe_send_group_message(bot, text: str, parse_mode: str | None = None) -> bool:
     try:
         await bot.send_message(
@@ -106,6 +128,54 @@ async def _reply_transport(
         return sent
 
     return await source.answer(text, parse_mode=parse_mode)
+
+
+async def _reply_not_registered(source: Message | CallbackQuery) -> None:
+    try:
+        me = await source.bot.get_me()
+        keyboard = _get_start_inline_keyboard(me.username)
+    except Exception:
+        keyboard = None
+
+    if isinstance(source, CallbackQuery):
+        try:
+            await source.answer(NOT_REGISTERED_TEXT, show_alert=True)
+        except Exception:
+            pass
+
+        try:
+            await source.message.answer(
+                NOT_REGISTERED_TEXT,
+                reply_markup=keyboard,
+                parse_mode=None,
+            )
+        except Exception as e:
+            logger.debug(f"[AUTH] failed to send not registered message: {e}")
+        return
+
+    await source.answer(
+        NOT_REGISTERED_TEXT,
+        reply_markup=keyboard,
+        parse_mode=None,
+    )
+
+
+async def _ensure_registered(user_id: int, source: Message | CallbackQuery, flow_name: str) -> bool:
+    t = time.perf_counter()
+    exists = await check_user_exists(user_id)
+    logger.info(
+        "[AUTH] check_user_exists user_id=%s flow=%s exists=%s took %sms",
+        user_id,
+        flow_name,
+        exists,
+        _ms(t),
+    )
+
+    if exists:
+        return True
+
+    await _reply_not_registered(source)
+    return False
 
 
 async def on_user_registered(event: EventEnvelope) -> bool:
@@ -236,6 +306,15 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     source = event.payload["source"]
     action = event.payload["action"]
     user = event.payload["user"]
+
+    if not await _ensure_registered(event.user_id, source, f"training:{action}"):
+        logger.info(
+            "[TRAIN] blocked unregistered user_id=%s action=%s total=%sms",
+            event.user_id,
+            action,
+            _ms(total_started),
+        )
+        return False
 
     t = time.perf_counter()
     current_state = await state_machine.get_state(event.user_id)
@@ -482,6 +561,15 @@ async def _handle_static_action(event: EventEnvelope, action_name: str, hp: int,
     source = event.payload["source"]
     user = event.payload["user"]
 
+    if not await _ensure_registered(event.user_id, source, f"static:{action_name}"):
+        logger.info(
+            "[STATIC] blocked unregistered user_id=%s action=%s total=%sms",
+            event.user_id,
+            action_name,
+            _ms(total_started),
+        )
+        return False
+
     t = time.perf_counter()
     today_has_activity = await ActivityService.check_today_report(event.user_id, ignore_actions=["Реєстрація"])
     logger.info(
@@ -576,6 +664,14 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     total_started = time.perf_counter()
 
     message: Message = event.payload["message"]
+
+    if not await _ensure_registered(event.user_id, message, "video_upload"):
+        logger.info(
+            "[VIDEO] blocked unregistered user_id=%s total=%sms",
+            event.user_id,
+            _ms(total_started),
+        )
+        return False
 
     t = time.perf_counter()
     current_state = await state_machine.get_state(event.user_id)
