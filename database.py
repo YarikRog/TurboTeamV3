@@ -21,6 +21,7 @@ from supabase_db import (
     get_referrals_count,
     get_weekly_rating,
     add_referral as supabase_add_referral,
+    get_last_user_activity_by_actions,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,38 @@ def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[d
             last_activity_date = activity_date
 
     return last_activity_date
+
+
+def _get_last_activity_date_from_row(activity: Optional[Dict[str, Any]]) -> Optional[datetime.date]:
+    if not activity:
+        return None
+
+    created_at = _parse_activity_created_at(activity.get("created_at"))
+    if not created_at:
+        return None
+
+    return created_at.date()
+
+
+async def _get_last_real_activity_row(user_uuid: str) -> Optional[Dict[str, Any]]:
+    try:
+        return await get_last_user_activity_by_actions(
+            user_id=str(user_uuid),
+            actions=list(REAL_ACTIVITY_ACTIONS),
+        )
+    except Exception as e:
+        logger.error(
+            "[DB] failed to get last real activity row: user_uuid=%s error=%s",
+            user_uuid,
+            e,
+            exc_info=True,
+        )
+        return None
+
+
+async def _get_last_real_activity_date_direct(user_uuid: str) -> Optional[datetime.date]:
+    activity = await _get_last_real_activity_row(user_uuid)
+    return _get_last_activity_date_from_row(activity)
 
 
 async def _has_activity_today(
@@ -606,11 +639,8 @@ async def get_inactive_users() -> List[str]:
                 )
                 continue
 
-            activities = await get_user_activities(
-                str(user_uuid),
-                limit=INACTIVITY_ACTIVITY_LIMIT,
-            )
-            last_activity_date = _get_last_real_activity_date(activities)
+            last_activity_row = await _get_last_real_activity_row(str(user_uuid))
+            last_activity_date = _get_last_activity_date_from_row(last_activity_row)
 
             if last_activity_date is None:
                 silent_days = INACTIVE_DAYS_THRESHOLD
@@ -621,9 +651,12 @@ async def get_inactive_users() -> List[str]:
                 continue
 
             logger.info(
-                "[INACTIVE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                "[INACTIVE] user_id=%s uuid=%s nickname=%s last_action=%s last_created_at=%s last_activity_date=%s today=%s silent_days=%s",
                 telegram_user_id,
+                user_uuid,
                 nickname,
+                last_activity_row.get("action_name") if last_activity_row else None,
+                last_activity_row.get("created_at") if last_activity_row else None,
                 last_activity_date,
                 today,
                 silent_days,
@@ -663,11 +696,8 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
                 )
                 continue
 
-            activities = await get_user_activities(
-                str(user_uuid),
-                limit=INACTIVITY_ACTIVITY_LIMIT,
-            )
-            last_activity_date = _get_last_real_activity_date(activities)
+            last_activity_row = await _get_last_real_activity_row(str(user_uuid))
+            last_activity_date = _get_last_activity_date_from_row(last_activity_row)
 
             if last_activity_date is None:
                 silent_days = LAST_WARNING_DAYS_THRESHOLD
@@ -678,9 +708,12 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
                 continue
 
             logger.info(
-                "[LAST_WARNING_CANDIDATE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                "[LAST_WARNING_CANDIDATE] user_id=%s uuid=%s nickname=%s last_action=%s last_created_at=%s last_activity_date=%s today=%s silent_days=%s",
                 telegram_user_id,
+                user_uuid,
                 nickname,
+                last_activity_row.get("action_name") if last_activity_row else None,
+                last_activity_row.get("created_at") if last_activity_row else None,
                 last_activity_date,
                 today,
                 silent_days,
@@ -726,11 +759,8 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
                 )
                 continue
 
-            activities = await get_user_activities(
-                str(user_uuid),
-                limit=INACTIVITY_ACTIVITY_LIMIT,
-            )
-            last_activity_date = _get_last_real_activity_date(activities)
+            last_activity_row = await _get_last_real_activity_row(str(user_uuid))
+            last_activity_date = _get_last_activity_date_from_row(last_activity_row)
 
             if last_activity_date is None:
                 silent_days = AUTO_REMOVE_DAYS_THRESHOLD
@@ -741,9 +771,12 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
                 continue
 
             logger.info(
-                "[AUTO_REMOVE_CANDIDATE] user_id=%s nickname=%s last_activity_date=%s today=%s silent_days=%s",
+                "[AUTO_REMOVE_CANDIDATE] user_id=%s uuid=%s nickname=%s last_action=%s last_created_at=%s last_activity_date=%s today=%s silent_days=%s",
                 telegram_user_id,
+                user_uuid,
                 nickname,
+                last_activity_row.get("action_name") if last_activity_row else None,
+                last_activity_row.get("created_at") if last_activity_row else None,
                 last_activity_date,
                 today,
                 silent_days,
