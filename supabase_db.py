@@ -172,6 +172,44 @@ async def get_user_activities(user_id: str, limit: int = 50) -> List[Dict[str, A
     return response.data or []
 
 
+async def get_last_user_activity_by_actions(
+    user_id: str,
+    actions: List[str],
+) -> Optional[Dict[str, Any]]:
+    """
+    Returns the latest activity for a user by action_name list.
+
+    Used by inactivity / last warning / auto-removal logic.
+    This avoids relying on loading a large activity list and scanning it manually.
+    """
+    normalized_actions = [
+        str(action).strip()
+        for action in actions
+        if str(action).strip()
+    ]
+
+    if not normalized_actions:
+        return None
+
+    def _query():
+        sb = get_supabase()
+        return (
+            sb.table("activities")
+            .select("*")
+            .eq("user_id", user_id)
+            .in_("action_name", normalized_actions)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+    response = await _run_sync(_query)
+
+    if response.data:
+        return response.data[0]
+    return None
+
+
 async def get_user_activities_in_period(
     user_id: str,
     created_at_from: str,
