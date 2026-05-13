@@ -310,6 +310,62 @@ class ActivityService:
             logger.warning("[invalidate_training_count_cache] %s", e)
 
     @staticmethod
+    async def refresh_streak_after_training(
+        user_id: int,
+        fallback_streak: int = 0,
+        attempts: int = 3,
+        delay_seconds: float = 0.4,
+    ) -> int:
+        """
+        Reads fresh weekly streak after a training write.
+
+        Supabase can occasionally return stale activity data immediately after insert.
+        This helper retries shortly before building the public report.
+        """
+        best_streak = max(0, int(fallback_streak or 0))
+
+        for attempt in range(1, attempts + 1):
+            try:
+                from database import get_user_stats
+
+                stats = await get_user_stats(user_id)
+                if stats:
+                    fresh_streak = int(stats.get("streak", 0) or 0)
+                    fresh_streak = min(max(0, fresh_streak), WEEKLY_STREAK_MAX)
+
+                    if fresh_streak > best_streak:
+                        best_streak = fresh_streak
+
+                    if fresh_streak > 0:
+                        logger.info(
+                            "[STREAK] Fresh streak loaded: uid=%s streak=%s attempt=%s",
+                            user_id,
+                            fresh_streak,
+                            attempt,
+                        )
+                        return fresh_streak
+
+                logger.info(
+                    "[STREAK] Fresh streak not ready: uid=%s attempt=%s fallback=%s",
+                    user_id,
+                    attempt,
+                    best_streak,
+                )
+
+            except Exception as e:
+                logger.warning(
+                    "[STREAK] Failed to refresh streak: uid=%s attempt=%s error=%s",
+                    user_id,
+                    attempt,
+                    e,
+                )
+
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds)
+
+        return best_streak
+
+    @staticmethod
     def get_current_training_status(training_count: int) -> str:
         """
         Returns current status title for any training count.
@@ -701,6 +757,12 @@ class ActivityService:
 
         if action_type in ["Gym", "Street"]:
             await ActivityService.invalidate_training_count_cache(user.id)
+            streak_days = await ActivityService.refresh_streak_after_training(
+                user_id=user.id,
+                fallback_streak=streak_days,
+                attempts=3,
+                delay_seconds=0.4,
+            )
 
         back_to_group_kb = types.InlineKeyboardMarkup(
             inline_keyboard=[
