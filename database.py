@@ -75,17 +75,52 @@ async def _is_auto_removed_user(telegram_user_id: int) -> bool:
 
 
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:
-    if not value:
+    """
+    Safely parses Supabase created_at into Kyiv-aware datetime.
+
+    Supports:
+    - datetime objects
+    - 2026-05-12T15:27:17.82741+00:00
+    - 2026-05-12T15:27:17.827410+00:00
+    - 2026-05-12T15:27:17Z
+    - strings with timezone suffix
+    """
+    if value is None:
         return None
 
     if isinstance(value, datetime):
         dt = value
     elif isinstance(value, str):
-        try:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except Exception:
+        raw = value.strip()
+        if not raw:
             return None
+
+        normalized = raw.replace("Z", "+00:00")
+
+        try:
+            dt = datetime.fromisoformat(normalized)
+        except Exception:
+            try:
+                # Fallback for rare Supabase/Postgres formats.
+                # Example: 2026-05-12 15:27:17.82741+00
+                normalized = normalized.replace(" ", "T")
+                if normalized.endswith("+00"):
+                    normalized = normalized[:-3] + "+00:00"
+                dt = datetime.fromisoformat(normalized)
+            except Exception as e:
+                logger.error(
+                    "[DATE_PARSE_ERROR] Failed to parse created_at=%r error=%s",
+                    value,
+                    e,
+                    exc_info=True,
+                )
+                return None
     else:
+        logger.error(
+            "[DATE_PARSE_ERROR] Unsupported created_at type=%s value=%r",
+            type(value).__name__,
+            value,
+        )
         return None
 
     if dt.tzinfo is None:
@@ -237,6 +272,36 @@ def _get_last_activity_date_from_row(activity: Optional[Dict[str, Any]]) -> Opti
         return None
 
     return created_at.date()
+
+
+def _should_skip_due_to_bad_activity_date(
+    context: str,
+    telegram_user_id: Any,
+    user_uuid: Any,
+    nickname: str,
+    last_activity_row: Optional[Dict[str, Any]],
+    last_activity_date: Optional[datetime.date],
+) -> bool:
+    """
+    Safety guard.
+
+    If Supabase returned an activity row but date parsing failed, we must NOT treat
+    the user as inactive. Otherwise a valid active user can be warned/removed.
+    """
+    if last_activity_row is not None and last_activity_date is None:
+        logger.error(
+            "[%s] SAFETY_SKIP_BAD_DATE user_id=%s uuid=%s nickname=%s "
+            "last_action=%s last_created_at=%s",
+            context,
+            telegram_user_id,
+            user_uuid,
+            nickname,
+            last_activity_row.get("action_name"),
+            last_activity_row.get("created_at"),
+        )
+        return True
+
+    return False
 
 
 async def _get_last_real_activity_row(user_uuid: str) -> Optional[Dict[str, Any]]:
@@ -642,6 +707,16 @@ async def get_inactive_users() -> List[str]:
             last_activity_row = await _get_last_real_activity_row(str(user_uuid))
             last_activity_date = _get_last_activity_date_from_row(last_activity_row)
 
+            if _should_skip_due_to_bad_activity_date(
+                "INACTIVE",
+                telegram_user_id,
+                user_uuid,
+                nickname,
+                last_activity_row,
+                last_activity_date,
+            ):
+                continue
+
             if last_activity_date is None:
                 silent_days = INACTIVE_DAYS_THRESHOLD
             else:
@@ -698,6 +773,16 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
 
             last_activity_row = await _get_last_real_activity_row(str(user_uuid))
             last_activity_date = _get_last_activity_date_from_row(last_activity_row)
+
+            if _should_skip_due_to_bad_activity_date(
+                "LAST_WARNING",
+                telegram_user_id,
+                user_uuid,
+                nickname,
+                last_activity_row,
+                last_activity_date,
+            ):
+                continue
 
             if last_activity_date is None:
                 silent_days = LAST_WARNING_DAYS_THRESHOLD
@@ -761,6 +846,16 @@ async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
 
             last_activity_row = await _get_last_real_activity_row(str(user_uuid))
             last_activity_date = _get_last_activity_date_from_row(last_activity_row)
+
+            if _should_skip_due_to_bad_activity_date(
+                "AUTO_REMOVE",
+                telegram_user_id,
+                user_uuid,
+                nickname,
+                last_activity_row,
+                last_activity_date,
+            ):
+                continue
 
             if last_activity_date is None:
                 silent_days = AUTO_REMOVE_DAYS_THRESHOLD
