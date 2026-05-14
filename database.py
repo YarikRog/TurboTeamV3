@@ -76,14 +76,15 @@ async def _is_auto_removed_user(telegram_user_id: int) -> bool:
 
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:
     """
-    Safely parses Supabase created_at into Kyiv-aware datetime.
+    Safely parses Supabase/Postgres created_at into Kyiv-aware datetime.
 
     Supports:
     - datetime objects
-    - 2026-05-12T15:27:17.82741+00:00
+    - 2026-05-14T09:23:14.6173+00:00
+    - 2026-05-13T16:50:24.31573+00:00
     - 2026-05-12T15:27:17.827410+00:00
     - 2026-05-12T15:27:17Z
-    - strings with timezone suffix
+    - 2026-05-12 15:27:17.82741+00
     """
     if value is None:
         return None
@@ -95,26 +96,44 @@ def _parse_activity_created_at(value: Any) -> Optional[datetime]:
         if not raw:
             return None
 
-        normalized = raw.replace("Z", "+00:00")
+        normalized = raw.replace(" ", "T").replace("Z", "+00:00")
+
+        if normalized.endswith("+00"):
+            normalized = normalized[:-3] + "+00:00"
 
         try:
+            if "." in normalized:
+                date_part, tail = normalized.split(".", 1)
+
+                tz_part = ""
+                fraction_part = tail
+
+                plus_index = tail.find("+")
+                minus_index = tail.find("-", 1)
+
+                if plus_index != -1:
+                    fraction_part = tail[:plus_index]
+                    tz_part = tail[plus_index:]
+                elif minus_index != -1:
+                    fraction_part = tail[:minus_index]
+                    tz_part = tail[minus_index:]
+
+                digits = "".join(ch for ch in fraction_part if ch.isdigit())
+                digits = digits[:6].ljust(6, "0")
+
+                normalized = f"{date_part}.{digits}{tz_part}"
+
             dt = datetime.fromisoformat(normalized)
-        except Exception:
-            try:
-                # Fallback for rare Supabase/Postgres formats.
-                # Example: 2026-05-12 15:27:17.82741+00
-                normalized = normalized.replace(" ", "T")
-                if normalized.endswith("+00"):
-                    normalized = normalized[:-3] + "+00:00"
-                dt = datetime.fromisoformat(normalized)
-            except Exception as e:
-                logger.error(
-                    "[DATE_PARSE_ERROR] Failed to parse created_at=%r error=%s",
-                    value,
-                    e,
-                    exc_info=True,
-                )
-                return None
+
+        except Exception as e:
+            logger.error(
+                "[DATE_PARSE_ERROR] Failed to parse created_at=%r normalized=%r error=%s",
+                value,
+                normalized,
+                e,
+                exc_info=True,
+            )
+            return None
     else:
         logger.error(
             "[DATE_PARSE_ERROR] Unsupported created_at type=%s value=%r",
@@ -789,7 +808,7 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
             else:
                 silent_days = (today - last_activity_date).days
 
-            if silent_days < LAST_WARNING_DAYS_THRESHOLD:
+            if silent_days != LAST_WARNING_DAYS_THRESHOLD:
                 continue
 
             logger.info(
