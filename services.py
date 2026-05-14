@@ -232,6 +232,200 @@ def _format_days_uk(days: int) -> str:
     return "днів"
 
 
+def _build_progress_bar(current: int, target: int, width: int = 10) -> str:
+    """
+    Builds text progress bar.
+
+    Example:
+    current=5 target=10 -> █████░░░░░
+    """
+    try:
+        current = max(0, int(current))
+        target = max(1, int(target))
+        width = max(5, int(width))
+
+        filled = round((min(current, target) / target) * width)
+        filled = min(width, max(0, filled))
+        empty = width - filled
+
+        return "█" * filled + "░" * empty
+    except Exception:
+        return "░" * width
+
+
+def _get_next_training_rank_progress(training_count: int) -> dict[str, Any]:
+    """
+    Returns progress data to next rank.
+    """
+    training_count = max(0, int(training_count or 0))
+
+    current_threshold = 0
+    current_title = "Без статусу"
+
+    for threshold, title in TRAINING_STATUS_LEVELS:
+        if training_count >= threshold:
+            current_threshold = threshold
+            current_title = title
+        else:
+            next_threshold = threshold
+            next_title = title
+            progress_from_current_rank = max(0, training_count - current_threshold)
+            progress_target = max(1, next_threshold - current_threshold)
+            left = max(0, next_threshold - training_count)
+
+            return {
+                "current_title": current_title,
+                "current_threshold": current_threshold,
+                "next_title": next_title,
+                "next_threshold": next_threshold,
+                "progress_current": progress_from_current_rank,
+                "progress_target": progress_target,
+                "left": left,
+                "is_max": False,
+            }
+
+    return {
+        "current_title": current_title,
+        "current_threshold": current_threshold,
+        "next_title": None,
+        "next_threshold": None,
+        "progress_current": current_threshold,
+        "progress_target": current_threshold,
+        "left": 0,
+        "is_max": True,
+    }
+
+
+def _get_next_streak_bonus_progress(streak_days: int) -> dict[str, Any]:
+    """
+    Returns next streak bonus milestone data.
+    """
+    streak_days = max(0, int(streak_days or 0))
+
+    for milestone in sorted(STREAK_BONUS_MILESTONES):
+        if streak_days < milestone:
+            return {
+                "next_milestone": milestone,
+                "bonus": int(STREAK_BONUS_MILESTONES[milestone]),
+                "left": milestone - streak_days,
+                "is_max": False,
+            }
+
+    return {
+        "next_milestone": WEEKLY_STREAK_MAX,
+        "bonus": int(STREAK_BONUS_MILESTONES.get(WEEKLY_STREAK_MAX, 0)),
+        "left": 0,
+        "is_max": True,
+    }
+
+
+def _get_next_training_achievement_progress(training_count: int) -> dict[str, Any]:
+    """
+    Returns next training achievement data.
+    """
+    training_count = max(0, int(training_count or 0))
+
+    for threshold, achievement_code, achievement_title in TRAINING_ACHIEVEMENTS:
+        if training_count < threshold:
+            return {
+                "threshold": threshold,
+                "achievement_code": achievement_code,
+                "achievement_title": achievement_title,
+                "left": threshold - training_count,
+                "is_max": False,
+            }
+
+    last_threshold, last_code, last_title = TRAINING_ACHIEVEMENTS[-1]
+    return {
+        "threshold": last_threshold,
+        "achievement_code": last_code,
+        "achievement_title": last_title,
+        "left": 0,
+        "is_max": True,
+    }
+
+
+def _build_training_progress_report_block(
+    training_count: int,
+    current_status_title: str,
+    streak_days: int,
+) -> str:
+    """
+    Builds beautiful progress block for group training report.
+    """
+    rank_progress = _get_next_training_rank_progress(training_count)
+    streak_progress = _get_next_streak_bonus_progress(streak_days)
+    achievement_progress = _get_next_training_achievement_progress(training_count)
+
+    streak_days = max(0, min(int(streak_days or 0), WEEKLY_STREAK_MAX))
+    streak_bar = _build_progress_bar(streak_days, WEEKLY_STREAK_MAX, width=14)
+
+    lines = [
+        "",
+        f"🎖️ Рівень: <b>{escape(str(current_status_title))}</b>",
+        f"📊 Тренувань: <b>{int(training_count)}</b>",
+        "",
+    ]
+
+    if rank_progress["is_max"]:
+        lines.extend(
+            [
+                "📈 <b>Ранг прокачано на максимум</b>",
+                "██████████ MAX",
+                "Ти вже в легендарній зоні 🏎️🔥",
+                "",
+            ]
+        )
+    else:
+        rank_bar = _build_progress_bar(
+            rank_progress["progress_current"],
+            rank_progress["progress_target"],
+            width=10,
+        )
+        lines.extend(
+            [
+                f"📈 <b>До рангу “{escape(str(rank_progress['next_title']))}”</b>",
+                f"{rank_bar} {training_count}/{rank_progress['next_threshold']}",
+                f"Ще <b>{rank_progress['left']}</b> тренувань 🔥",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "🔥 <b>Streak</b>",
+            f"{streak_bar} {streak_days}/{WEEKLY_STREAK_MAX}",
+        ]
+    )
+
+    if streak_progress["is_max"]:
+        lines.append("Максимальна streak-нагорода цього тижня взята 🏆")
+    else:
+        lines.append(
+            f"До бонусу <b>+{streak_progress['bonus']} HP</b>: "
+            f"ще <b>{streak_progress['left']}</b>"
+        )
+
+    if achievement_progress["is_max"]:
+        lines.extend(
+            [
+                "",
+                "🎯 Наступна ціль: легендарний режим тримається 😎",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                f"🎯 Наступна ціль: <b>{achievement_progress['threshold']}</b> тренувань",
+                f"До “{escape(str(achievement_progress['achievement_title']))}” ще "
+                f"<b>{achievement_progress['left']}</b>",
+            ]
+        )
+
+    return "\n".join(lines)
+
+
 # ==============================================================================
 # ACTIVITY SERVICE
 # ==============================================================================
@@ -847,10 +1041,10 @@ class ActivityService:
         )
 
         if action_type in ["Gym", "Street"]:
-            report_text += (
-                f"\n🎖️ Рівень: {escape(str(current_status_title))}"
-                f"\n📊 Тренувань: {training_count}"
-                f"\n🔥 Streak: {streak_days}/{WEEKLY_STREAK_MAX}"
+            report_text += _build_training_progress_report_block(
+                training_count=training_count,
+                current_status_title=current_status_title,
+                streak_days=streak_days,
             )
 
         group_text_msg = await message.bot.send_message(
