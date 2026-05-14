@@ -118,9 +118,10 @@ def _build_achievements_text(
 ) -> str:
     total = len(TRAINING_ACHIEVEMENTS)
     unlocked_count = sum(
-    1 for threshold, code, title in TRAINING_ACHIEVEMENTS
-    if code in unlocked_codes or training_count >= threshold
-)
+        1
+        for threshold, code, title in TRAINING_ACHIEVEMENTS
+        if code in unlocked_codes or training_count >= threshold
+    )
 
     percent = round((unlocked_count / total) * 100) if total > 0 else 0
     bar = _build_progress_bar(unlocked_count, total, width=10)
