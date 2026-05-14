@@ -938,6 +938,64 @@ async def handle_my_profile(message: Message):
         sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
         safe_create_task(auto_delete(sent_msg, 1))
 
+@router.message(F.text == "🏅 Досягнення")
+async def handle_my_achievements(message: Message):
+    telegram_user_id = message.from_user.id
+
+    try:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        stats = await get_user_stats(telegram_user_id)
+        user_row = await get_user_by_telegram_id(telegram_user_id)
+
+        if not stats or not user_row:
+            sent_msg = await message.answer(
+                "⚠️ Досягнення не знайдено. Спочатку зареєструйся в TurboTeam."
+            )
+            safe_create_task(auto_delete(sent_msg, 5))
+            return
+
+        user_uuid = user_row.get("id")
+        if not user_uuid:
+            sent_msg = await message.answer("⚠️ Не вдалося завантажити досягнення.")
+            safe_create_task(auto_delete(sent_msg, 5))
+            return
+
+        activities = await get_user_activities(str(user_uuid), limit=5000)
+        achievements = await get_user_achievements(str(user_uuid), limit=200)
+        referrals_count = await get_referrals_count(str(user_uuid))
+
+        unlocked_codes = {
+            str(item.get("achievement_code") or "").strip()
+            for item in achievements
+            if str(item.get("achievement_code") or "").strip()
+        }
+
+        training_count = _count_training_from_activities(activities)
+        nickname = user_row.get("nickname") or message.from_user.first_name or "Учасник"
+        hp_total = int(stats.get("hp_total", 0) or 0)
+        streak = int(stats.get("streak", 0) or 0)
+
+        text = _build_achievements_text(
+            nickname=str(nickname),
+            training_count=training_count,
+            unlocked_codes=unlocked_codes,
+            hp_total=hp_total,
+            streak=streak,
+            referrals_count=referrals_count,
+        )
+
+        sent_msg = await message.answer(text, parse_mode="HTML")
+        safe_create_task(auto_delete(sent_msg, 180))
+
+    except Exception as e:
+        logger.error(f"[HANDLERS] handle_my_achievements error: {e}", exc_info=True)
+        sent_msg = await message.answer("⚠️ Не вдалося завантажити досягнення. Спробуй ще раз.")
+        safe_create_task(auto_delete(sent_msg, 10))
+
 
 @router.message(F.text == "🚀 Запросити друга 🔥")
 async def handle_invite_friend_message(message: Message):
@@ -961,7 +1019,6 @@ async def handle_community_rules(callback: CallbackQuery):
         "• За порушення знімаємо HP"
     )
     await callback.answer(rules_text, show_alert=True)
-
 
 @router.callback_query(F.data == "turbo_rules")
 async def handle_turbo_rules(callback: CallbackQuery):
