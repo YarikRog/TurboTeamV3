@@ -30,6 +30,9 @@ AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
 
 INACTIVE_DAYS_THRESHOLD = 3
+LAST_WARNING_DAYS_THRESHOLD = 7
+AUTO_REMOVE_DAYS_THRESHOLD = 8
+
 SECOND_DAY_REMINDER_DAYS = 2
 SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
 SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
@@ -498,9 +501,22 @@ async def send_last_day_warning(bot) -> None:
     warned_count = 0
     skipped_not_in_group = 0
     skipped_removed = 0
+    skipped_already_warned = 0
+    skipped_overdue = 0
 
     for user in warning_users:
         user_id = int(user["telegram_user_id"])
+        silent_days = int(user.get("silent_days") or 0)
+
+        if silent_days != LAST_WARNING_DAYS_THRESHOLD:
+            skipped_overdue += 1
+            logger.info(
+                "[TASKS] Last-day warning skipped: user_id=%s silent_days=%s expected=%s",
+                user_id,
+                silent_days,
+                LAST_WARNING_DAYS_THRESHOLD,
+            )
+            continue
 
         removed_key = _get_auto_removed_key(user_id)
         already_removed = await get_data(removed_key)
@@ -516,10 +532,10 @@ async def send_last_day_warning(bot) -> None:
         warned_key = _get_last_warning_key(user_id)
         already_warned = await get_data(warned_key)
         if already_warned is not None:
+            skipped_already_warned += 1
             continue
 
         mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
-        silent_days = int(user.get("silent_days") or 7)
 
         try:
             await bot.send_message(
@@ -531,7 +547,7 @@ async def send_last_day_warning(bot) -> None:
                 ),
                 parse_mode="HTML",
             )
-            await set_data(_get_last_warning_key(user_id), "1", ex=172800)
+            await set_data(warned_key, "1", ex=172800)
             warned_count += 1
         except Exception as e:
             logger.error(
@@ -540,10 +556,12 @@ async def send_last_day_warning(bot) -> None:
             )
 
     logger.info(
-        "[TASKS] Last-day warning finished. Warned: %s, skipped_removed=%s, skipped_not_in_group=%s",
+        "[TASKS] Last-day warning finished. Warned: %s, skipped_removed=%s, skipped_not_in_group=%s, skipped_already_warned=%s, skipped_overdue=%s",
         warned_count,
         skipped_removed,
         skipped_not_in_group,
+        skipped_already_warned,
+        skipped_overdue,
     )
 
 
@@ -559,17 +577,27 @@ async def auto_remove_inactive_users(bot) -> None:
     removed_count = 0
     skipped_not_in_group = 0
     skipped_existing_key = 0
+    safety_skipped_not_due = 0
 
     for user in removable_users:
         user_id = int(user["telegram_user_id"])
         user_key = _get_auto_removed_key(user_id)
+        silent_days = int(user.get("silent_days") or 0)
+
+        if silent_days < AUTO_REMOVE_DAYS_THRESHOLD:
+            safety_skipped_not_due += 1
+            logger.warning(
+                "[TASKS] Auto-removal SAFETY_SKIP_NOT_DUE: user_id=%s silent_days=%s threshold=%s",
+                user_id,
+                silent_days,
+                AUTO_REMOVE_DAYS_THRESHOLD,
+            )
+            continue
 
         existing = await get_data(user_key)
         if existing is not None:
             skipped_existing_key += 1
             continue
-
-        silent_days = int(user.get("silent_days") or 0)
 
         in_group = await _is_user_in_group(bot, user_id)
         if not in_group:
@@ -618,10 +646,11 @@ async def auto_remove_inactive_users(bot) -> None:
             )
 
     logger.info(
-        "[TASKS] Auto-removal finished. Removed: %s, skipped_existing_key=%s, skipped_not_in_group=%s",
+        "[TASKS] Auto-removal finished. Removed: %s, skipped_existing_key=%s, skipped_not_in_group=%s, safety_skipped_not_due=%s",
         removed_count,
         skipped_existing_key,
         skipped_not_in_group,
+        safety_skipped_not_due,
     )
 
 
