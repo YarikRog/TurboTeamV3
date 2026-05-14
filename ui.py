@@ -16,8 +16,14 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
             url=f"https://t.me/{bot_username}?start=street",
         )
     else:
-        gym_button = types.InlineKeyboardButton(text="🏋️‍♂️ Gym Train", callback_data="train_gym")
-        street_button = types.InlineKeyboardButton(text="🦾 Street Train", callback_data="train_street")
+        gym_button = types.InlineKeyboardButton(
+            text="🏋️‍♂️ Gym Train",
+            callback_data="train_gym",
+        )
+        street_button = types.InlineKeyboardButton(
+            text="🦾 Street Train",
+            callback_data="train_street",
+        )
 
     return types.InlineKeyboardMarkup(
         inline_keyboard=[
@@ -26,8 +32,14 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
                 street_button,
             ],
             [
-                types.InlineKeyboardButton(text="🧘‍♂️ Відпочинок", callback_data="action_rest"),
-                types.InlineKeyboardButton(text="🚫 Забив болт", callback_data="action_skip"),
+                types.InlineKeyboardButton(
+                    text="🧘‍♂️ Відпочинок",
+                    callback_data="action_rest",
+                ),
+                types.InlineKeyboardButton(
+                    text="🚫 Забив болт",
+                    callback_data="action_skip",
+                ),
             ],
             [
                 types.InlineKeyboardButton(
@@ -42,7 +54,12 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
 def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="🚀 ПРОЙТИ ВІДБІР", web_app=types.WebAppInfo(url=web_app_url))]
+            [
+                types.KeyboardButton(
+                    text="🚀 ПРОЙТИ ВІДБІР",
+                    web_app=types.WebAppInfo(url=web_app_url),
+                )
+            ]
         ],
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -53,7 +70,7 @@ def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [
-                types.KeyboardButton(text="🏆 Рейтинг ТОП"),
+                types.KeyboardButton(text="🏅 Досягнення"),
                 types.KeyboardButton(text="👤 Мій профіль"),
             ],
             [
