@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 
 from architecture.event_bus import EventBus
 from architecture.events import (
+    CHALLENGE_SELECTED,
     EventEnvelope,
     PENALTY_APPLIED,
     REST_SELECTED,
@@ -17,6 +18,13 @@ from architecture.events import (
 )
 from architecture.state_machine import UserFlowState, state_machine
 from cache import KeyManager, delete_data, get_data, set_flag, set_data
+from challenge import (
+    CHALLENGE_ACTION,
+    build_challenge_group_report_text,
+    build_challenge_text,
+    get_challenge_stats,
+    submit_weekly_challenge,
+)
 from config import GROUP_LINK, HP_REST, HP_SKIP, REPORTS_GROUP_ID
 from database import get_kyiv_now, register_user_from_quiz, check_user_exists
 from phrases import get_phrase
@@ -99,6 +107,16 @@ def _get_start_inline_keyboard(bot_username: str | None) -> types.InlineKeyboard
     )
 
 
+def _get_back_to_group_inline_keyboard() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK),
+            ]
+        ]
+    )
+
+
 async def _safe_send_group_message(bot, text: str, parse_mode: str | None = None) -> bool:
     try:
         await bot.send_message(
@@ -117,17 +135,26 @@ async def _reply_transport(
     text: str,
     show_alert: bool = False,
     parse_mode: str | None = None,
+    reply_markup=None,
 ):
     if isinstance(source, CallbackQuery):
         if show_alert:
             await source.answer(text, show_alert=True)
             return None
 
-        sent = await source.message.answer(text, parse_mode=parse_mode)
+        sent = await source.message.answer(
+            text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+        )
         await source.answer()
         return sent
 
-    return await source.answer(text, parse_mode=parse_mode)
+    return await source.answer(
+        text,
+        parse_mode=parse_mode,
+        reply_markup=reply_markup,
+    )
 
 
 async def _reply_not_registered(source: Message | CallbackQuery) -> None:
@@ -367,19 +394,14 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     )
 
     if today_has_rest_or_skip:
-        back_to_group_kb = types.InlineKeyboardMarkup(
-            inline_keyboard=[[
-                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK)
-            ]]
-        )
-
         rest_text = "💆‍♂️ Бро, ти сьогодні вже відпочиваєш. Нове тренування можна зафіксувати завтра."
 
-        if isinstance(source, CallbackQuery):
-            msg = await source.message.answer(rest_text, reply_markup=back_to_group_kb, parse_mode=None)
-            await source.answer()
-        else:
-            msg = await source.answer(rest_text, reply_markup=back_to_group_kb, parse_mode=None)
+        msg = await _reply_transport(
+            source,
+            rest_text,
+            parse_mode=None,
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
 
         if msg is not None:
             safe_create_task(
@@ -434,26 +456,12 @@ async def on_training_selected(event: EventEnvelope) -> bool:
             _ms(t),
         )
 
-        back_to_group_kb = types.InlineKeyboardMarkup(
-            inline_keyboard=[[
-                types.InlineKeyboardButton(text="🔙 Назад у банду", url=GROUP_LINK)
-            ]]
-        )
-
         async def _send_with_button(text: str, parse_mode: str | None = None):
-            if isinstance(source, CallbackQuery):
-                msg = await source.message.answer(
-                    text,
-                    reply_markup=back_to_group_kb,
-                    parse_mode=parse_mode,
-                )
-                await source.answer()
-                return msg
-
-            return await source.answer(
+            return await _reply_transport(
+                source,
                 text,
-                reply_markup=back_to_group_kb,
                 parse_mode=parse_mode,
+                reply_markup=_get_back_to_group_inline_keyboard(),
             )
 
         if next_count == 1:
@@ -552,6 +560,123 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         action,
         _ms(total_started),
     )
+    return True
+
+
+async def on_challenge_selected(event: EventEnvelope) -> bool:
+    total_started = time.perf_counter()
+
+    source = event.payload["source"]
+    user = event.payload["user"]
+
+    if not await _ensure_registered(event.user_id, source, "challenge"):
+        logger.info(
+            "[CHALLENGE] blocked unregistered user_id=%s total=%sms",
+            event.user_id,
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
+    current_state = await state_machine.get_state(event.user_id)
+    logger.info(
+        "[CHALLENGE] get_state user_id=%s state=%s took %sms",
+        event.user_id,
+        current_state,
+        _ms(t),
+    )
+
+    if current_state == UserFlowState.VIDEO_WAITING:
+        msg = await _reply_transport(
+            source,
+            "⏳ Спочатку надішли відео за попередню дію.",
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_challenge_waiting_{event.user_id}")
+        return False
+
+    if current_state == UserFlowState.PROCESSING:
+        msg = await _reply_transport(
+            source,
+            "⏳ Зачекай, попередній звіт ще обробляється.",
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 15), name=f"auto_delete_challenge_processing_{event.user_id}")
+        return False
+
+    t = time.perf_counter()
+    stats = await get_challenge_stats(event.user_id)
+    logger.info(
+        "[CHALLENGE] get_stats user_id=%s stats=%s took %sms",
+        event.user_id,
+        stats,
+        _ms(t),
+    )
+
+    if not stats.get("can_submit"):
+        text = build_challenge_text(
+            weekly_count=int(stats.get("weekly_count", 0) or 0),
+            done_today=bool(stats.get("done_today")),
+        )
+
+        msg = await _reply_transport(
+            source,
+            text,
+            parse_mode="HTML",
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
+        if msg is not None:
+            safe_create_task(auto_delete(msg, 120), name=f"auto_delete_challenge_done_{event.user_id}")
+
+        logger.info(
+            "[CHALLENGE] blocked cannot submit user_id=%s total=%sms",
+            event.user_id,
+            _ms(total_started),
+        )
+        return False
+
+    t = time.perf_counter()
+    started = await state_machine.begin_training(event.user_id, CHALLENGE_ACTION, ttl=120)
+    logger.info(
+        "[CHALLENGE] begin session user_id=%s took %sms",
+        event.user_id,
+        _ms(t),
+    )
+
+    if not started:
+        await _reply_transport(
+            source,
+            "⚠️ Не вдалося активувати челендж-сесію. Спробуй ще раз.",
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
+        logger.info("[CHALLENGE] begin failed user_id=%s total=%sms", event.user_id, _ms(total_started))
+        return False
+
+    text = build_challenge_text(
+        weekly_count=int(stats.get("weekly_count", 0) or 0),
+        done_today=False,
+    )
+
+    instruction = (
+        f"{text}\n\n"
+        f"━━━━━━━━━━━━━━\n\n"
+        f"✅ <b>Сесія активована.</b>\n"
+        f"Тепер надішли свіже відео/кружечок у бот протягом <b>2 хвилин</b>."
+    )
+
+    msg = await _reply_transport(
+        source,
+        instruction,
+        parse_mode="HTML",
+        reply_markup=_get_back_to_group_inline_keyboard(),
+    )
+
+    if msg is not None:
+        safe_create_task(auto_delete(msg, 120), name=f"auto_delete_challenge_start_{event.user_id}")
+
+    logger.info("[CHALLENGE] selected user_id=%s total=%sms", event.user_id, _ms(total_started))
     return True
 
 
@@ -678,7 +803,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     logger.info("[VIDEO] get_state user_id=%s took %sms", event.user_id, _ms(t))
 
     if current_state != UserFlowState.VIDEO_WAITING:
-        await message.answer("⏰ Спочатку вибери тренування в меню!", parse_mode=None)
+        await message.answer("⏰ Спочатку вибери дію в меню!", parse_mode=None)
         logger.info("[VIDEO] wrong state user_id=%s total=%sms", event.user_id, _ms(total_started))
         return False
 
@@ -700,12 +825,85 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     await state_machine.mark_processing(event.user_id, ttl=60)
     logger.info("[VIDEO] mark_processing user_id=%s took %sms", event.user_id, _ms(t))
 
+    action = str(session_data.get("action") or "").strip()
+
+    if action == CHALLENGE_ACTION:
+        video_id = message.video_note.file_id if message.video_note else ""
+
+        t = time.perf_counter()
+        result = await submit_weekly_challenge(
+            user_id=event.user_id,
+            nickname=message.from_user.full_name,
+            video_id=video_id,
+        )
+        logger.info(
+            "[VIDEO] submit_weekly_challenge user_id=%s result=%s took %sms",
+            event.user_id,
+            result,
+            _ms(t),
+        )
+
+        if result.get("ok"):
+            await state_machine.complete(event.user_id)
+
+            await message.answer(
+                f"✅ Челендж зараховано. +{int(result.get('hp', 0) or 0)} HP",
+                reply_markup=_get_back_to_group_inline_keyboard(),
+                parse_mode=None,
+            )
+
+            try:
+                await message.copy_to(REPORTS_GROUP_ID)
+            except Exception as e:
+                logger.warning("[CHALLENGE] Failed to copy video to group: %s", e)
+
+            report_nickname = (
+                f"@{message.from_user.username}"
+                if message.from_user.username
+                else (message.from_user.full_name or message.from_user.first_name or "Учасник")
+            )
+
+            await message.bot.send_message(
+                REPORTS_GROUP_ID,
+                build_challenge_group_report_text(
+                    nickname=report_nickname,
+                    hp=int(result.get("hp", 0) or 0),
+                    weekly_count=int(result.get("weekly_count", 0) or 0),
+                ),
+                parse_mode="HTML",
+            )
+
+            logger.info("[VIDEO] challenge completed user_id=%s total=%sms", event.user_id, _ms(total_started))
+            return True
+
+        await state_machine.complete(event.user_id)
+
+        reason = str(result.get("reason") or "unknown")
+        if reason == "already_done_today":
+            text = "⚠️ Сьогодні челендж уже здано. Наступна спроба — завтра."
+        else:
+            text = "⚠️ Не вдалося зарахувати челендж. Спробуй ще раз пізніше."
+
+        await message.answer(
+            text,
+            reply_markup=_get_back_to_group_inline_keyboard(),
+            parse_mode=None,
+        )
+
+        logger.info(
+            "[VIDEO] challenge failed user_id=%s reason=%s total=%sms",
+            event.user_id,
+            reason,
+            _ms(total_started),
+        )
+        return False
+
     t = time.perf_counter()
-    success = await ActivityService.process_training_full_cycle(message, session_data["action"])
+    success = await ActivityService.process_training_full_cycle(message, action)
     logger.info(
         "[VIDEO] process_training_full_cycle user_id=%s action=%s took %sms",
         event.user_id,
-        session_data["action"],
+        action,
         _ms(t),
     )
 
@@ -738,6 +936,7 @@ async def on_penalty_applied(event: EventEnvelope) -> bool:
 
 flow_event_bus.subscribe(USER_REGISTERED, on_user_registered)
 flow_event_bus.subscribe(TRAINING_SELECTED, on_training_selected)
+flow_event_bus.subscribe(CHALLENGE_SELECTED, on_challenge_selected)
 flow_event_bus.subscribe(REST_SELECTED, on_rest_selected)
 flow_event_bus.subscribe(SKIP_SELECTED, on_skip_selected)
 flow_event_bus.subscribe(VIDEO_UPLOADED, on_video_uploaded)
