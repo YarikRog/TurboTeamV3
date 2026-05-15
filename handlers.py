@@ -358,42 +358,6 @@ async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
         )
         return False
 
-        if status in {
-            "member",
-            "administrator",
-            "creator",
-            "owner",
-            "chatmemberstatus.member",
-            "chatmemberstatus.administrator",
-            "chatmemberstatus.creator",
-            "chatmemberstatus.owner",
-        }:
-            return True
-
-        logger.info(
-            "[STATS] unknown chat member status: user_id=%s status=%s raw=%r",
-            user_id,
-            status,
-            status_raw,
-        )
-        return False
-
-    except Exception as e:
-        logger.info(
-            "[STATS] user is not available in group: user_id=%s error=%s",
-            user_id,
-            e,
-        )
-        return False
-
-    except Exception as e:
-        logger.info(
-            "[STATS] user is not available in group: user_id=%s error=%s",
-            user_id,
-            e,
-        )
-        return False
-
 
 async def _filter_users_currently_in_group(bot, users: list[dict]) -> list[dict]:
     """
@@ -415,6 +379,13 @@ async def _filter_users_currently_in_group(bot, users: list[dict]) -> list[dict]
         if await _is_user_in_group_for_stats(bot, user_id):
             result.append(user)
 
+    logger.info(
+        "[STATS] group member filter: supabase_users=%s active_group_users=%s",
+        len(users),
+        len(result),
+    )
+
+    return result
     logger.info(
         "[STATS] group member filter: supabase_users=%s active_group_users=%s",
         len(users),
