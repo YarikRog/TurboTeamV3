@@ -304,6 +304,57 @@ def _get_auto_removed_key(user_id: int) -> str:
 def _get_last_warning_key(user_id: int) -> str:
     return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
 
+async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
+    """
+    Returns True if Telegram says the user is currently in REPORTS_GROUP_ID.
+    Counts member / administrator / creator.
+    Skips left / kicked / inaccessible users.
+    """
+    try:
+        member = await bot.get_chat_member(REPORTS_GROUP_ID, user_id)
+        status = str(member.status)
+
+        if status in {"left", "kicked"}:
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.info(
+            "[STATS] user is not available in group: user_id=%s error=%s",
+            user_id,
+            e,
+        )
+        return False
+
+
+async def _filter_users_currently_in_group(bot, users: list[dict]) -> list[dict]:
+    """
+    Filters Supabase users by real Telegram group membership.
+    """
+    result = []
+
+    for user in users:
+        telegram_user_id = user.get("telegram_user_id")
+
+        if not telegram_user_id:
+            continue
+
+        try:
+            user_id = int(telegram_user_id)
+        except Exception:
+            continue
+
+        if await _is_user_in_group_for_stats(bot, user_id):
+            result.append(user)
+
+    logger.info(
+        "[STATS] group member filter: supabase_users=%s active_group_users=%s",
+        len(users),
+        len(result),
+    )
+
+    return result
 
 def _build_promo_stats_text(data: dict) -> str:
     champion = escape(str(data["champion_nickname"]))
