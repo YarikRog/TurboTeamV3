@@ -15,6 +15,7 @@ from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 
 from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
+from challenge import get_challenge_stats
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
 from database import check_user_exists, close_db_session, get_kyiv_now
 from handlers import router as action_router
@@ -373,6 +374,43 @@ async def start_handler(message: types.Message, command: CommandObject):
         return
 
     if args == "challenge":
+        try:
+            challenge_stats = await get_challenge_stats(user_id)
+
+            if challenge_stats.get("registered") and challenge_stats.get("done_today"):
+                back_to_group_kb = types.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text="🔙 Повернутися в групу",
+                                url=GROUP_LINK,
+                            )
+                        ]
+                    ]
+                )
+
+                await message.answer(
+                    "✅ Твій челендж на сьогодні вже закритий.\n\n"
+                    "Повертайся завтра — забереш нові HP 💪",
+                    reply_markup=back_to_group_kb,
+                    parse_mode=None,
+                )
+
+                try:
+                    await message.delete()
+                except Exception as e:
+                    logger.debug(f"[START] Failed to delete /start challenge message: {e}")
+
+                return
+
+        except Exception as e:
+            logger.error(
+                "[START] challenge precheck failed user_id=%s error=%s",
+                user_id,
+                e,
+                exc_info=True,
+            )
+
         await flow_event_bus.publish(
             EventEnvelope(
                 name=CHALLENGE_SELECTED,
