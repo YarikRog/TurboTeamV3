@@ -167,17 +167,23 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
     me = await bot.get_me()
 
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
-                InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
-            ],
-            [
-                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
-                InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
-            ],
-        ]
-    )
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
+            InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔥 Челендж тижня",
+                url=f"https://t.me/{me.username}?start=challenge",
+            ),
+        ],
+        [
+            InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
+            InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
+        ],
+    ]
+)
 
 
 def build_return_group_keyboard() -> InlineKeyboardMarkup:
