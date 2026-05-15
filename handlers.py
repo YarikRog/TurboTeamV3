@@ -569,8 +569,13 @@ def _calculate_turbo_index(
     return turbo_index, level
 
 
-async def _build_weekly_impact_data(finished_week: bool = True, previous_week: bool = False) -> dict:
-    users = await get_all_users()
+async def _build_weekly_impact_data(
+    bot,
+    finished_week: bool = True,
+    previous_week: bool = False,
+) -> dict:
+    all_users = await get_all_users()
+    users = await _filter_users_currently_in_group(bot, all_users)
     total_users = len(users)
 
     if previous_week:
