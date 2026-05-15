@@ -13,7 +13,7 @@ from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 
-from architecture.events import EventEnvelope, TRAINING_SELECTED, USER_REGISTERED
+from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
 from database import check_user_exists, close_db_session, get_kyiv_now
@@ -303,7 +303,6 @@ async def wipe_user(message: types.Message, command: CommandObject):
         user_uuid = str(target_user.get("id"))
         nickname = target_user.get("nickname") or f"ID:{telegram_user_id}"
 
-        # Dependent rows are removed by Supabase ON DELETE CASCADE constraints.
         await delete_user_by_id(user_uuid)
 
         today = get_kyiv_now().strftime("%Y-%m-%d")
@@ -325,6 +324,7 @@ async def wipe_user(message: types.Message, command: CommandObject):
             KeyManager.get_action_lock_key(telegram_user_id, f"Street:{today}"),
             KeyManager.get_action_lock_key(telegram_user_id, f"Rest:{today}"),
             KeyManager.get_action_lock_key(telegram_user_id, f"Skipped:{today}"),
+            KeyManager.get_action_lock_key(telegram_user_id, f"Weekly Challenge:{today}"),
         ]
 
         for key in redis_keys:
@@ -369,6 +369,27 @@ async def start_handler(message: types.Message, command: CommandObject):
             await message.delete()
         except Exception as e:
             logger.debug(f"[START] Failed to delete /start message: {e}")
+
+        return
+
+    if args == "challenge":
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=CHALLENGE_SELECTED,
+                user_id=user_id,
+                payload={
+                    "source": message,
+                    "user": message.from_user,
+                    "action": "Weekly Challenge",
+                },
+                idempotency_key=f"challenge-select:{user_id}:{message.message_id}",
+            )
+        )
+
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.debug(f"[START] Failed to delete /start challenge message: {e}")
 
         return
 
