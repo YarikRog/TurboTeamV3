@@ -1312,7 +1312,7 @@ async def handle_promo_stats(m: Message):
         return
 
     try:
-        data = await _build_weekly_impact_data(finished_week=True)
+        data = await _build_weekly_impact_data(m.bot, finished_week=True)
         text = _build_promo_stats_text(data)
 
         sent = await m.answer(
@@ -1340,8 +1340,9 @@ async def handle_promo_compare_previous(callback: CallbackQuery):
         return
 
     try:
-        current_data = await _build_weekly_impact_data(finished_week=True)
+        current_data = await _build_weekly_impact_data(callback.bot, finished_week=True)
         previous_data = await _build_weekly_impact_data(
+            callback.bot,
             finished_week=True,
             previous_week=True,
         )
@@ -1365,7 +1366,7 @@ async def handle_impact_stats(m: Message):
         return
 
     try:
-        data = await _build_weekly_impact_data(finished_week=True)
+        data = await _build_weekly_impact_data(m.bot, finished_week=True)
 
         champion = escape(str(data["champion_nickname"]))
         turbo_index = int(data["turbo_index"])
@@ -1380,7 +1381,7 @@ async def handle_impact_stats(m: Message):
             f"повертатися в гру, тренуватися, звітувати й змагатися.\n\n"
             f"📅 <b>Період:</b>\n"
             f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
-            f"👥 Учасників у базі: <b>{data['total_users']}</b>\n"
+            f"👥 Учасників у групі: <b>{data['total_users']}</b>\n"
             f"⚡ Активних за тиждень: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
             f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
             f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
@@ -1417,121 +1418,3 @@ async def handle_impact_stats(m: Message):
         logger.error(f"[HANDLERS] handle_impact_stats error: {e}", exc_info=True)
         sent = await m.answer("⚠️ Не вдалося зібрати impact-статистику.")
         safe_create_task(auto_delete(sent, 10))
-
-
-@router.message(Command("testref"))
-async def handle_test_referral_message(m: Message):
-    if m.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        bad_newbie_name = "test_user_[bad]*name_with_underscore"
-        bad_referrer_name = "@bad_ref_[name]*test_user"
-
-        newbie_html = escape(bad_newbie_name)
-        referrer_html = escape(bad_referrer_name)
-
-        text = (
-            "🧪 <b>TEST REFERRAL MESSAGE</b>\n\n"
-            f"Новий гравець <b>{newbie_html}</b> (+50 HP)\n"
-            f"Прийшов за запрошенням від: <b>{referrer_html}</b> (+150 HP) 🔥\n\n"
-            "✅ Якщо ти бачиш це повідомлення — реферальні повідомлення не падають від спецсимволів."
-        )
-
-        sent = await m.bot.send_message(
-            chat_id=REPORTS_GROUP_ID,
-            text=text,
-            parse_mode="HTML",
-        )
-
-        safe_create_task(auto_delete(sent, 120))
-
-        try:
-            await m.delete()
-        except Exception:
-            pass
-
-    except Exception as e:
-        logger.error(f"[HANDLERS] handle_test_referral_message error: {e}", exc_info=True)
-        sent = await m.answer("⚠️ Test referral message failed. Дивись логи.")
-        safe_create_task(auto_delete(sent, 10))
-
-
-@router.message(Command("loadtest"))
-async def handle_loadtest(m: Message):
-    if m.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        parts = (m.text or "").strip().split()
-        total_jobs = 20
-
-        if len(parts) >= 2:
-            try:
-                total_jobs = int(parts[1])
-            except Exception:
-                total_jobs = 20
-
-        if total_jobs < 1:
-            total_jobs = 1
-
-        if total_jobs > 200:
-            total_jobs = 200
-
-        progress = await m.answer(
-            f"⏳ Запускаю load test на <b>{total_jobs}</b> паралельних задач...",
-            parse_mode="HTML",
-        )
-
-        result = await _run_loadtest_batch(total_jobs)
-
-        text = (
-            f"🧪 <b>LOAD TEST RESULT</b>\n\n"
-            f"📦 Задач: <b>{result['total_jobs']}</b>\n"
-            f"✅ Успішно: <b>{result['success_count']}</b>\n"
-            f"❌ Помилок: <b>{result['fail_count']}</b>\n\n"
-            f"⏱ Загальний час: <b>{result['total_duration_s']} c</b>\n"
-            f"⚡ Найшвидша задача: <b>{result['min_ms']} ms</b>\n"
-            f"🐢 Найтриваліша задача: <b>{result['max_ms']} ms</b>\n"
-            f"📊 Середній час: <b>{result['avg_ms']} ms</b>\n\n"
-            f"ℹ️ Це безпечний тест конкурентності без створення юзерів у базі."
-        )
-
-        try:
-            await progress.delete()
-        except Exception:
-            pass
-
-        sent = await m.answer(text, parse_mode="HTML")
-        safe_create_task(auto_delete(sent, 180))
-
-        try:
-            await m.delete()
-        except Exception:
-            pass
-
-    except Exception as e:
-        logger.error(f"[HANDLERS] handle_loadtest error: {e}", exc_info=True)
-        sent = await m.answer("⚠️ Load test впав.")
-        safe_create_task(auto_delete(sent, 10))
-
-
-@router.message(Command("panel"))
-async def send_panel(m: Message):
-    if m.from_user.id not in ADMIN_IDS:
-        return
-
-    bot = await m.bot.get_me()
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{bot.username}?start=gym"),
-                InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{bot.username}?start=street"),
-            ],
-            [
-                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
-                InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
-            ],
-        ]
-    )
-    await m.answer("🔥 **TURBO PANEL**", reply_markup=kb)
