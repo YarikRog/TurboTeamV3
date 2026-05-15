@@ -607,7 +607,7 @@ async def _build_weekly_impact_data(
         limit=5000,
     )
 
-        real_activities = [
+    real_activities = [
         activity for activity in activities_raw
         if _is_real_activity(activity)
         and str(activity.get("user_id") or "").strip() in current_group_user_ids
