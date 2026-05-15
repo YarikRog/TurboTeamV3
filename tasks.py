@@ -37,6 +37,8 @@ SECOND_DAY_REMINDER_DAYS = 2
 SECOND_DAY_REMINDER_LINK = "https://t.me/turboteampro/3746"
 SECOND_DAY_REMINDER_REDIS_PREFIX = "turbo:second_day_reminder"
 
+BAD_DATE = "BAD_DATE"
+
 REAL_ACTIVITY_ACTIONS = {
     "Gym",
     "Street",
@@ -75,17 +77,37 @@ def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
 
 
 def _parse_activity_created_at(value):
-    if not value:
+    if value is None:
         return None
 
     if isinstance(value, datetime):
         dt = value
     elif isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+
+        normalized = raw.replace("Z", "+00:00").replace(" ", "T")
+
+        if normalized.endswith("+00"):
+            normalized = normalized[:-3] + "+00:00"
+
         try:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except Exception:
+            dt = datetime.fromisoformat(normalized)
+        except Exception as e:
+            logger.error(
+                "[TASKS_DATE_PARSE_ERROR] Failed to parse created_at=%r error=%s",
+                value,
+                e,
+                exc_info=True,
+            )
             return None
     else:
+        logger.error(
+            "[TASKS_DATE_PARSE_ERROR] Unsupported created_at type=%s value=%r",
+            type(value).__name__,
+            value,
+        )
         return None
 
     if dt.tzinfo is None:
@@ -101,6 +123,7 @@ def _is_real_activity(activity: dict) -> bool:
 
 def _get_last_real_activity_date(activities: list[dict]):
     last_activity_date = None
+    had_real_activity_with_bad_date = False
 
     for activity in activities:
         if not _is_real_activity(activity):
@@ -108,11 +131,20 @@ def _get_last_real_activity_date(activities: list[dict]):
 
         created_at = _parse_activity_created_at(activity.get("created_at"))
         if not created_at:
+            had_real_activity_with_bad_date = True
+            logger.error(
+                "[TASKS] SAFETY_BAD_ACTIVITY_DATE action=%s created_at=%r",
+                activity.get("action_name"),
+                activity.get("created_at"),
+            )
             continue
 
         activity_date = created_at.date()
         if last_activity_date is None or activity_date > last_activity_date:
             last_activity_date = activity_date
+
+    if last_activity_date is None and had_real_activity_with_bad_date:
+        return BAD_DATE
 
     return last_activity_date
 
@@ -167,23 +199,23 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
     me = await bot.get_me()
 
     return InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
-            InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔥 Челендж тижня",
-                url=f"https://t.me/{me.username}?start=challenge",
-            ),
-        ],
-        [
-            InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
-            InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
-        ],
-    ]
-)
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
+                InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔥 Челендж тижня",
+                    url=f"https://t.me/{me.username}?start=challenge",
+                ),
+            ],
+            [
+                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
+                InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
+            ],
+        ]
+    )
 
 
 def build_return_group_keyboard() -> InlineKeyboardMarkup:
@@ -306,6 +338,7 @@ async def send_second_day_private_reminder(bot) -> None:
         skipped_count = 0
         skipped_not_in_group = 0
         skipped_removed = 0
+        safety_skipped_bad_date = 0
 
         for user in users:
             telegram_user_id = user.get("telegram_user_id")
@@ -348,6 +381,15 @@ async def send_second_day_private_reminder(bot) -> None:
 
             last_activity_date = _get_last_real_activity_date(activities)
 
+            if last_activity_date == BAD_DATE:
+                safety_skipped_bad_date += 1
+                skipped_count += 1
+                logger.error(
+                    "[TASKS] Second-day reminder SAFETY_SKIP_BAD_DATE user_id=%s",
+                    user_id,
+                )
+                continue
+
             if last_activity_date is None:
                 silent_days = SECOND_DAY_REMINDER_DAYS
             else:
@@ -379,11 +421,12 @@ async def send_second_day_private_reminder(bot) -> None:
                 skipped_count += 1
 
         logger.info(
-            "[TASKS] Second-day private reminder finished. Sent: %s, skipped: %s, skipped_removed=%s, skipped_not_in_group=%s",
+            "[TASKS] Second-day private reminder finished. Sent: %s, skipped: %s, skipped_removed=%s, skipped_not_in_group=%s, safety_skipped_bad_date=%s",
             sent_count,
             skipped_count,
             skipped_removed,
             skipped_not_in_group,
+            safety_skipped_bad_date,
         )
 
     except Exception as e:
@@ -403,6 +446,7 @@ async def inactive_reminder(bot) -> None:
         skipped_not_in_group = 0
         skipped_removed = 0
         skipped_active = 0
+        safety_skipped_bad_date = 0
 
         for user in users:
             telegram_user_id = user.get("telegram_user_id")
@@ -438,6 +482,16 @@ async def inactive_reminder(bot) -> None:
 
             last_activity_date = _get_last_real_activity_date(activities)
 
+            if last_activity_date == BAD_DATE:
+                safety_skipped_bad_date += 1
+                skipped_active += 1
+                logger.error(
+                    "[TASKS] Inactive reminder SAFETY_SKIP_BAD_DATE user_id=%s nickname=%s",
+                    user_id,
+                    nickname,
+                )
+                continue
+
             if last_activity_date is None:
                 silent_days = INACTIVE_DAYS_THRESHOLD
             else:
@@ -463,10 +517,11 @@ async def inactive_reminder(bot) -> None:
 
         if not inactive_mentions:
             logger.info(
-                "[TASKS] Inactive reminder: no valid users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s",
+                "[TASKS] Inactive reminder: no valid users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s safety_skipped_bad_date=%s",
                 skipped_removed,
                 skipped_not_in_group,
                 skipped_active,
+                safety_skipped_bad_date,
             )
             return
 
@@ -487,11 +542,12 @@ async def inactive_reminder(bot) -> None:
         )
 
         logger.info(
-            "[TASKS] Inactive reminder triggered for %s users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s",
+            "[TASKS] Inactive reminder triggered for %s users. skipped_removed=%s skipped_not_in_group=%s skipped_active=%s safety_skipped_bad_date=%s",
             len(inactive_mentions),
             skipped_removed,
             skipped_not_in_group,
             skipped_active,
+            safety_skipped_bad_date,
         )
 
     except Exception as e:
