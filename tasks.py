@@ -44,6 +44,7 @@ REAL_ACTIVITY_ACTIONS = {
     "Skipped",
     "Welcome Bonus",
     "Returned",
+    "Weekly Challenge",
 }
 
 
