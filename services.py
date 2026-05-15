@@ -237,25 +237,37 @@ def _build_progress_bar(current: int, target: int, width: int = 10) -> str:
     Builds text progress bar.
 
     Example:
-    current=5 target=10 -> █████░░░░░
+    current=1 target=5 width=10 -> ██░░░░░░░░
     """
     try:
-        current = max(0, int(current))
-        target = max(1, int(target))
-        width = max(5, int(width))
+        current = max(0, int(current or 0))
+        target = max(1, int(target or 1))
+        width = max(5, int(width or 10))
 
-        filled = round((min(current, target) / target) * width)
+        ratio = min(current, target) / target
+        filled = int(ratio * width)
+
+        if current > 0 and filled == 0:
+            filled = 1
+
         filled = min(width, max(0, filled))
         empty = width - filled
 
         return "█" * filled + "░" * empty
     except Exception:
-        return "░" * width
+        try:
+            return "░" * max(5, int(width or 10))
+        except Exception:
+            return "░░░░░░░░░░"
 
 
 def _get_next_training_rank_progress(training_count: int) -> dict[str, Any]:
     """
     Returns progress data to next rank.
+
+    Rank bar is calculated from 0 to next threshold.
+    Example:
+    1/5 -> progress_current=1, progress_target=5.
     """
     training_count = max(0, int(training_count or 0))
 
@@ -266,31 +278,26 @@ def _get_next_training_rank_progress(training_count: int) -> dict[str, Any]:
         if training_count >= threshold:
             current_threshold = threshold
             current_title = title
-        else:
-            next_threshold = threshold
-            next_title = title
-            progress_from_current_rank = max(0, training_count - current_threshold)
-            progress_target = max(1, next_threshold - current_threshold)
-            left = max(0, next_threshold - training_count)
+            continue
 
-            return {
-                "current_title": current_title,
-                "current_threshold": current_threshold,
-                "next_title": next_title,
-                "next_threshold": next_threshold,
-                "progress_current": progress_from_current_rank,
-                "progress_target": progress_target,
-                "left": left,
-                "is_max": False,
-            }
+        return {
+            "current_title": current_title,
+            "current_threshold": current_threshold,
+            "next_title": title,
+            "next_threshold": threshold,
+            "progress_current": training_count,
+            "progress_target": threshold,
+            "left": max(0, threshold - training_count),
+            "is_max": False,
+        }
 
     return {
         "current_title": current_title,
         "current_threshold": current_threshold,
         "next_title": None,
         "next_threshold": None,
-        "progress_current": current_threshold,
-        "progress_target": current_threshold,
+        "progress_current": training_count,
+        "progress_target": training_count,
         "left": 0,
         "is_max": True,
     }
@@ -357,13 +364,14 @@ def _build_training_progress_report_block(
     streak_progress = _get_next_streak_bonus_progress(streak_days)
     achievement_progress = _get_next_training_achievement_progress(training_count)
 
+    training_count = max(0, int(training_count or 0))
     streak_days = max(0, min(int(streak_days or 0), WEEKLY_STREAK_MAX))
     streak_bar = _build_progress_bar(streak_days, WEEKLY_STREAK_MAX, width=14)
 
     lines = [
         "",
         f"🎖️ Рівень: <b>{escape(str(current_status_title))}</b>",
-        f"📊 Тренувань: <b>{int(training_count)}</b>",
+        f"📊 Тренувань: <b>{training_count}</b>",
         "",
     ]
 
