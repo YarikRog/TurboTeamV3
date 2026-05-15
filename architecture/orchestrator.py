@@ -17,7 +17,7 @@ from architecture.events import (
     VIDEO_UPLOADED,
 )
 from architecture.state_machine import UserFlowState, state_machine
-from cache import KeyManager, delete_data, get_data, set_flag, set_data
+from cache import KeyManager, acquire_lock, delete_data, get_data, set_flag, set_data
 from challenge import (
     CHALLENGE_ACTION,
     build_challenge_group_report_text,
@@ -37,6 +37,9 @@ flow_event_bus = EventBus()
 
 WELCOME_HP_BONUS = 50
 RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
+
+CHALLENGE_SESSION_TTL = 120
+CHALLENGE_SESSION_LOCK_PREFIX = "turbo:challenge_session"
 
 NOT_REGISTERED_TEXT = (
     "⚠️ Тебе ще немає в базі TurboTeam.\n\n"
@@ -63,6 +66,11 @@ def mention_html(user: types.User) -> str:
 
 def _ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
+
+
+def _get_challenge_session_lock_key(user_id: int) -> str:
+    today = get_kyiv_now().strftime("%Y-%m-%d")
+    return f"{CHALLENGE_SESSION_LOCK_PREFIX}:{user_id}:{today}"
 
 
 def _get_return_to_group_reply_keyboard() -> types.ReplyKeyboardMarkup:
@@ -567,7 +575,6 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
     total_started = time.perf_counter()
 
     source = event.payload["source"]
-    user = event.payload["user"]
 
     if not await _ensure_registered(event.user_id, source, "challenge"):
         logger.info(
@@ -637,8 +644,31 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         )
         return False
 
+    challenge_lock_key = _get_challenge_session_lock_key(event.user_id)
+    lock_acquired = await acquire_lock(challenge_lock_key, ex=CHALLENGE_SESSION_TTL)
+
+    if not lock_acquired:
+        msg = await _reply_transport(
+            source,
+            "⏳ Ти вже відкрив челендж-сесію. Скинь відео-кружечок або зачекай 2 хвилини.",
+            reply_markup=_get_back_to_group_inline_keyboard(),
+        )
+
+        if msg is not None:
+            safe_create_task(
+                auto_delete(msg, 15),
+                name=f"auto_delete_challenge_session_lock_{event.user_id}",
+            )
+
+        logger.info(
+            "[CHALLENGE] blocked by session lock user_id=%s total=%sms",
+            event.user_id,
+            _ms(total_started),
+        )
+        return False
+
     t = time.perf_counter()
-    started = await state_machine.begin_training(event.user_id, CHALLENGE_ACTION, ttl=120)
+    started = await state_machine.begin_training(event.user_id, CHALLENGE_ACTION, ttl=CHALLENGE_SESSION_TTL)
     logger.info(
         "[CHALLENGE] begin session user_id=%s took %sms",
         event.user_id,
@@ -646,6 +676,8 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
     )
 
     if not started:
+        await delete_data(challenge_lock_key)
+
         await _reply_transport(
             source,
             "⚠️ Не вдалося активувати челендж-сесію. Спробуй ще раз.",
@@ -842,6 +874,8 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
             result,
             _ms(t),
         )
+
+        await delete_data(_get_challenge_session_lock_key(event.user_id))
 
         if result.get("ok"):
             await state_machine.complete(event.user_id)
