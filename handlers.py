@@ -315,12 +315,26 @@ async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
     """
     try:
         member = await bot.get_chat_member(REPORTS_GROUP_ID, user_id)
-        status = str(member.status)
+
+        status_raw = getattr(member, "status", "")
+        status = str(status_raw).lower()
 
         if status in {"left", "kicked"}:
             return False
 
-        return True
+        if status.endswith(".left") or status.endswith(".kicked"):
+            return False
+
+        if status in {"member", "administrator", "creator", "owner"}:
+            return True
+
+        logger.info(
+            "[STATS] unknown chat member status: user_id=%s status=%s raw=%r",
+            user_id,
+            status,
+            status_raw,
+        )
+        return False
 
     except Exception as e:
         logger.info(
