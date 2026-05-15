@@ -48,6 +48,7 @@ REAL_ACTIVITY_ACTIONS = {
     "Skipped",
     "Welcome Bonus",
     "Returned",
+    "Weekly Challenge",
 }
 
 TRAINING_ACTIONS = {"Gym", "Street"}
@@ -163,6 +164,7 @@ def _build_achievements_text(
         lines.append("🏆 Усі базові тренувальні досягнення відкрито. Це вже режим легенди.")
 
     return "\n".join(lines)
+
 
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
@@ -304,6 +306,7 @@ def _get_auto_removed_key(user_id: int) -> str:
 def _get_last_warning_key(user_id: int) -> str:
     return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
 
+
 async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
     """
     Returns True if Telegram says the user is currently in REPORTS_GROUP_ID.
@@ -356,6 +359,7 @@ async def _filter_users_currently_in_group(bot, users: list[dict]) -> list[dict]
 
     return result
 
+
 def _build_promo_stats_text(data: dict) -> str:
     champion = escape(str(data["champion_nickname"]))
     turbo_index = int(data["turbo_index"])
@@ -367,7 +371,7 @@ def _build_promo_stats_text(data: dict) -> str:
         f"Рівень залучення: <b>{turbo_level}</b>\n\n"
         f"📅 Період:\n"
         f"{_format_period(data['week_start'])} — {_format_period(data['week_end'])}\n\n"
-        f"👥 Учасників: <b>{data['total_users']}</b>\n"
+        f"👥 Учасників у групі: <b>{data['total_users']}</b>\n"
         f"⚡ Активних: <b>{data['active_users']}</b> із <b>{data['total_users']}</b> — <b>{data['active_percent']}%</b>\n"
         f"🏋️ Підтверджених тренувань: <b>{data['training_count']}</b>\n"
         f"📹 Відео-звітів: <b>{data['video_reports']}</b>\n"
@@ -485,6 +489,7 @@ def _build_activity_counter(activities: list[dict]) -> dict[str, int]:
         "Skipped": 0,
         "Welcome Bonus": 0,
         "Returned": 0,
+        "Weekly Challenge": 0,
     }
 
     for activity in activities:
@@ -578,13 +583,18 @@ async def _build_weekly_impact_data(
     users = await _filter_users_currently_in_group(bot, all_users)
     total_users = len(users)
 
+    current_group_user_ids = {
+        str(user.get("id"))
+        for user in users
+        if user.get("id")
+    }
+
     if previous_week:
         week_start, week_end = _get_previous_finished_week_period()
     elif finished_week:
         week_start, week_end = _get_last_finished_week_period()
     else:
         week_start, week_end = _get_current_week_period()
-
     activities_raw = await get_all_activities_in_period(
         created_at_from=week_start.isoformat(),
         created_at_to=week_end.isoformat(),
@@ -597,9 +607,10 @@ async def _build_weekly_impact_data(
         limit=5000,
     )
 
-    real_activities = [
+        real_activities = [
         activity for activity in activities_raw
         if _is_real_activity(activity)
+        and str(activity.get("user_id") or "").strip() in current_group_user_ids
     ]
 
     training_activities = [
