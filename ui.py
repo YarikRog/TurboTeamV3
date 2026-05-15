@@ -5,24 +5,38 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
     """Main TurboTeam inline menu."""
     gym_button: types.InlineKeyboardButton
     street_button: types.InlineKeyboardButton
+    challenge_button: types.InlineKeyboardButton
 
     if bot_username:
         gym_button = types.InlineKeyboardButton(
             text="🏋️‍♂️ Gym Train",
             url=f"https://t.me/{bot_username}?start=gym",
         )
+
         street_button = types.InlineKeyboardButton(
             text="🦾 Street Train",
             url=f"https://t.me/{bot_username}?start=street",
         )
+
+        challenge_button = types.InlineKeyboardButton(
+            text="🔥 ЧЕЛЕНДЖ ТИЖНЯ",
+            url=f"https://t.me/{bot_username}?start=challenge",
+        )
+
     else:
         gym_button = types.InlineKeyboardButton(
             text="🏋️‍♂️ Gym Train",
             callback_data="train_gym",
         )
+
         street_button = types.InlineKeyboardButton(
             text="🦾 Street Train",
             callback_data="train_street",
+        )
+
+        challenge_button = types.InlineKeyboardButton(
+            text="🔥 ЧЕЛЕНДЖ ТИЖНЯ",
+            callback_data="weekly_challenge",
         )
 
     return types.InlineKeyboardMarkup(
@@ -42,10 +56,7 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
                 ),
             ],
             [
-                types.InlineKeyboardButton(
-                    text="🔥 ЧЕЛЕНДЖ ТИЖНЯ",
-                    callback_data="weekly_challenge",
-                ),
+                challenge_button,
             ],
             [
                 types.InlineKeyboardButton(
