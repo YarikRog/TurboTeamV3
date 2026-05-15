@@ -43,6 +43,12 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
             ],
             [
                 types.InlineKeyboardButton(
+                    text="🔥 ЧЕЛЕНДЖ ТИЖНЯ",
+                    callback_data="weekly_challenge",
+                ),
+            ],
+            [
+                types.InlineKeyboardButton(
                     text="📘 ПРАВИЛА СПІЛЬНОТИ",
                     callback_data="community_rules",
                 ),
