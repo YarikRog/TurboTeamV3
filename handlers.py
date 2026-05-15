@@ -358,6 +358,34 @@ async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
         )
         return False
 
+        if status in {
+            "member",
+            "administrator",
+            "creator",
+            "owner",
+            "chatmemberstatus.member",
+            "chatmemberstatus.administrator",
+            "chatmemberstatus.creator",
+            "chatmemberstatus.owner",
+        }:
+            return True
+
+        logger.info(
+            "[STATS] unknown chat member status: user_id=%s status=%s raw=%r",
+            user_id,
+            status,
+            status_raw,
+        )
+        return False
+
+    except Exception as e:
+        logger.info(
+            "[STATS] user is not available in group: user_id=%s error=%s",
+            user_id,
+            e,
+        )
+        return False
+
     except Exception as e:
         logger.info(
             "[STATS] user is not available in group: user_id=%s error=%s",
