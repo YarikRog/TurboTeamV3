@@ -310,14 +310,19 @@ def _get_last_warning_key(user_id: int) -> str:
 async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
     """
     Returns True if Telegram says the user is currently in REPORTS_GROUP_ID.
-    Counts member / administrator / creator.
+    Counts active members.
     Skips left / kicked / inaccessible users.
     """
     try:
         member = await bot.get_chat_member(REPORTS_GROUP_ID, user_id)
 
         status_raw = getattr(member, "status", "")
-        status = str(status_raw).lower()
+        status_value = getattr(status_raw, "value", None)
+
+        if status_value:
+            status = str(status_value).lower().strip()
+        else:
+            status = str(status_raw).lower().strip()
 
         if status in {"left", "kicked"}:
             return False
@@ -325,7 +330,16 @@ async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
         if status.endswith(".left") or status.endswith(".kicked"):
             return False
 
-        if status in {"member", "administrator", "creator", "owner"}:
+        if status in {
+            "member",
+            "administrator",
+            "creator",
+            "owner",
+            "chatmemberstatus.member",
+            "chatmemberstatus.administrator",
+            "chatmemberstatus.creator",
+            "chatmemberstatus.owner",
+        }:
             return True
 
         logger.info(
@@ -333,6 +347,14 @@ async def _is_user_in_group_for_stats(bot, user_id: int) -> bool:
             user_id,
             status,
             status_raw,
+        )
+        return False
+
+    except Exception as e:
+        logger.info(
+            "[STATS] user is not available in group: user_id=%s error=%s",
+            user_id,
+            e,
         )
         return False
 
