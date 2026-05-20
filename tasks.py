@@ -76,6 +76,55 @@ def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
     return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
 
 
+def _normalize_iso_datetime_string(raw: str) -> str:
+    """
+    Normalizes Supabase/Postgres created_at for datetime.fromisoformat.
+
+    Fixes:
+    - 2026-05-19T15:31:09.72724+00:00
+    - 2026-05-14T09:23:14.6173+00:00
+    - 2026-04-29T16:53:18.4106+00:00
+    """
+    normalized = raw.strip().replace("Z", "+00:00").replace(" ", "T")
+
+    if normalized.endswith("+00"):
+        normalized = normalized[:-3] + "+00:00"
+
+    if normalized.endswith("-00"):
+        normalized = normalized[:-3] + "-00:00"
+
+    t_pos = normalized.find("T")
+    plus_pos = normalized.rfind("+")
+    minus_pos = normalized.rfind("-")
+
+    timezone_pos = -1
+
+    if plus_pos > t_pos:
+        timezone_pos = plus_pos
+
+    if minus_pos > t_pos:
+        timezone_pos = max(timezone_pos, minus_pos)
+
+    if timezone_pos != -1:
+        datetime_part = normalized[:timezone_pos]
+        timezone_part = normalized[timezone_pos:]
+    else:
+        datetime_part = normalized
+        timezone_part = ""
+
+    if "." in datetime_part:
+        base_part, fraction_part = datetime_part.split(".", 1)
+        fraction_digits = "".join(char for char in fraction_part if char.isdigit())
+
+        if fraction_digits:
+            fraction_digits = fraction_digits[:6].ljust(6, "0")
+            datetime_part = f"{base_part}.{fraction_digits}"
+        else:
+            datetime_part = base_part
+
+    return f"{datetime_part}{timezone_part}"
+
+
 def _parse_activity_created_at(value):
     if value is None:
         return None
@@ -87,17 +136,15 @@ def _parse_activity_created_at(value):
         if not raw:
             return None
 
-        normalized = raw.replace("Z", "+00:00").replace(" ", "T")
-
-        if normalized.endswith("+00"):
-            normalized = normalized[:-3] + "+00:00"
+        normalized = _normalize_iso_datetime_string(raw)
 
         try:
             dt = datetime.fromisoformat(normalized)
         except Exception as e:
             logger.error(
-                "[TASKS_DATE_PARSE_ERROR] Failed to parse created_at=%r error=%s",
+                "[TASKS_DATE_PARSE_ERROR] Failed to parse created_at=%r normalized=%r error=%s",
                 value,
+                normalized,
                 e,
                 exc_info=True,
             )
@@ -129,13 +176,15 @@ def _get_last_real_activity_date(activities: list[dict]):
         if not _is_real_activity(activity):
             continue
 
-        created_at = _parse_activity_created_at(activity.get("created_at"))
+        created_at_raw = activity.get("created_at")
+        created_at = _parse_activity_created_at(created_at_raw)
+
         if not created_at:
             had_real_activity_with_bad_date = True
             logger.error(
                 "[TASKS] SAFETY_BAD_ACTIVITY_DATE action=%s created_at=%r",
                 activity.get("action_name"),
-                activity.get("created_at"),
+                created_at_raw,
             )
             continue
 
@@ -143,7 +192,7 @@ def _get_last_real_activity_date(activities: list[dict]):
         if last_activity_date is None or activity_date > last_activity_date:
             last_activity_date = activity_date
 
-    if last_activity_date is None and had_real_activity_with_bad_date:
+    if had_real_activity_with_bad_date:
         return BAD_DATE
 
     return last_activity_date
@@ -152,9 +201,19 @@ def _get_last_real_activity_date(activities: list[dict]):
 async def _is_user_in_group(bot, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(REPORTS_GROUP_ID, user_id)
-        status = str(member.status)
+
+        status_raw = getattr(member, "status", "")
+        status_value = getattr(status_raw, "value", None)
+
+        if status_value:
+            status = str(status_value).lower().strip()
+        else:
+            status = str(status_raw).lower().strip()
 
         if status in {"left", "kicked"}:
+            return False
+
+        if status.endswith(".left") or status.endswith(".kicked"):
             return False
 
         return True
@@ -626,8 +685,6 @@ async def send_last_day_warning(bot) -> None:
         skipped_already_warned,
         skipped_overdue,
     )
-
-
 @safe_job
 async def auto_remove_inactive_users(bot) -> None:
     removable_users = await get_users_for_auto_removal()
