@@ -695,7 +695,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         f"{text}\n\n"
         f"━━━━━━━━━━━━━━\n\n"
         f"✅ <b>Сесія активована.</b>\n"
-        f"Тепер надішли свіже відео/кружечок у бот протягом <b>2 хвилин</b>."
+        f"Тепер надішли свіже відео/кружечок у бот протягом <b>5 хвилин</b>."
     )
 
     msg = await _reply_transport(
