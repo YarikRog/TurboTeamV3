@@ -38,7 +38,7 @@ flow_event_bus = EventBus()
 WELCOME_HP_BONUS = 50
 RETURN_TO_GROUP_TEXT = "🏎️ ПОВЕРНУТИСЯ В ГРУПУ"
 
-CHALLENGE_SESSION_TTL = 120
+CHALLENGE_SESSION_TTL = 300
 CHALLENGE_SESSION_LOCK_PREFIX = "turbo:challenge_session"
 
 NOT_REGISTERED_TEXT = (
@@ -525,7 +525,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
-    started = await state_machine.begin_training(event.user_id, action, ttl=120)
+    started = await state_machine.begin_training(event.user_id, action, ttl=300)
     logger.info(
         "[TRAIN] begin_training user_id=%s action=%s took %sms",
         event.user_id,
@@ -545,7 +545,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
     training_instruction = (
         f"Ти обрав {action} 💪\n\n"
-        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 2 хвилин 🤳\n\n"
+        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 5 хвилин 🤳\n\n"
         "Кружечок потрібен як підтвердження, що ти реально тренувався 🔥\n\n"
         "Після цього тренування зарахується, і ти отримаєш HP ⚡️"
     )
@@ -650,7 +650,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
     if not lock_acquired:
         msg = await _reply_transport(
             source,
-            "⏳ Ти вже відкрив челендж-сесію. Скинь відео-кружечок або зачекай 2 хвилини.",
+            "⏳ Ти вже відкрив челендж-сесію. Скинь відео-кружечок або зачекай 5 хвилини.",
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
 
