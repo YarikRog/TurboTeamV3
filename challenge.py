@@ -44,8 +44,15 @@ CHALLENGE_DESCRIPTION = (
 
 def parse_activity_created_at(value: Any) -> Optional[datetime]:
     """
-    Safe parser for Supabase created_at.
+    Safe parser for Supabase/Postgres created_at.
     Returns Kyiv-aware datetime or None.
+
+    Supports:
+    - datetime objects
+    - 2026-05-26T17:20:29.69094+00:00
+    - 2026-05-26T17:20:29.690940+00:00
+    - 2026-05-26T17:20:29Z
+    - 2026-05-26 17:20:29.69094+00
     """
     if value is None:
         return None
@@ -57,17 +64,40 @@ def parse_activity_created_at(value: Any) -> Optional[datetime]:
         if not raw:
             return None
 
-        normalized = raw.replace("Z", "+00:00").replace(" ", "T")
+        normalized = raw.replace(" ", "T").replace("Z", "+00:00")
 
         if normalized.endswith("+00"):
             normalized = normalized[:-3] + "+00:00"
 
         try:
+            if "." in normalized:
+                date_part, tail = normalized.split(".", 1)
+
+                tz_part = ""
+                fraction_part = tail
+
+                plus_index = tail.find("+")
+                minus_index = tail.find("-", 1)
+
+                if plus_index != -1:
+                    fraction_part = tail[:plus_index]
+                    tz_part = tail[plus_index:]
+                elif minus_index != -1:
+                    fraction_part = tail[:minus_index]
+                    tz_part = tail[minus_index:]
+
+                digits = "".join(ch for ch in fraction_part if ch.isdigit())
+                digits = digits[:6].ljust(6, "0")
+
+                normalized = f"{date_part}.{digits}{tz_part}"
+
             dt = datetime.fromisoformat(normalized)
+
         except Exception as e:
             logger.error(
-                "[CHALLENGE] Failed to parse created_at=%r error=%s",
+                "[CHALLENGE] Failed to parse created_at=%r normalized=%r error=%s",
                 value,
+                normalized,
                 e,
                 exc_info=True,
             )
