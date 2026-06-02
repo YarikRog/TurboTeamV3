@@ -95,4 +95,5 @@ def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
             ],
         ],
         resize_keyboard=True,
+        input_field_placeholder="Запросити друга 👇",
     )
