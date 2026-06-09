@@ -6,11 +6,11 @@ import random
 import pytz
 from html import escape
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional, List, Union, Dict, Any
 
 from config import GOOGLE_SCRIPT_URL, MAX_RETRIES, RETRY_DELAY
-from cache import get_data, set_flag, KeyManager, acquire_lock, delete_data
+from cache import get_data, set_flag, set_data, KeyManager, acquire_lock, delete_data
 from supabase_db import (
     get_user_by_telegram_id,
     create_user,
@@ -18,6 +18,7 @@ from supabase_db import (
     get_user_activities,
     get_all_users,
     get_user_activities_in_period,
+    get_user_activities_by_actions_in_period,
     get_referrals_count,
     get_weekly_rating,
     add_referral as supabase_add_referral,
@@ -48,6 +49,7 @@ TRAINING_ROLLBACK_ACTIONS = {"Gym Rollback", "Street Rollback"}
 
 INACTIVITY_ACTIVITY_LIMIT = 1000
 WEEKLY_STREAK_MAX = 14
+USER_CACHE_TTL = 86400
 
 
 def get_kyiv_now() -> datetime:
@@ -220,10 +222,50 @@ def _get_last_finished_week_period() -> tuple[str, str]:
 
 async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
     try:
-        return await get_user_by_telegram_id(user_id)
+        user_row = await get_user_by_telegram_id(user_id)
+        if user_row:
+            await _cache_supabase_user_row(user_id, user_row)
+        return user_row
     except Exception as e:
         logger.error(f"[DB] failed to load Supabase user: user_id={user_id}, error={e}")
         return None
+
+
+async def _cache_supabase_user_row(user_id: int, user_row: Dict[str, Any]) -> None:
+    supabase_user_id = str(user_row.get("id") or "").strip()
+    if not supabase_user_id:
+        return
+
+    await set_flag(KeyManager.get_reg_key(user_id), ex=USER_CACHE_TTL)
+    await set_data(KeyManager.get_user_uuid_key(user_id), supabase_user_id, ex=USER_CACHE_TTL)
+
+
+async def get_cached_supabase_user_id(user_id: int) -> Optional[str]:
+    cached_uuid = await get_data(KeyManager.get_user_uuid_key(user_id))
+    if isinstance(cached_uuid, str) and cached_uuid.strip():
+        return cached_uuid.strip()
+
+    user_row = await _get_supabase_user_row(user_id)
+    if not user_row:
+        return None
+
+    supabase_user_id = str(user_row.get("id") or "").strip()
+    return supabase_user_id or None
+
+
+def get_kyiv_day_bounds_utc_strings(target_date: Optional[date] = None) -> tuple[str, str]:
+    now = get_kyiv_now()
+    day = target_date or now.date()
+
+    day_start_kyiv = KYIV_TZ.localize(
+        datetime.combine(day, datetime.min.time())
+    )
+    day_end_kyiv = day_start_kyiv + timedelta(days=1)
+
+    return (
+        day_start_kyiv.astimezone(pytz.UTC).isoformat(),
+        day_end_kyiv.astimezone(pytz.UTC).isoformat(),
+    )
 
 
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
@@ -349,23 +391,26 @@ async def _has_activity_today(
     user_id: int,
     action_name: str,
     video_id: str = "",
+    supabase_user_id: Optional[str] = None,
 ) -> bool:
-    user_row = await _get_supabase_user_row(user_id)
-    if not user_row:
-        return False
-
-    supabase_user_id = user_row.get("id")
+    supabase_user_id = supabase_user_id or await get_cached_supabase_user_id(user_id)
     if not supabase_user_id:
-        logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
+        logger.warning(f"[DB] Supabase user not found: telegram_user_id={user_id}")
         return False
 
     try:
-        activities = await get_user_activities(str(supabase_user_id), limit=1000)
+        day_start_utc, day_end_utc = get_kyiv_day_bounds_utc_strings()
+        activities = await get_user_activities_by_actions_in_period(
+            user_id=str(supabase_user_id),
+            actions=[action_name, f"{action_name} Rollback"],
+            created_at_from=day_start_utc,
+            created_at_to=day_end_utc,
+            limit=50,
+        )
     except Exception as e:
         logger.error(f"[DB] failed to read activities: user_id={user_id}, error={e}")
         return False
 
-    today = get_kyiv_now().date()
     normalized_action = str(action_name).strip()
     normalized_video_id = str(video_id or "").strip()
 
@@ -374,11 +419,6 @@ async def _has_activity_today(
 
     for activity in activities:
         current_action_name = str(activity.get("action_name", "")).strip()
-
-        created_at = _parse_activity_created_at(activity.get("created_at"))
-        if not created_at or created_at.date() != today:
-            continue
-
         existing_video_id = str(activity.get("video_id") or "").strip()
 
         if current_action_name == normalized_action:
@@ -580,22 +620,26 @@ async def update_user_activity(
 
     for attempt in range(MAX_RETRIES):
         try:
+            supabase_user_id = await get_cached_supabase_user_id(user_id)
+
             if is_check:
-                already_exists = await _has_activity_today(user_id, action_name, video_id)
+                already_exists = await _has_activity_today(
+                    user_id,
+                    action_name,
+                    video_id,
+                    supabase_user_id=supabase_user_id,
+                )
                 return not already_exists
 
-            already_exists = await _has_activity_today(user_id, action_name, video_id)
+            already_exists = await _has_activity_today(
+                user_id,
+                action_name,
+                video_id,
+                supabase_user_id=supabase_user_id,
+            )
             if already_exists:
                 return "already_done"
 
-            user_row = await _get_supabase_user_row(user_id)
-            if not user_row:
-                logger.warning(f"[DB] user not found in Supabase: telegram_user_id={user_id}")
-                await asyncio.sleep(delay + random.uniform(0, 0.3))
-                delay *= 1.6
-                continue
-
-            supabase_user_id = user_row.get("id")
             if not supabase_user_id:
                 logger.warning(f"[DB] Supabase user row has no id: telegram_user_id={user_id}")
                 await asyncio.sleep(delay + random.uniform(0, 0.3))
@@ -629,8 +673,8 @@ async def check_user_exists(user_id: int) -> bool:
     if cached is not None:
         return True
 
-    user_row = await _get_supabase_user_row(user_id)
-    exists = user_row is not None
+    user_uuid = await get_cached_supabase_user_id(user_id)
+    exists = user_uuid is not None
 
     if exists:
         await set_flag(cache_key, ex=3600)
@@ -642,10 +686,10 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
     try:
         existing_user = await _get_supabase_user_row(user_id)
         if existing_user:
-            await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+            await _cache_supabase_user_row(user_id, existing_user)
             return True
 
-        await create_user(
+        created_user = await create_user(
             telegram_user_id=user_id,
             nickname=str(nickname),
             gender=quiz_data.get("gender", "N/A"),
@@ -655,7 +699,7 @@ async def register_user_from_quiz(user_id: int, nickname: str, quiz_data: dict) 
             training_place=str(quiz_data.get("training_place", "N/A"))[:100],
         )
 
-        await set_flag(KeyManager.get_reg_key(user_id), ex=86400)
+        await _cache_supabase_user_row(user_id, created_user)
         return True
 
     except Exception as e:

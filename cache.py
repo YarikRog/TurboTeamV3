@@ -39,6 +39,10 @@ class KeyManager:
     def get_reg_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:is_reg:{uid}"
 
+    @staticmethod
+    def get_user_uuid_key(uid: int) -> str:
+        return f"{KeyManager.PREFIX}:user_uuid:{uid}"
+
     # --- Referrals ---
     @staticmethod
     def get_ref_key(uid: int) -> str:

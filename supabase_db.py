@@ -233,6 +233,40 @@ async def get_user_activities_in_period(
     return response.data or []
 
 
+async def get_user_activities_by_actions_in_period(
+    user_id: str,
+    actions: List[str],
+    created_at_from: str,
+    created_at_to: str,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    normalized_actions = [
+        str(action).strip()
+        for action in actions
+        if str(action).strip()
+    ]
+
+    if not normalized_actions:
+        return []
+
+    def _query():
+        sb = get_supabase()
+        return (
+            sb.table("activities")
+            .select("action_name,created_at,video_id")
+            .eq("user_id", user_id)
+            .in_("action_name", normalized_actions)
+            .gte("created_at", created_at_from)
+            .lt("created_at", created_at_to)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+    response = await _run_sync(_query)
+    return response.data or []
+
+
 async def get_all_activities(
     limit: int = 10000,
 ) -> List[Dict[str, Any]]:

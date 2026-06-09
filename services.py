@@ -12,13 +12,19 @@ from aiogram.types import Message
 
 from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
 from cache import KeyManager, acquire_lock, get_data, redis_client, set_data
-from database import get_kyiv_now, add_activity, check_activity_limit, update_user_activity
+from database import (
+    get_kyiv_now,
+    add_activity,
+    check_activity_limit,
+    update_user_activity,
+    get_cached_supabase_user_id,
+    get_kyiv_day_bounds_utc_strings,
+)
 from phrases import get_phrase
 from config import GROUP_LINK
 from reports import build_report_keyboard
 from supabase_db import (
-    get_user_by_telegram_id,
-    get_user_activities,
+    get_user_activities_by_actions_in_period,
     has_user_achievement,
     add_user_achievement,
 )
@@ -631,40 +637,24 @@ class ActivityService:
 
     @staticmethod
     async def _has_non_rollback_activity_today_in_db(user_id: int, action_name: str) -> bool:
-        user_row = await get_user_by_telegram_id(user_id)
-        if not user_row:
-            return False
-
-        user_uuid = user_row.get("id")
+        user_uuid = await get_cached_supabase_user_id(user_id)
         if not user_uuid:
             return False
 
-        activities = await get_user_activities(str(user_uuid), limit=200)
-        today = get_kyiv_now().date()
+        day_start_utc, day_end_utc = get_kyiv_day_bounds_utc_strings()
+        activities = await get_user_activities_by_actions_in_period(
+            user_id=str(user_uuid),
+            actions=[action_name, f"{action_name} Rollback"],
+            created_at_from=day_start_utc,
+            created_at_to=day_end_utc,
+            limit=50,
+        )
 
         action_count = 0
         rollback_count = 0
 
         for activity in activities:
             current_action_name = str(activity.get("action_name", "")).strip()
-            created_at_raw = activity.get("created_at")
-
-            if not created_at_raw:
-                continue
-
-            try:
-                if isinstance(created_at_raw, str):
-                    created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
-                else:
-                    created_at = created_at_raw
-
-                if created_at.tzinfo is None:
-                    created_at = pytz.UTC.localize(created_at)
-
-                if created_at.astimezone(KYIV_TZ).date() != today:
-                    continue
-            except Exception:
-                continue
 
             if current_action_name == str(action_name):
                 action_count += 1
@@ -716,6 +706,7 @@ class ActivityService:
             for action_name in daily_actions
             if action_name.strip().lower() not in ignore_set
         ]
+        rollback_actions = [f"{action_name} Rollback" for action_name in cache_actions]
 
         if cache_actions:
             if redis_client is not None:
@@ -748,12 +739,38 @@ class ActivityService:
                         )
                         return True
 
+        if not cache_actions:
+            return False
+
+        user_uuid = await get_cached_supabase_user_id(user_id)
+        if not user_uuid:
+            return False
+
+        day_start_utc, day_end_utc = get_kyiv_day_bounds_utc_strings()
+        activities = await get_user_activities_by_actions_in_period(
+            user_id=str(user_uuid),
+            actions=cache_actions + rollback_actions,
+            created_at_from=day_start_utc,
+            created_at_to=day_end_utc,
+            limit=100,
+        )
+
+        counts = {action_name: 0 for action_name in cache_actions}
+        rollback_counts = {action_name: 0 for action_name in cache_actions}
+
+        for activity in activities:
+            current_action_name = str(activity.get("action_name", "")).strip()
+            if current_action_name in counts:
+                counts[current_action_name] += 1
+                continue
+
+            for action_name in cache_actions:
+                if current_action_name == f"{action_name} Rollback":
+                    rollback_counts[action_name] += 1
+                    break
+
         for action_name in cache_actions:
-            has_db_activity = await ActivityService._has_non_rollback_activity_today_in_db(
-                user_id,
-                action_name,
-            )
-            if has_db_activity:
+            if counts[action_name] > rollback_counts[action_name]:
                 logger.debug(
                     "[check_today_report] DB-hit: uid=%s action=%s date=%s",
                     user_id,
