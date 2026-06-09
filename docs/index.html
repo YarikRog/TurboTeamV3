@@ -36,9 +36,18 @@
         linear-gradient(180deg, #0b0d12 0%, #121722 100%);
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       padding: 20px 14px 28px;
       overflow-x: hidden;
+    }
+
+    .quiz-shell {
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
     }
 
     .bg-icons {
@@ -69,7 +78,6 @@
 
     .quiz-container {
       width: 100%;
-      max-width: 420px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -338,6 +346,58 @@
       font-size: 14px;
     }
 
+    .music-panel {
+      display: none;
+      padding: 0 8px 10px;
+      text-align: center;
+      animation: fadeSlide 0.35s ease;
+    }
+
+    .music-panel.visible {
+      display: block;
+    }
+
+    .music-copy {
+      margin: 0 0 10px;
+      color: #dce3ef;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .music-panel.compact .music-copy {
+      display: none;
+    }
+
+    .music-controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .music-btn {
+      min-width: 112px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .music-btn:active {
+      transform: scale(0.97);
+    }
+
+    .music-btn.active {
+      background: rgba(255, 90, 31, 0.18);
+      border-color: rgba(255, 90, 31, 0.42);
+      box-shadow: 0 0 18px rgba(255, 90, 31, 0.16);
+    }
+
     .loading {
       display: none;
       text-align: center;
@@ -390,26 +450,27 @@
     <span>🏆</span>
   </div>
 
-  <div class="quiz-container">
-    <div class="top-bar">
-      <div class="brand">
-        <div class="brand-title">TurboTeam</div>
-        <div class="brand-badge">ONBOARDING</div>
+  <div class="quiz-shell">
+    <div class="quiz-container">
+      <div class="top-bar">
+        <div class="brand">
+          <div class="brand-title">TurboTeam</div>
+          <div class="brand-badge">ONBOARDING</div>
+        </div>
+
+        <div id="progressWrap" class="progress-wrap">
+          <div class="progress-meta">
+            <span id="progressText">Крок 1 / 5</span>
+            <span>Швидкий відбір</span>
+          </div>
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </div>
       </div>
 
-      <div id="progressWrap" class="progress-wrap">
-        <div class="progress-meta">
-          <span id="progressText">Крок 1 / 5</span>
-          <span>Швидкий відбір</span>
-        </div>
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="content">
-      <div id="hero" class="hero active">
+      <div class="content">
+        <div id="hero" class="hero active">
         <div class="hero-icon">⚡</div>
         <h1 class="hero-title">Ласкаво просимо в TurboTeam</h1>
         <p class="hero-subtitle">
@@ -435,182 +496,193 @@
         <button class="start-btn" onclick="startQuiz()">🚀 Почати відбір</button>
       </div>
 
-      <div id="step1" class="step">
-        <div class="step-kicker">Крок 1</div>
-        <h2 class="step-title">Хто ти в грі?</h2>
-        <p class="step-desc">Обери варіант, щоб ми краще налаштували твій старт.</p>
+        <div id="step1" class="step">
+          <div class="step-kicker">Крок 1</div>
+          <h2 class="step-title">Хто ти в грі?</h2>
+          <p class="step-desc">Обери варіант, щоб ми краще налаштували твій старт.</p>
 
-        <div class="options">
-          <button class="option-btn" onclick="nextStep('gender', 'Чоловік', 2)">
-            <div class="option-icon">👨</div>
-            <div class="option-text">
-              <strong>Чоловік</strong>
-              <span>Силовий старт у TurboTeam</span>
-            </div>
-          </button>
+          <div class="options">
+            <button class="option-btn" onclick="nextStep('gender', 'Чоловік', 2)">
+              <div class="option-icon">👨</div>
+              <div class="option-text">
+                <strong>Чоловік</strong>
+                <span>Силовий старт у TurboTeam</span>
+              </div>
+            </button>
 
-          <button class="option-btn" onclick="nextStep('gender', 'Жінка', 2)">
-            <div class="option-icon">👩</div>
-            <div class="option-text">
-              <strong>Жінка</strong>
-              <span>Гнучкий і сильний шлях</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <div id="step2" class="step">
-        <div class="step-kicker">Крок 2</div>
-        <h2 class="step-title">Який у тебе рівень?</h2>
-        <p class="step-desc">Оціни себе чесно — так ми підберемо правильний старт.</p>
-
-        <div class="options">
-          <button class="option-btn" onclick="nextStep('level', 'Новачок', 3)">
-            <div class="option-icon">🌱</div>
-            <div class="option-text">
-              <strong>Новачок</strong>
-              <span>Тільки входжу в режим</span>
-            </div>
-          </button>
-
-          <button class="option-btn" onclick="nextStep('level', 'Середній', 3)">
-            <div class="option-icon">⚡</div>
-            <div class="option-text">
-              <strong>Середній</strong>
-              <span>Вже маю базу і хочу рости</span>
-            </div>
-          </button>
-
-          <button class="option-btn" onclick="nextStep('level', 'Профі', 3)">
-            <div class="option-icon">🔥</div>
-            <div class="option-text">
-              <strong>Профі</strong>
-              <span>Готовий тиснути на максимум</span>
-            </div>
-          </button>
+            <button class="option-btn" onclick="nextStep('gender', 'Жінка', 2)">
+              <div class="option-icon">👩</div>
+              <div class="option-text">
+                <strong>Жінка</strong>
+                <span>Гнучкий і сильний шлях</span>
+              </div>
+            </button>
+          </div>
         </div>
 
-        <div class="footer-row">
-          <button class="back-btn" onclick="goBack(1)">← Назад</button>
-        </div>
-      </div>
+        <div id="step2" class="step">
+          <div class="step-kicker">Крок 2</div>
+          <h2 class="step-title">Який у тебе рівень?</h2>
+          <p class="step-desc">Оціни себе чесно — так ми підберемо правильний старт.</p>
 
-      <div id="step3" class="step">
-        <div class="step-kicker">Крок 3</div>
-        <h2 class="step-title">До чого ти йдеш?</h2>
-        <p class="step-desc">Обери головну ціль, яка зараз для тебе найважливіша.</p>
+          <div class="options">
+            <button class="option-btn" onclick="nextStep('level', 'Новачок', 3)">
+              <div class="option-icon">🌱</div>
+              <div class="option-text">
+                <strong>Новачок</strong>
+                <span>Тільки входжу в режим</span>
+              </div>
+            </button>
 
-        <div class="options">
-          <button class="option-btn" onclick="nextStep('goal', 'Схуднення', 4)">
-            <div class="option-icon">🏃</div>
-            <div class="option-text">
-              <strong>Схуднення</strong>
-              <span>Стаю легшим і витривалішим</span>
-            </div>
-          </button>
+            <button class="option-btn" onclick="nextStep('level', 'Середній', 3)">
+              <div class="option-icon">⚡</div>
+              <div class="option-text">
+                <strong>Середній</strong>
+                <span>Вже маю базу і хочу рости</span>
+              </div>
+            </button>
 
-          <button class="option-btn" onclick="nextStep('goal', 'Набір маси', 4)">
-            <div class="option-icon">🏋️</div>
-            <div class="option-text">
-              <strong>Набір маси</strong>
-              <span>Будую силу і форму</span>
-            </div>
-          </button>
+            <button class="option-btn" onclick="nextStep('level', 'Профі', 3)">
+              <div class="option-icon">🔥</div>
+              <div class="option-text">
+                <strong>Профі</strong>
+                <span>Готовий тиснути на максимум</span>
+              </div>
+            </button>
+          </div>
 
-          <button class="option-btn" onclick="nextStep('goal', 'Витривалість', 4)">
-            <div class="option-icon">🚴</div>
-            <div class="option-text">
-              <strong>Витривалість</strong>
-              <span>Хочу більше енергії та ресурсу</span>
-            </div>
-          </button>
-        </div>
-
-        <div class="footer-row">
-          <button class="back-btn" onclick="goBack(2)">← Назад</button>
-        </div>
-      </div>
-
-      <div id="step4" class="step">
-        <div class="step-kicker">Крок 4</div>
-        <h2 class="step-title">Скільки разів на тиждень плануєш тренуватись?</h2>
-        <p class="step-desc">Обери свій реальний темп, без зайвого пафосу.</p>
-
-        <div class="options">
-          <button class="option-btn" onclick="nextStep('weekly_plan', '1-2 рази', 5)">
-            <div class="option-icon">🌿</div>
-            <div class="option-text">
-              <strong>1–2 рази</strong>
-              <span>Спокійний вхід у ритм</span>
-            </div>
-          </button>
-
-          <button class="option-btn" onclick="nextStep('weekly_plan', '3-4 рази', 5)">
-            <div class="option-icon">⚡</div>
-            <div class="option-text">
-              <strong>3–4 рази</strong>
-              <span>Оптимальний темп для росту</span>
-            </div>
-          </button>
-
-          <button class="option-btn" onclick="nextStep('weekly_plan', '5+ разів', 5)">
-            <div class="option-icon">🔥</div>
-            <div class="option-text">
-              <strong>5+ разів</strong>
-              <span>Максимальна зарядка на результат</span>
-            </div>
-          </button>
+          <div class="footer-row">
+            <button class="back-btn" onclick="goBack(1)">← Назад</button>
+          </div>
         </div>
 
-        <div class="footer-row">
-          <button class="back-btn" onclick="goBack(3)">← Назад</button>
+        <div id="step3" class="step">
+          <div class="step-kicker">Крок 3</div>
+          <h2 class="step-title">До чого ти йдеш?</h2>
+          <p class="step-desc">Обери головну ціль, яка зараз для тебе найважливіша.</p>
+
+          <div class="options">
+            <button class="option-btn" onclick="nextStep('goal', 'Схуднення', 4)">
+              <div class="option-icon">🏃</div>
+              <div class="option-text">
+                <strong>Схуднення</strong>
+                <span>Стаю легшим і витривалішим</span>
+              </div>
+            </button>
+
+            <button class="option-btn" onclick="nextStep('goal', 'Набір маси', 4)">
+              <div class="option-icon">🏋️</div>
+              <div class="option-text">
+                <strong>Набір маси</strong>
+                <span>Будую силу і форму</span>
+              </div>
+            </button>
+
+            <button class="option-btn" onclick="nextStep('goal', 'Витривалість', 4)">
+              <div class="option-icon">🚴</div>
+              <div class="option-text">
+                <strong>Витривалість</strong>
+                <span>Хочу більше енергії та ресурсу</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="footer-row">
+            <button class="back-btn" onclick="goBack(2)">← Назад</button>
+          </div>
         </div>
-      </div>
 
-      <div id="step5" class="step">
-        <div class="step-kicker">Крок 5</div>
-        <h2 class="step-title">Де здебільшого тренуєшся?</h2>
-        <p class="step-desc">Це допоможе краще зрозуміти твій стиль у грі.</p>
+        <div id="step4" class="step">
+          <div class="step-kicker">Крок 4</div>
+          <h2 class="step-title">Скільки разів на тиждень плануєш тренуватись?</h2>
+          <p class="step-desc">Обери свій реальний темп, без зайвого пафосу.</p>
 
-        <div class="options">
-          <button class="option-btn" onclick="finishQuiz('У залі')">
-            <div class="option-icon">🏋️</div>
-            <div class="option-text">
-              <strong>У залі</strong>
-              <span>Люблю залізо, ваги й режим</span>
-            </div>
-          </button>
+          <div class="options">
+            <button class="option-btn" onclick="nextStep('weekly_plan', '1-2 рази', 5)">
+              <div class="option-icon">🌿</div>
+              <div class="option-text">
+                <strong>1–2 рази</strong>
+                <span>Спокійний вхід у ритм</span>
+              </div>
+            </button>
 
-          <button class="option-btn" onclick="finishQuiz('На вулиці / турніках')">
-            <div class="option-icon">🦾</div>
-            <div class="option-text">
-              <strong>На вулиці / турніках</strong>
-              <span>Характер, база і вільний стиль</span>
-            </div>
-          </button>
+            <button class="option-btn" onclick="nextStep('weekly_plan', '3-4 рази', 5)">
+              <div class="option-icon">⚡</div>
+              <div class="option-text">
+                <strong>3–4 рази</strong>
+                <span>Оптимальний темп для росту</span>
+              </div>
+            </button>
 
-          <button class="option-btn" onclick="finishQuiz('І там, і там')">
-            <div class="option-icon">⚔️</div>
-            <div class="option-text">
-              <strong>І там, і там</strong>
-              <span>Комбіную все, що дає прогрес</span>
-            </div>
-          </button>
+            <button class="option-btn" onclick="nextStep('weekly_plan', '5+ разів', 5)">
+              <div class="option-icon">🔥</div>
+              <div class="option-text">
+                <strong>5+ разів</strong>
+                <span>Максимальна зарядка на результат</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="footer-row">
+            <button class="back-btn" onclick="goBack(3)">← Назад</button>
+          </div>
         </div>
 
-        <div class="footer-row">
-          <button class="back-btn" onclick="goBack(4)">← Назад</button>
-        </div>
-      </div>
+        <div id="step5" class="step">
+          <div class="step-kicker">Крок 5</div>
+          <h2 class="step-title">Де здебільшого тренуєшся?</h2>
+          <p class="step-desc">Це допоможе краще зрозуміти твій стиль у грі.</p>
 
-      <div id="loading" class="loading">
-        ⏳ Формуємо твій профіль у TurboTeam...
-        <div class="dots">
-          <span></span><span></span><span></span>
+          <div class="options">
+            <button class="option-btn" onclick="finishQuiz('У залі')">
+              <div class="option-icon">🏋️</div>
+              <div class="option-text">
+                <strong>У залі</strong>
+                <span>Люблю залізо, ваги й режим</span>
+              </div>
+            </button>
+
+            <button class="option-btn" onclick="finishQuiz('На вулиці / турніках')">
+              <div class="option-icon">🦾</div>
+              <div class="option-text">
+                <strong>На вулиці / турніках</strong>
+                <span>Характер, база і вільний стиль</span>
+              </div>
+            </button>
+
+            <button class="option-btn" onclick="finishQuiz('І там, і там')">
+              <div class="option-icon">⚔️</div>
+              <div class="option-text">
+                <strong>І там, і там</strong>
+                <span>Комбіную все, що дає прогрес</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="footer-row">
+            <button class="back-btn" onclick="goBack(4)">← Назад</button>
+          </div>
+        </div>
+
+        <div id="loading" class="loading">
+          ⏳ Формуємо твій профіль у TurboTeam...
+          <div class="dots">
+            <span></span><span></span><span></span>
+          </div>
         </div>
       </div>
     </div>
+
+    <div id="musicPanel" class="music-panel">
+      <p id="musicCopy" class="music-copy">Щоб не було сумно проходити квіз, увімкни Гімн TurboTeam</p>
+      <div class="music-controls">
+        <button id="musicOnBtn" class="music-btn" type="button">Увімкнути</button>
+        <button id="musicOffBtn" class="music-btn" type="button">Вимкнути</button>
+      </div>
+    </div>
   </div>
+
+  <audio id="anthemAudio" src="./media/turboteam-anthem.mp3" preload="metadata" loop playsinline></audio>
 
   <script>
     const tg = window.Telegram.WebApp;
@@ -619,12 +691,66 @@
     let quizResults = {};
     let currentStep = 0;
     const TOTAL_STEPS = 5;
+    const MUSIC_STORAGE_KEY = 'turboteam_anthem_enabled';
 
     const hero = document.getElementById('hero');
     const progressWrap = document.getElementById('progressWrap');
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
     const loading = document.getElementById('loading');
+    const musicPanel = document.getElementById('musicPanel');
+    const musicCopy = document.getElementById('musicCopy');
+    const musicOnBtn = document.getElementById('musicOnBtn');
+    const musicOffBtn = document.getElementById('musicOffBtn');
+    const anthemAudio = document.getElementById('anthemAudio');
+
+    let musicEnabled = localStorage.getItem(MUSIC_STORAGE_KEY) === 'true';
+
+    function renderMusicControls() {
+      musicOnBtn.classList.toggle('active', musicEnabled);
+      musicOffBtn.classList.toggle('active', !musicEnabled);
+    }
+
+    function persistMusicMode() {
+      localStorage.setItem(MUSIC_STORAGE_KEY, String(musicEnabled));
+      renderMusicControls();
+    }
+
+    async function playAnthem() {
+      musicEnabled = true;
+      persistMusicMode();
+
+      try {
+        await anthemAudio.play();
+      } catch (error) {
+        console.warn('Anthem playback was blocked:', error);
+      }
+    }
+
+    function stopAnthem() {
+      musicEnabled = false;
+      persistMusicMode();
+      anthemAudio.pause();
+      anthemAudio.currentTime = 0;
+    }
+
+    function syncMusicPanel(stepNumber) {
+      const isVisible = stepNumber === 0 || (stepNumber >= 1 && stepNumber <= TOTAL_STEPS);
+      musicPanel.classList.toggle('visible', isVisible);
+      musicPanel.classList.toggle('compact', stepNumber !== 1 && stepNumber !== 0);
+      musicCopy.textContent = 'Щоб не було сумно проходити квіз, увімкни Гімн TurboTeam';
+    }
+
+    musicOnBtn.addEventListener('click', () => {
+      playAnthem();
+    });
+
+    musicOffBtn.addEventListener('click', () => {
+      stopAnthem();
+    });
+
+    renderMusicControls();
+    syncMusicPanel(0);
 
     function startQuiz() {
       hero.classList.remove('active');
@@ -642,9 +768,17 @@
         target.classList.add('active');
       }
 
+      syncMusicPanel(stepNumber);
+
       const percent = (stepNumber / TOTAL_STEPS) * 100;
       progressFill.style.width = percent + '%';
       progressText.textContent = `Крок ${stepNumber} / ${TOTAL_STEPS}`;
+
+      if (musicEnabled) {
+        anthemAudio.play().catch((error) => {
+          console.warn('Anthem playback was blocked on step change:', error);
+        });
+      }
     }
 
     function nextStep(field, value, next) {
@@ -662,6 +796,7 @@
 
       document.querySelectorAll('.step.active').forEach(el => el.classList.remove('active'));
       loading.classList.add('visible');
+      musicPanel.classList.remove('visible');
       progressFill.style.width = '100%';
       progressText.textContent = 'Готово';
 
