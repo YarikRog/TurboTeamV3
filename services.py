@@ -25,6 +25,7 @@ from config import GROUP_LINK
 from reports import build_report_keyboard
 from supabase_db import (
     get_user_by_telegram_id,
+    get_user_activities,
     get_user_activities_by_actions_in_period,
     has_user_achievement,
     add_user_achievement,
