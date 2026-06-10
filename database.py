@@ -405,7 +405,7 @@ async def _has_activity_today(
             actions=[action_name, f"{action_name} Rollback"],
             created_at_from=day_start_utc,
             created_at_to=day_end_utc,
-            limit=50,
+            limit=1000,
         )
     except Exception as e:
         logger.error(f"[DB] failed to read activities: user_id={user_id}, error={e}")

@@ -649,7 +649,7 @@ class ActivityService:
             actions=[action_name, f"{action_name} Rollback"],
             created_at_from=day_start_utc,
             created_at_to=day_end_utc,
-            limit=50,
+            limit=200,
         )
 
         action_count = 0
@@ -754,7 +754,7 @@ class ActivityService:
             actions=cache_actions + rollback_actions,
             created_at_from=day_start_utc,
             created_at_to=day_end_utc,
-            limit=100,
+            limit=1000,
         )
 
         counts = {action_name: 0 for action_name in cache_actions}
