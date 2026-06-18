@@ -825,6 +825,16 @@ async def handle_new_chat_members(message: Message):
     if message.chat.id != REPORTS_GROUP_ID:
         return
 
+    # Delete Telegram system "user joined the group" message.
+    # NOTE: this must live in the same handler as the return/unban logic below.
+    # If join-message deletion is registered as a separate dispatcher-level
+    # handler, it consumes the new_chat_members event first and stops
+    # propagation, so the Returned-activity / unban-cleanup logic never runs.
+    try:
+        await message.delete()
+    except Exception as e:
+        logger.debug(f"[JOIN] Failed to delete join message: {e}")
+
     for member in message.new_chat_members:
         if member.is_bot:
             continue
@@ -836,22 +846,34 @@ async def handle_new_chat_members(message: Message):
         name_raw = f"@{member.username}" if member.username else (member.full_name or "Учасник")
         name_html = escape(str(name_raw))
 
-        try:
-            await update_user_activity(
-                user_id=user_id,
-                nickname=str(name_raw),
-                action_name="Returned",
-                hp_change=0,
-                video_id=f"returned:{user_id}:{message.message_id}",
-                is_check=False,
-                skip_lock=True,
-            )
-        except Exception as e:
-            logger.error(
-                "[HANDLERS] failed to write Returned activity user_id=%s error=%s",
+        # Only registered users have a Supabase row. Writing "Returned" for a
+        # never-registered joiner would just spin update_user_activity through
+        # its full retry/backoff cycle (~10s) and write nothing.
+        # check_user_exists caches the uuid, so the write below hits Redis, not Supabase again.
+        is_registered = await check_user_exists(user_id)
+
+        if is_registered:
+            try:
+                await update_user_activity(
+                    user_id=user_id,
+                    nickname=str(name_raw),
+                    action_name="Returned",
+                    hp_change=0,
+                    video_id=f"returned:{user_id}:{message.message_id}",
+                    is_check=False,
+                    skip_lock=True,
+                )
+            except Exception as e:
+                logger.error(
+                    "[HANDLERS] failed to write Returned activity user_id=%s error=%s",
+                    user_id,
+                    e,
+                    exc_info=True,
+                )
+        else:
+            logger.info(
+                "[HANDLERS] new member not registered, skipping Returned write user_id=%s",
                 user_id,
-                e,
-                exc_info=True,
             )
 
         if removed_payload is None:
