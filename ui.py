@@ -83,12 +83,15 @@ def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
     )
 
 
-def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
+def get_rating_reply_keyboard(profile_web_app_url: str) -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [
                 types.KeyboardButton(text="🏅 Досягнення"),
-                types.KeyboardButton(text="👤 Мій профіль"),
+                types.KeyboardButton(
+                    text="👤 Мій профіль",
+                    web_app=types.WebAppInfo(url=profile_web_app_url),
+                ),
             ],
             [
                 types.KeyboardButton(text="🚀 Запросити друга 🔥"),

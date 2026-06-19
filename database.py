@@ -268,6 +268,43 @@ def get_kyiv_day_bounds_utc_strings(target_date: Optional[date] = None) -> tuple
     )
 
 
+def get_kyiv_month_bounds_utc_strings(year: int, month: int) -> tuple[str, str]:
+    month_start_kyiv = KYIV_TZ.localize(datetime(year, month, 1))
+
+    if month == 12:
+        next_month_start_kyiv = KYIV_TZ.localize(datetime(year + 1, 1, 1))
+    else:
+        next_month_start_kyiv = KYIV_TZ.localize(datetime(year, month + 1, 1))
+
+    return (
+        month_start_kyiv.astimezone(pytz.UTC).isoformat(),
+        next_month_start_kyiv.astimezone(pytz.UTC).isoformat(),
+    )
+
+
+async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[str, List[Dict[str, Any]]]:
+    """All activities per Kyiv calendar day: {"YYYY-MM-DD": [{"action_name", "hp_change"}, ...]}."""
+    period_from, period_to = get_kyiv_month_bounds_utc_strings(year, month)
+    activities = await get_user_activities_in_period(user_id, period_from, period_to, limit=1000)
+
+    days: Dict[str, List[Dict[str, Any]]] = {}
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+
+        if not action_name or not created_at:
+            continue
+
+        day_key = created_at.astimezone(KYIV_TZ).strftime("%Y-%m-%d")
+        days.setdefault(day_key, []).append({
+            "action_name": action_name,
+            "hp_change": activity.get("hp_change", 0),
+        })
+
+    return days
+
+
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
     """
     Weekly TurboTeam streak.
