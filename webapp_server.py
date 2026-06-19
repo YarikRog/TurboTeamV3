@@ -8,8 +8,7 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 
-from cache import KeyManager, get_data
-from config import BOT_TOKEN, WEBAPP_CORS_ORIGIN
+from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
     get_kyiv_now,
@@ -128,7 +127,6 @@ async def handle_profile(request: web.Request) -> web.Response:
     unlocked_achievements = await get_user_achievements(user_uuid, limit=200)
     last_achievement = await get_last_user_achievement(user_uuid)
     calendar_days = await get_user_calendar_month(user_uuid, year, month)
-    bot_username = await get_data(KeyManager.get_bot_username_key())
 
     gym_count = sum(1 for a in activities if a.get("action_name") == "Gym")
     street_count = sum(1 for a in activities if a.get("action_name") == "Street")
@@ -194,7 +192,7 @@ async def handle_profile(request: web.Request) -> web.Response:
             "last_achievement_title": last_achievement_title,
             "next_goal_text": next_goal_text,
             "training_count": training_count,
-            "bot_username": bot_username,
+            "group_link": GROUP_LINK,
             "achievements": achievements_payload,
             "calendar": {
                 "year": year,
