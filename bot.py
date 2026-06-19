@@ -16,7 +16,7 @@ from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from challenge import get_challenge_stats
-from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS, PORT, PROFILE_WEB_APP_URL
+from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS, PORT
 from database import check_user_exists, close_db_session, get_kyiv_now
 from handlers import router as action_router
 from phrases import get_phrase
@@ -88,7 +88,7 @@ async def show_menu_in_group(message: types.Message):
         "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇",
         reply_markup=get_inline_menu(bot_username.username)
     )
-    await message.answer("🏆", reply_markup=get_rating_reply_keyboard(PROFILE_WEB_APP_URL))
+    await message.answer("🏆", reply_markup=get_rating_reply_keyboard())
 
 
 @dp.message(Command("panel"))
