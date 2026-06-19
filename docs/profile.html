@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Мій профіль — TurboTeam</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --card: rgba(22, 26, 34, 0.92);
+    --card-2: rgba(33, 39, 50, 0.9);
+    --text: #ffffff;
+    --muted: #b9c0cc;
+    --accent: #ff5a1f;
+    --accent-2: #4cc9f0;
+    --border: rgba(255, 255, 255, 0.08);
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+
+  .wrap { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .nickname { font-size: 20px; font-weight: 700; }
+  .status-pill {
+    background: rgba(255, 90, 31, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(255, 90, 31, 0.35);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .stat-box {
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+
+  .stat-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .stat-value { font-size: 17px; font-weight: 700; }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 10px;
+  }
+
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cal-nav button {
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .cal-month-label { font-weight: 700; font-size: 15px; }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+  }
+
+  .cal-weekday {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    padding-bottom: 4px;
+  }
+
+  .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    gap: 2px;
+  }
+
+  .cal-day.empty { background: transparent; border-color: transparent; }
+  .cal-day .num { font-size: 11px; }
+  .cal-day .icon { font-size: 13px; line-height: 1; letter-spacing: -1px; white-space: nowrap; }
+
+  .cal-day.gym { background: rgba(255, 90, 31, 0.18); border-color: rgba(255, 90, 31, 0.4); color: var(--text); }
+  .cal-day.street { background: rgba(76, 201, 240, 0.18); border-color: rgba(76, 201, 240, 0.4); color: var(--text); }
+  .cal-day.rest { background: rgba(76, 201, 120, 0.18); border-color: rgba(76, 201, 120, 0.4); color: var(--text); }
+  .cal-day.skip { background: rgba(220, 60, 60, 0.18); border-color: rgba(220, 60, 60, 0.4); color: var(--text); }
+  .cal-day.challenge { background: rgba(255, 200, 40, 0.18); border-color: rgba(255, 200, 40, 0.4); color: var(--text); }
+  .cal-day.multi {
+    background: linear-gradient(135deg, rgba(255, 200, 40, 0.22), rgba(255, 90, 31, 0.22));
+    border: 1px solid rgba(255, 200, 40, 0.6);
+    color: var(--text);
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+  .state-msg { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="state-msg" id="loading">⏳ Завантаження профілю...</div>
+</div>
+
+<script>
+  const API_BASE_URL = "https://worker-production-b767.up.railway.app";
+
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+
+  const today = new Date();
+  let viewYear = today.getFullYear();
+  let viewMonth = today.getMonth() + 1;
+
+  const MONTH_NAMES = [
+    "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
+    "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
+  ];
+  const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+
+  const ACTION_META = {
+    Gym: { cls: "gym", icon: "🏋️" },
+    Street: { cls: "street", icon: "🦾" },
+    Rest: { cls: "rest", icon: "🧘" },
+    Skipped: { cls: "skip", icon: "🚫" },
+    "Weekly Challenge": { cls: "challenge", icon: "🔥" },
+  };
+
+  const app = document.getElementById("app");
+
+  function render(data) {
+    app.innerHTML = `
+      <div class="card">
+        <div class="cal-nav">
+          <button id="prevMonth">←</button>
+          <div class="cal-month-label">${MONTH_NAMES[data.calendar.month - 1]} ${data.calendar.year}</div>
+          <button id="nextMonth">→</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="legend">
+          <span>🏋️ Gym</span>
+          <span>🦾 Street</span>
+          <span>🧘 Rest</span>
+          <span>🚫 Skip</span>
+          <span>🔥 Challenge</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="header">
+          <div class="nickname">👤 ${escapeHtml(data.nickname || "Без ніку")}</div>
+          <div class="status-pill">${escapeHtml(data.status)}</div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-box"><div class="stat-label">⚡ Загальний HP</div><div class="stat-value">${data.hp_total}</div></div>
+          <div class="stat-box"><div class="stat-label">🔥 Streak</div><div class="stat-value">${data.streak}/${data.streak_max}</div></div>
+          <div class="stat-box"><div class="stat-label">🏋️ Gym</div><div class="stat-value">${data.gym_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🦾 Street</div><div class="stat-value">${data.street_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🧘 Rest</div><div class="stat-value">${data.rest_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🚫 Skip</div><div class="stat-value">${data.skip_count}</div></div>
+          <div class="stat-box"><div class="stat-label">📌 Усього дій</div><div class="stat-value">${data.activities_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🚀 Реферали</div><div class="stat-value">${data.referrals_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🏆 Досягнень</div><div class="stat-value">${data.achievements_count}</div></div>
+          <div class="stat-box"><div class="stat-label">🎯 Наступна ціль</div><div class="stat-value">${escapeHtml(data.next_goal_text)}</div></div>
+        </div>
+        <div class="stat-box" style="margin-top:10px;">
+          <div class="stat-label">🕓 Останнє досягнення</div>
+          <div class="stat-value">${escapeHtml(data.last_achievement_title)}</div>
+        </div>
+      </div>
+    `;
+
+    renderCalendar(data.calendar.year, data.calendar.month, data.calendar.days);
+
+    document.getElementById("prevMonth").onclick = () => changeMonth(-1);
+    document.getElementById("nextMonth").onclick = () => changeMonth(1);
+  }
+
+  function renderCalendar(year, month, days) {
+    const grid = document.getElementById("calGrid");
+    grid.innerHTML = WEEKDAY_NAMES.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
+
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const leadingEmpty = (firstDay.getDay() + 6) % 7;
+
+    for (let i = 0; i < leadingEmpty; i++) {
+      grid.innerHTML += `<div class="cal-day empty"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const entries = days[dayKey] || [];
+      const knownEntries = entries.filter((e) => ACTION_META[e.action_name]);
+      const icons = knownEntries.map((e) => ACTION_META[e.action_name].icon).join("");
+      const cls = knownEntries.length > 1 ? "multi" : (knownEntries[0] ? ACTION_META[knownEntries[0].action_name].cls : "");
+      grid.innerHTML += `<div class="cal-day ${cls}"><div class="num">${day}</div><div class="icon">${icons}</div></div>`;
+    }
+  }
+
+  function changeMonth(delta) {
+    viewMonth += delta;
+    if (viewMonth > 12) { viewMonth = 1; viewYear += 1; }
+    if (viewMonth < 1) { viewMonth = 12; viewYear -= 1; }
+    loadProfile();
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.innerText = value ?? "";
+    return div.innerHTML;
+  }
+
+  async function loadProfile() {
+    if (!tg || !tg.initData) {
+      app.innerHTML = `<div class="state-msg">⚠️ Відкрий цю сторінку через кнопку в Telegram-боті.</div>`;
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/profile?year=${viewYear}&month=${viewMonth}`,
+        { headers: { Authorization: `tma ${tg.initData}` } }
+      );
+
+      if (!response.ok) {
+        app.innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити профіль (код ${response.status}).</div>`;
+        return;
+      }
+
+      const data = await response.json();
+      render(data);
+    } catch (e) {
+      app.innerHTML = `<div class="state-msg">⚠️ Помилка з'єднання з сервером.</div>`;
+    }
+  }
+
+  loadProfile();
+</script>
+</body>
+</html>
