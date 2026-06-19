@@ -23,6 +23,7 @@ from supabase_db import (
     get_weekly_rating,
     add_referral as supabase_add_referral,
     get_last_user_activity_by_actions,
+    get_user_achievements,
 )
 
 logger = logging.getLogger(__name__)
@@ -764,6 +765,135 @@ async def get_weekly_top_users(finished_week: bool = False):
     except Exception as e:
         logger.error(f"[DB] failed to build weekly top users: {e}", exc_info=True)
         return []
+
+
+# get_weekly_rating is a generic RPC over any [start, end) window — reusing it with
+# a window wide enough to cover the project's whole lifetime gives an all-time rating
+# without any new SQL.
+ALL_TIME_RATING_START = "2000-01-01T00:00:00+00:00"
+ALL_TIME_RATING_END = "2100-01-01T00:00:00+00:00"
+
+
+async def get_all_time_rating() -> List[Dict[str, Any]]:
+    """All users ranked by total HP since the start of the project."""
+    try:
+        ranking_rows = await get_weekly_rating(ALL_TIME_RATING_START, ALL_TIME_RATING_END)
+        return ranking_rows
+    except Exception as e:
+        logger.error(f"[DB] failed to build all-time rating: {e}", exc_info=True)
+        return []
+
+
+# ==============================================================================
+# ACTIVITY FEED ("Останнє в стрічці")
+# ==============================================================================
+
+REFERRAL_BONUS_ACTION_PREFIX = "Referral Bonus"
+
+FEED_EVENT_META: dict[str, tuple[str, str]] = {
+    "Gym": ("🏋️", "Тренування в залі"),
+    "Street": ("🦾", "Тренування на вулиці"),
+    "Rest": ("🧘", "Відпочинок"),
+    "Skipped": ("🚫", "Пропуск дня"),
+    "Welcome Bonus": ("🎁", "Вітальний бонус"),
+    "Returned": ("🏎️", "Повернення в групу"),
+    "Weekly Challenge": ("🔥", "Тижневий челендж"),
+    "Referral Welcome Bonus": ("🎉", "Бонус за приєднання"),
+}
+
+
+def _format_days_uk_short(days: int) -> str:
+    if days % 10 == 1 and days % 100 != 11:
+        return "день"
+    if 2 <= days % 10 <= 4 and not (12 <= days % 100 <= 14):
+        return "дні"
+    return "днів"
+
+
+def _feed_relative_label(created_at: datetime) -> str:
+    """Honest human-readable gap label — never invents recency that isn't there."""
+    seconds = max(0.0, (get_kyiv_now() - created_at).total_seconds())
+
+    if seconds < 3600:
+        minutes = max(1, int(seconds // 60))
+        return f"{minutes} хв тому"
+
+    if seconds < 86400:
+        hours = int(seconds // 3600)
+        return "годину тому" if hours == 1 else f"{hours} год тому"
+
+    days = int(seconds // 86400)
+    if days == 1:
+        return "учора"
+    if days < 30:
+        return f"{days} {_format_days_uk_short(days)} тому"
+    if days < 365:
+        months = max(1, days // 30)
+        return f"{months} міс тому"
+
+    return created_at.strftime("%d.%m.%Y")
+
+
+async def get_user_feed(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Recent activity feed for the profile webapp: real trainings/rest/skips/referrals
+    merged with achievement unlocks, sorted newest-first.
+    """
+    from services import TRAINING_ACHIEVEMENT_ICONS  # deferred: services.py imports database.py
+
+    activities = await get_user_activities(user_id, limit=200)
+    achievements = await get_user_achievements(user_id, limit=50)
+
+    entries: List[Dict[str, Any]] = []
+
+    for activity in activities:
+        action_name = str(activity.get("action_name") or "").strip()
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        if action_name in FEED_EVENT_META:
+            icon, title = FEED_EVENT_META[action_name]
+        elif action_name.startswith(REFERRAL_BONUS_ACTION_PREFIX):
+            icon, title = "🚀", "Запросив друга"
+        else:
+            continue
+
+        try:
+            hp_change = int(activity.get("hp_change") or 0)
+        except Exception:
+            hp_change = 0
+
+        hp_label = f"{hp_change:+d} HP" if hp_change else ""
+        subtitle = " · ".join(filter(None, [hp_label, _feed_relative_label(created_at)]))
+
+        entries.append({
+            "type": "activity",
+            "icon": icon,
+            "title": title,
+            "subtitle": subtitle,
+            "created_at": created_at.isoformat(),
+        })
+
+    for achievement in achievements:
+        created_at = _parse_activity_created_at(achievement.get("created_at"))
+        if not created_at:
+            continue
+
+        achievement_code = str(achievement.get("achievement_code") or "").strip()
+        achievement_title = str(achievement.get("achievement_title") or "Досягнення").strip()
+        icon = TRAINING_ACHIEVEMENT_ICONS.get(achievement_code, "🏅")
+
+        entries.append({
+            "type": "achievement",
+            "icon": icon,
+            "title": f"Розблоковано «{achievement_title}»",
+            "subtitle": _feed_relative_label(created_at),
+            "created_at": created_at.isoformat(),
+        })
+
+    entries.sort(key=lambda item: item["created_at"], reverse=True)
+    return entries[:limit]
 
 
 async def reset_weekly_stats() -> bool:
