@@ -310,8 +310,8 @@
         </div>
 
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="openBotChat()">🏋️ Тренуватись</button>
-          <button class="btn btn-ghost" onclick="goTab('rating')">🏆 Рейтинг</button>
+          <button class="btn btn-primary" onclick="openGroupChat()">🏋️ Тренуватись</button>
+          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
         </div>
       </div>
 
@@ -440,12 +440,12 @@
     document.getElementById("goalSub").textContent = data.next_goal_text || "";
   }
 
-  function openBotChat() {
-    if (!profileData || !profileData.bot_username) {
-      showToast("Відкрий бота через Telegram, щоб тренуватись 🏋️");
+  function openGroupChat() {
+    if (!profileData || !profileData.group_link) {
+      showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
       return;
     }
-    const url = `https://t.me/${profileData.bot_username}`;
+    const url = profileData.group_link;
     if (tg && tg.openTelegramLink) {
       tg.openTelegramLink(url);
     } else {
