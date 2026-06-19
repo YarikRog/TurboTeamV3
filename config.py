@@ -15,6 +15,16 @@ REDIS_URL: str = os.environ["REDIS_URL"]
 WEB_APP_URL: str = os.getenv("WEB_APP_URL", "https://example.pythonanywhere.com/index.html")
 GROUP_LINK: str = os.getenv("GROUP_LINK", "https://t.me/turboteampro")
 
+# --- ПРОФІЛЬ-ВЕБАПП (календар тренувань + статистика) ---
+# Статична сторінка хоститься на GitHub Pages (docs/profile.html).
+PROFILE_WEB_APP_URL: str = os.getenv(
+    "PROFILE_WEB_APP_URL", "https://yarikrog.github.io/TurboTeamV3/profile.html"
+)
+# Origin фронтенду профілю — для CORS у внутрішньому API-сервері бота.
+WEBAPP_CORS_ORIGIN: str = os.getenv("WEBAPP_CORS_ORIGIN", "https://yarikrog.github.io")
+# Порт, на якому бот піднімає HTTP API для веб-аппу профілю (Railway підставляє PORT сам).
+PORT: int = int(os.getenv("PORT", "8080"))
+
 # --- IDs (обов'язкові) ---
 REPORTS_GROUP_ID: int = int(os.environ["REPORTS_GROUP_ID"])
 

@@ -16,7 +16,7 @@ from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from challenge import get_challenge_stats
-from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS
+from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS, PORT, PROFILE_WEB_APP_URL
 from database import check_user_exists, close_db_session, get_kyiv_now
 from handlers import router as action_router
 from phrases import get_phrase
@@ -28,6 +28,7 @@ from awards import send_test_fifa_card
 from cache import redis_client, set_data, delete_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
+from webapp_server import run_webapp_server
 from supabase_db import (
     get_supabase,
     get_user_by_telegram_id,
@@ -87,7 +88,7 @@ async def show_menu_in_group(message: types.Message):
         "🚀 *TURBO-МЕНЮ АКТИВОВАНЕ* \nОбирай свій шлях на сьогодні: 👇",
         reply_markup=get_inline_menu(bot_username.username)
     )
-    await message.answer("🏆", reply_markup=get_rating_reply_keyboard())
+    await message.answer("🏆", reply_markup=get_rating_reply_keyboard(PROFILE_WEB_APP_URL))
 
 
 @dp.message(Command("panel"))
@@ -535,11 +536,13 @@ async def main():
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
     scheduler = setup_scheduler(bot)
+    webapp_runner = await run_webapp_server(PORT)
     try:
         await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         scheduler.shutdown()
+        await webapp_runner.cleanup()
 
 
 if __name__ == "__main__":

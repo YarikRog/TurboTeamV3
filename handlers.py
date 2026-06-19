@@ -23,9 +23,7 @@ from supabase_db import (
     get_user_by_telegram_id,
     get_user_activities,
     get_referrals_count,
-    get_user_achievements_count,
     get_user_achievements,
-    get_last_user_achievement,
     get_all_users,
     get_all_activities,
     get_all_activities_in_period,
@@ -37,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
-PROFILE_COOLDOWN = 7200
-PROFILE_MESSAGE_TTL = 120
 ADMIN_HELP_TTL = 120
 
 REAL_ACTIVITY_ACTIONS = {
@@ -952,116 +948,6 @@ async def handle_return_to_group(message: Message):
     except Exception as e:
         logger.error(f"[HANDLERS] handle_return_to_group error: {e}", exc_info=True)
 
-
-@router.message(F.text == "👤 Мій профіль")
-async def handle_my_profile(message: Message):
-    telegram_user_id = message.from_user.id
-    profile_limit_key = KeyManager.get_profile_limit_key(telegram_user_id)
-    profile_warn_key = KeyManager.get_profile_warn_key(telegram_user_id)
-
-    try:
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        if (await get_data(profile_limit_key)) is not None:
-            if (await get_data(profile_warn_key)) is None:
-                await set_flag(profile_warn_key, ex=PROFILE_COOLDOWN)
-                sent_msg = await message.answer(
-                    "⏳ Бро, профіль можна відкривати раз на 2 години. Спробуй пізніше."
-                )
-                safe_create_task(auto_delete(sent_msg, 1))
-            return
-
-        stats = await get_user_stats(telegram_user_id)
-        user_row = await get_user_by_telegram_id(telegram_user_id)
-
-        if not stats or not user_row:
-            sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, 1))
-            return
-
-        user_uuid = user_row.get("id")
-        if not user_uuid:
-            sent_msg = await message.answer("⚠️ Профіль не знайдено. Спробуй ще раз пізніше.")
-            safe_create_task(auto_delete(sent_msg, 1))
-            return
-
-        activities = await get_user_activities(str(user_uuid), limit=1000)
-        referrals_count = await get_referrals_count(str(user_uuid))
-        achievements_count = await get_user_achievements_count(str(user_uuid))
-        last_achievement = await get_last_user_achievement(str(user_uuid))
-
-        gym_count = 0
-        street_count = 0
-        rest_count = 0
-        skip_count = 0
-
-        for activity in activities:
-            action_name = str(activity.get("action_name", ""))
-
-            if action_name == "Gym":
-                gym_count += 1
-            elif action_name == "Street":
-                street_count += 1
-            elif action_name == "Rest":
-                rest_count += 1
-            elif action_name == "Skipped":
-                skip_count += 1
-
-        training_count = gym_count + street_count
-        activities_count = gym_count + street_count + rest_count + skip_count
-
-        status_title = get_training_status(training_count)
-        next_goal, next_goal_progress = get_next_training_goal(training_count)
-
-        last_achievement_title = "Поки немає"
-        if last_achievement:
-            last_achievement_title = str(last_achievement.get("achievement_title") or "Поки немає")
-
-        next_goal_text = "MAX"
-        if next_goal is not None:
-            next_goal_text = f"{next_goal} тренувань ({next_goal_progress})"
-
-        nickname = user_row.get("nickname") or message.from_user.first_name
-        hp_total = int(stats.get("hp_total", 0) or 0)
-        streak = int(stats.get("streak", 0) or 0)
-        streak_max = int(stats.get("weekly_streak_max", WEEKLY_STREAK_MAX) or WEEKLY_STREAK_MAX)
-
-        nickname_html = escape(str(nickname))
-        status_title_html = escape(str(status_title))
-        last_achievement_title_html = escape(str(last_achievement_title))
-        next_goal_text_html = escape(str(next_goal_text))
-
-        text = (
-            f"👤 <b>МІЙ ПРОФІЛЬ</b>\n\n"
-            f"🏷️ Нік: <b>{nickname_html}</b>\n"
-            f"🎖️ Статус: <b>{status_title_html}</b>\n"
-            f"⚡ Загальний HP: <b>{hp_total}</b>\n"
-            f"🔥 Streak: <b>{streak}/{streak_max}</b>\n\n"
-            f"📊 <b>АКТИВНІСТЬ</b>\n"
-            f"🏋️ Gym: <b>{gym_count}</b>\n"
-            f"🦾 Street: <b>{street_count}</b>\n"
-            f"🧘 Rest: <b>{rest_count}</b>\n"
-            f"🚫 Skip: <b>{skip_count}</b>\n"
-            f"📌 Усього дій: <b>{activities_count}</b>\n"
-            f"🚀 Реферали: <b>{referrals_count}</b>\n\n"
-            f"🏅 <b>ПРОГРЕС</b>\n"
-            f"🏆 Досягнень: <b>{achievements_count}</b>\n"
-            f"🕓 Останнє: <b>{last_achievement_title_html}</b>\n"
-            f"🎯 Наступна ціль: <b>{next_goal_text_html}</b>"
-        )
-
-        sent_msg = await message.answer(text, parse_mode="HTML")
-        await set_flag(profile_limit_key, ex=PROFILE_COOLDOWN)
-        safe_create_task(auto_delete(sent_msg, PROFILE_MESSAGE_TTL))
-
-    except Exception as e:
-        logger.error(f"[HANDLERS] handle_my_profile error: {e}", exc_info=True)
-        await delete_data(profile_limit_key)
-        sent_msg = await message.answer("⚠️ Не вдалося завантажити профіль. Спробуй ще раз.")
-        safe_create_task(auto_delete(sent_msg, 1))
 
 @router.message(F.text == "🏅 Досягнення")
 async def handle_my_achievements(message: Message):
