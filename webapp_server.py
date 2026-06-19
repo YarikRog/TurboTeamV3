@@ -8,13 +8,21 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 
+from cache import KeyManager, get_data
 from config import BOT_TOKEN, WEBAPP_CORS_ORIGIN
-from database import get_kyiv_now, get_user_calendar_month, get_user_stats
-from handlers import get_next_training_goal, get_training_status
+from database import (
+    get_all_time_rating,
+    get_kyiv_now,
+    get_user_calendar_month,
+    get_user_feed,
+    get_user_stats,
+)
+from handlers import get_next_training_goal, get_training_status, word_trainings
+from services import TRAINING_ACHIEVEMENTS, TRAINING_ACHIEVEMENT_ICONS
 from supabase_db import (
     get_last_user_achievement,
     get_referrals_count,
-    get_user_achievements_count,
+    get_user_achievements,
     get_user_activities,
     get_user_by_telegram_id,
 )
@@ -117,9 +125,10 @@ async def handle_profile(request: web.Request) -> web.Response:
 
     activities = await get_user_activities(user_uuid, limit=1000)
     referrals_count = await get_referrals_count(user_uuid)
-    achievements_count = await get_user_achievements_count(user_uuid)
+    unlocked_achievements = await get_user_achievements(user_uuid, limit=200)
     last_achievement = await get_last_user_achievement(user_uuid)
     calendar_days = await get_user_calendar_month(user_uuid, year, month)
+    bot_username = await get_data(KeyManager.get_bot_username_key())
 
     gym_count = sum(1 for a in activities if a.get("action_name") == "Gym")
     street_count = sum(1 for a in activities if a.get("action_name") == "Street")
@@ -131,12 +140,40 @@ async def handle_profile(request: web.Request) -> web.Response:
     status_title = get_training_status(training_count)
     next_goal, next_goal_progress = get_next_training_goal(training_count)
     next_goal_text = (
-        "MAX" if next_goal is None else f"{next_goal} тренувань ({next_goal_progress})"
+        "MAX"
+        if next_goal is None
+        else f"{next_goal} {word_trainings(next_goal)} ({next_goal_progress})"
     )
 
     last_achievement_title = "Поки немає"
     if last_achievement:
         last_achievement_title = str(last_achievement.get("achievement_title") or "Поки немає")
+
+    unlocked_codes = {
+        str(item.get("achievement_code") or "").strip()
+        for item in unlocked_achievements
+        if str(item.get("achievement_code") or "").strip()
+    }
+    unlocked_at_by_code = {
+        str(item.get("achievement_code") or "").strip(): item.get("created_at")
+        for item in unlocked_achievements
+        if str(item.get("achievement_code") or "").strip()
+    }
+
+    achievements_payload = []
+    for threshold, code, title in TRAINING_ACHIEVEMENTS:
+        unlocked = code in unlocked_codes or training_count >= threshold
+        achievements_payload.append(
+            {
+                "code": code,
+                "title": title,
+                "icon": TRAINING_ACHIEVEMENT_ICONS.get(code, "🏅"),
+                "threshold": threshold,
+                "unlocked": unlocked,
+                "unlocked_at": unlocked_at_by_code.get(code),
+                "remaining": 0 if unlocked else max(0, threshold - training_count),
+            }
+        )
 
     nickname = user_row.get("nickname") or auth["user"].get("first_name") or ""
 
@@ -153,9 +190,12 @@ async def handle_profile(request: web.Request) -> web.Response:
             "skip_count": skip_count,
             "activities_count": activities_count,
             "referrals_count": referrals_count,
-            "achievements_count": achievements_count,
+            "achievements_count": len(unlocked_codes),
             "last_achievement_title": last_achievement_title,
             "next_goal_text": next_goal_text,
+            "training_count": training_count,
+            "bot_username": bot_username,
+            "achievements": achievements_payload,
             "calendar": {
                 "year": year,
                 "month": month,
@@ -165,10 +205,71 @@ async def handle_profile(request: web.Request) -> web.Response:
     )
 
 
+async def handle_rating(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    telegram_user_id = auth["telegram_user_id"]
+    rows = await get_all_time_rating()
+
+    top = [
+        {
+            "telegram_user_id": row.get("telegram_user_id"),
+            "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
+            "hp": int(row.get("hp", 0) or 0),
+            "referrals_count": int(row.get("referrals_count", 0) or 0),
+            "rank": int(row.get("rank", 0) or 0),
+        }
+        for row in rows[:5]
+    ]
+
+    me = None
+    for row in rows:
+        if int(row.get("telegram_user_id") or 0) == int(telegram_user_id):
+            me = {
+                "telegram_user_id": row.get("telegram_user_id"),
+                "nick": row.get("nick") or f"ID:{telegram_user_id}",
+                "hp": int(row.get("hp", 0) or 0),
+                "referrals_count": int(row.get("referrals_count", 0) or 0),
+                "rank": int(row.get("rank", 0) or 0),
+            }
+            break
+
+    return web.json_response(
+        {
+            "top": top,
+            "me": me,
+            "total_users": len(rows),
+        }
+    )
+
+
+async def handle_feed(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    user_row = await get_user_by_telegram_id(auth["telegram_user_id"])
+    if not user_row:
+        return web.json_response({"error": "profile not found"}, status=404)
+
+    user_uuid = str(user_row.get("id") or "")
+    if not user_uuid:
+        return web.json_response({"error": "profile not found"}, status=404)
+
+    items = await get_user_feed(user_uuid, limit=20)
+    return web.json_response({"items": items})
+
+
 def create_webapp_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/api/profile", handle_profile)
+    app.router.add_get("/api/rating", handle_rating)
+    app.router.add_get("/api/feed", handle_feed)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
     return app
 
 

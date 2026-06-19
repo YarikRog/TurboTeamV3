@@ -63,17 +63,23 @@ TRAINING_STATUS_LEVELS = [
     (1000, "Легенда TurboTeam"),
 ]
 
-TRAINING_GOALS = [1, 5, 10, 25, 50, 100, 200, 500, 1000]
+TRAINING_GOALS = [1, 3, 5, 10, 15, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000]
 
 TRAINING_ACHIEVEMENTS = [
     (1, "training_1", "Перший крок"),
+    (3, "training_3", "Втягнувся"),
     (5, "training_5", "Розігрів"),
     (10, "training_10", "Перша десятка"),
+    (15, "training_15", "Стабільність"),
     (25, "training_25", "У ритмі"),
     (50, "training_50", "Півсотні"),
+    (75, "training_75", "На повну"),
     (100, "training_100", "Сотка"),
+    (150, "training_150", "Залізна дисципліна"),
     (200, "training_200", "Машина"),
+    (300, "training_300", "Турбо-режим"),
     (500, "training_500", "Монстр"),
+    (750, "training_750", "Невгамовний"),
     (1000, "training_1000", "Легенда TurboTeam"),
 ]
 
@@ -139,7 +145,7 @@ def _build_achievements_text(
 
     for threshold, code, title in TRAINING_ACHIEVEMENTS:
         if code in unlocked_codes or training_count >= threshold:
-            lines.append(f"✅ <b>{escape(title)}</b> — {threshold} тренувань")
+            lines.append(f"✅ <b>{escape(title)}</b> — {threshold} {word_trainings(threshold)}")
         else:
             left = max(0, threshold - training_count)
             lines.append(f"🔒 {escape(title)} — ще <b>{left}</b>")
@@ -155,7 +161,7 @@ def _build_achievements_text(
     if next_locked:
         threshold, title, left = next_locked
         lines.append("🎯 <b>Найближча ціль</b>")
-        lines.append(f"До “{escape(title)}” — ще <b>{left}</b> тренувань")
+        lines.append(f"До “{escape(title)}” — ще <b>{left}</b> {word_trainings(left)}")
     else:
         lines.append("🏆 Усі базові тренувальні досягнення відкрито. Це вже режим легенди.")
 
@@ -276,6 +282,16 @@ def _word_days(count: int) -> str:
         return "дні"
 
     return "днів"
+
+
+def word_trainings(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return "тренування"
+
+    if 2 <= count % 10 <= 4 and not (12 <= count % 100 <= 14):
+        return "тренування"
+
+    return "тренувань"
 
 
 def _format_delta(current_value, previous_value, suffix: str = "") -> str:
