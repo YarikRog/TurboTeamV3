@@ -7,166 +7,238 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
-    --bg: #0d0f14;
-    --card: rgba(22, 26, 34, 0.92);
-    --card-2: rgba(33, 39, 50, 0.9);
+    --bg: #0a0c10;
+    --card: #161a22;
+    --card-2: #1d2330;
     --text: #ffffff;
-    --muted: #b9c0cc;
+    --muted: #8b93a3;
     --accent: #ff5a1f;
     --accent-2: #4cc9f0;
-    --border: rgba(255, 255, 255, 0.08);
-    --radius: 18px;
+    --gold: #ffc828;
+    --green: #3ddc84;
+    --border: rgba(255, 255, 255, 0.07);
+    --radius: 20px;
   }
-
-  * { box-sizing: border-box; }
-
-  body {
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
     margin: 0;
-    min-height: 100vh;
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { padding-bottom: 84px; }
+
+  .screen { display: none; padding: 16px 16px 8px; max-width: 480px; margin: 0 auto; }
+  .screen.active { display: block; animation: fadeIn .2s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- ANIMATIONS ---------- */
+  @keyframes flyIn { from { opacity:0; transform: translateY(-16px) scale(.3); } to { opacity:1; transform: none; } }
+  @keyframes popIn { from { opacity:0; transform: scale(.55) translateY(10px); } to { opacity:1; transform: none; } }
+  @keyframes slideIn { from { opacity:0; transform: translateX(-18px); } to { opacity:1; transform: none; } }
+  @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,90,31,0); } 50% { box-shadow: 0 0 18px 2px rgba(255,90,31,0.35); } }
+  @keyframes shine { 0% { background-position: -120% 0; } 100% { background-position: 220% 0; } }
+
+  /* ---------- TODAY ---------- */
+  .greet { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .greet-text { font-size: 15px; color: var(--muted); }
+  .greet-name { font-size: 18px; font-weight: 800; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--gold));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; animation: floatY 3.2s ease-in-out infinite;
   }
 
-  .wrap { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
+  .hero {
+    background: radial-gradient(circle at 50% 0%, rgba(255,90,31,0.20), transparent 70%);
+    border-radius: 26px;
+    padding: 18px 16px 18px;
+    text-align: center;
   }
-
-  .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .nickname { font-size: 20px; font-weight: 700; }
-  .status-pill {
-    background: rgba(255, 90, 31, 0.15);
-    color: var(--accent);
-    border: 1px solid rgba(255, 90, 31, 0.35);
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
+  .ring-wrap { position: relative; width: 192px; height: 192px; margin: 4px auto 2px; }
+  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: var(--card-2); stroke-width: 13; }
+  .ring-fill {
+    fill: none; stroke: url(#ringGrad); stroke-width: 13; stroke-linecap: round;
+    stroke-dasharray: 503; stroke-dashoffset: 503;
+    transition: stroke-dashoffset 1.2s cubic-bezier(.34,1.2,.4,1);
+    filter: drop-shadow(0 0 6px rgba(255,120,40,0.5));
   }
+  .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring-mascot { font-size: 32px; margin-bottom: 2px; animation: floatY 2.6s ease-in-out infinite; }
+  .ring-streak { font-size: 40px; font-weight: 900; line-height: 1; letter-spacing: -1px; }
+  .ring-streak small { font-size: 18px; font-weight: 800; color: var(--muted); }
+  .ring-streak-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
 
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin-top: 12px;
+  .hero-msg { font-size: 15px; font-weight: 800; margin-top: 12px; }
+  .hero-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+
+  .quick-row { display: flex; gap: 10px; margin-top: 16px; }
+  .quick-pill {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 11px 12px; text-align: left;
   }
+  .quick-pill .q-label { font-size: 11px; color: var(--muted); }
+  .quick-pill .q-value { font-size: 17px; font-weight: 800; margin-top: 3px; }
+  .quick-pill .q-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 
-  .stat-box {
-    background: var(--card-2);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 10px 12px;
+  .cta-row { display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    flex: 1; border: none; border-radius: 14px; padding: 13px 10px;
+    font-size: 13.5px; font-weight: 800; cursor: pointer;
+    transition: transform .12s ease;
   }
-
-  .stat-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-  .stat-value { font-size: 17px; font-weight: 700; }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #ff8a3d); color: #1a0a02; }
+  .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 
   .section-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0 0 10px;
+    font-size: 12.5px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin: 22px 0 10px;
   }
+  .feed-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 12px 14px; display: flex; align-items: center; gap: 11px; margin-bottom: 8px;
+  }
+  .feed-icon { font-size: 18px; width: 24px; text-align: center; }
+  .feed-title { font-size: 13px; font-weight: 700; }
+  .feed-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
+  /* ---------- CALENDAR ---------- */
+  .cal-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 14px; }
   .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .cal-nav button {
-    background: var(--card-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 10px;
-    padding: 6px 12px;
-    font-size: 16px;
-    cursor: pointer;
-  }
-  .cal-month-label { font-weight: 700; font-size: 15px; }
-
-  .cal-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 5px;
-  }
-
-  .cal-weekday {
-    text-align: center;
-    color: var(--muted);
-    font-size: 11px;
-    padding-bottom: 4px;
-  }
-
-  .cal-day {
-    aspect-ratio: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border-radius: 10px;
-    background: var(--card-2);
-    border: 1px solid var(--border);
-    font-size: 11px;
-    color: var(--muted);
-    gap: 2px;
-  }
-
+  .cal-nav button { background: var(--card-2); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 5px 11px; font-size: 14px; cursor: pointer; }
+  .cal-month-label { font-weight: 800; font-size: 14px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .cal-weekday { text-align: center; color: var(--muted); font-size: 10px; padding-bottom: 4px; }
+  .cal-day { position: relative; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 9px; background: var(--card-2); border: 1px solid var(--border); font-size: 10px; color: var(--muted); gap: 1px; }
   .cal-day.empty { background: transparent; border-color: transparent; }
-  .cal-day .num { font-size: 11px; }
-  .cal-day .icon { font-size: 13px; line-height: 1; letter-spacing: -1px; white-space: nowrap; }
+  .cal-day .num { font-size: 10px; }
+  .cal-day .icon { font-size: 12px; line-height: 1; letter-spacing: -1px; white-space: nowrap; }
+  .cal-day.gym { background: rgba(255,90,31,.18); border-color: rgba(255,90,31,.4); color: var(--text); }
+  .cal-day.street { background: rgba(76,201,240,.18); border-color: rgba(76,201,240,.4); color: var(--text); }
+  .cal-day.rest { background: rgba(76,201,120,.18); border-color: rgba(76,201,120,.4); color: var(--text); }
+  .cal-day.skip { background: rgba(220,60,60,.18); border-color: rgba(220,60,60,.4); color: var(--text); }
+  .cal-day.challenge { background: rgba(255,200,40,.18); border-color: rgba(255,200,40,.4); color: var(--text); }
+  .cal-day.multi { background: linear-gradient(135deg, rgba(255,200,40,.22), rgba(255,90,31,.22)); border-color: rgba(255,200,40,.6); color: var(--text); }
+  .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 3px; }
 
-  .cal-day.gym { background: rgba(255, 90, 31, 0.18); border-color: rgba(255, 90, 31, 0.4); color: var(--text); }
-  .cal-day.street { background: rgba(76, 201, 240, 0.18); border-color: rgba(76, 201, 240, 0.4); color: var(--text); }
-  .cal-day.rest { background: rgba(76, 201, 120, 0.18); border-color: rgba(76, 201, 120, 0.4); color: var(--text); }
-  .cal-day.skip { background: rgba(220, 60, 60, 0.18); border-color: rgba(220, 60, 60, 0.4); color: var(--text); }
-  .cal-day.challenge { background: rgba(255, 200, 40, 0.18); border-color: rgba(255, 200, 40, 0.4); color: var(--text); }
-  .cal-day.multi {
-    background: linear-gradient(135deg, rgba(255, 200, 40, 0.22), rgba(255, 90, 31, 0.22));
-    border: 1px solid rgba(255, 200, 40, 0.6);
-    color: var(--text);
+  /* ---------- ACHIEVEMENTS ---------- */
+  .ach-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .ach-count { font-size: 12px; color: var(--muted); }
+  .progress-bar-wrap { background: var(--card-2); border-radius: 999px; height: 9px; overflow: hidden; margin: 8px 0 18px; }
+  .progress-bar-fill { background: linear-gradient(90deg, var(--accent), var(--gold)); height: 100%; width: 0%; border-radius: 999px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+  .badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  .badge-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; cursor: pointer; transition: transform .12s ease; }
+  .badge-card:active { transform: scale(0.92); }
+  .badge-card.unlocked { border-color: rgba(255,90,31,.45); background: rgba(255,90,31,.10); }
+  .badge-card.unlocked .badge-icon { animation: floatY 3s ease-in-out infinite; }
+  .badge-card.locked { opacity: .5; }
+  .badge-icon { font-size: 23px; }
+  .badge-title { font-size: 10.5px; font-weight: 700; line-height: 1.1; }
+  .badge-sub { font-size: 9px; color: var(--muted); }
+  .badge-card.unlocked .badge-sub { color: var(--accent); font-weight: 700; }
+
+  /* ---------- RATING ---------- */
+  .rank-row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 11px 12px; margin-bottom: 8px; }
+  .rank-row.me { border-color: rgba(255,90,31,.55); background: rgba(255,90,31,.12); animation: pulseGlow 2.4s ease-in-out infinite; }
+  .rank-num { font-size: 13px; font-weight: 800; width: 26px; color: var(--muted); }
+  .rank-row.me .rank-num { color: var(--accent); }
+  .rank-avatar { font-size: 18px; width: 22px; text-align: center; }
+  .rank-name { flex: 1; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank-hp { font-size: 12.5px; font-weight: 800; color: var(--gold); white-space: nowrap; }
+  .rank-divider { text-align: center; color: var(--muted); font-size: 16px; letter-spacing: 3px; margin: 2px 0 8px; }
+
+  /* ---------- TAB BAR ---------- */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
+    display: flex; border-top: 1px solid var(--border);
+    background: rgba(10,12,16,0.92); backdrop-filter: blur(10px);
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
   }
-
-  .cal-day.today {
-    border: 2px solid #ffffff;
-    box-shadow: 0 0 7px 1px rgba(255, 255, 255, 0.65);
-    color: var(--text);
+  .tab {
+    flex: 1; background: none; border: none; color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-size: 10.5px; font-weight: 700; padding: 6px 0; cursor: pointer;
+    transition: color .15s ease, transform .12s ease;
   }
+  .tab .tab-icon { font-size: 19px; transition: transform .2s ease; }
+  .tab.active { color: var(--text); }
+  .tab.active .tab-icon { transform: translateY(-2px) scale(1.12); }
+  .tab:active { transform: scale(0.9); }
 
-  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--muted); }
-  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  /* ---------- SHARE MODAL ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 200;
+  }
+  .modal-backdrop.show { opacity: 1; pointer-events: auto; }
+  .modal-sheet {
+    width: 100%; max-width: 480px; background: var(--bg); border-radius: 22px 22px 0 0;
+    padding: 18px 18px 26px; transform: translateY(100%);
+    transition: transform .28s cubic-bezier(.34,1.2,.4,1); border-top: 1px solid var(--border);
+  }
+  .modal-backdrop.show .modal-sheet { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 16px; }
+  .share-card {
+    position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #2a1a0c, #120c08);
+    border: 1px solid rgba(255,200,40,0.4);
+    border-radius: 18px; padding: 24px 16px; text-align: center; margin-bottom: 16px;
+  }
+  .share-card::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.14) 50%, transparent 70%);
+    background-size: 200% 100%; animation: shine 2.6s linear infinite;
+  }
+  .share-icon { font-size: 50px; position: relative; animation: floatY 2.8s ease-in-out infinite; }
+  .share-title { font-size: 18px; font-weight: 900; margin-top: 8px; position: relative; }
+  .share-sub { font-size: 12px; color: var(--muted); margin-top: 5px; position: relative; }
+  .share-badge-hp { display:inline-block; margin-top:10px; font-size:12px; font-weight:800; color: var(--gold); position: relative; }
+  .modal-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 12px; }
 
-  .state-msg { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
+  .toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: var(--card-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 16px; font-size: 12.5px; font-weight: 600; max-width: 86%; text-align: center;
+    opacity: 0; transition: opacity .2s ease, transform .2s ease;
+    pointer-events: none; z-index: 220;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .state-msg { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 14px; }
 </style>
 </head>
 <body>
-<div class="wrap" id="app">
-  <div class="state-msg" id="loading">⏳ Завантаження профілю...</div>
+
+<div id="app">
+  <div class="state-msg" id="boot">⏳ Завантаження профілю...</div>
 </div>
 
 <script>
   const API_BASE_URL = "https://worker-production-b767.up.railway.app";
-
   const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.ready();
-    tg.expand();
-  }
+  if (tg) { tg.ready(); tg.expand(); }
 
   const today = new Date();
   let viewYear = today.getFullYear();
   let viewMonth = today.getMonth() + 1;
 
-  const MONTH_NAMES = [
-    "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
-    "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
-  ];
-  const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+  let profileData = null;
+  let achievements = [];
+  let achPercent = 0;
+  let ratingLoaded = false;
+  let activeBadge = null;
 
+  const MONTH_NAMES = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
+  const WEEKDAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const ACTION_META = {
     Gym: { cls: "gym", icon: "🏋️" },
     Street: { cls: "street", icon: "🦾" },
@@ -175,66 +247,244 @@
     "Weekly Challenge": { cls: "challenge", icon: "🔥" },
   };
 
-  const app = document.getElementById("app");
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.innerText = value ?? "";
+    return div.innerHTML;
+  }
 
-  function render(data) {
-    app.innerHTML = `
-      <div class="card">
+  function authHeaders() {
+    return { Authorization: `tma ${tg.initData}` };
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // ==================== SKELETON ====================
+  const SKELETON = `
+    <div class="screen active" id="screen-today">
+      <div class="greet">
+        <div>
+          <div class="greet-text">Привіт 👋</div>
+          <div class="greet-name" id="greetName">Гравець</div>
+        </div>
+        <div class="avatar">🔥</div>
+      </div>
+
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 180 180">
+            <defs>
+              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ff5a1f"/>
+                <stop offset="100%" stop-color="#ffc828"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="90" cy="90" r="80"/>
+            <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-mascot">🔥</div>
+            <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
+            <div class="ring-streak-label">тренувань<br>цього тижня</div>
+          </div>
+        </div>
+        <div class="hero-msg" id="heroMsg">—</div>
+        <div class="hero-sub" id="heroSub">—</div>
+
+        <div class="quick-row">
+          <div class="quick-pill">
+            <div class="q-label">⚡ Загальний HP</div>
+            <div class="q-value" id="hpValue">0</div>
+          </div>
+          <div class="quick-pill">
+            <div class="q-label">🎯 Наступна ціль</div>
+            <div class="q-value" id="goalValue">—</div>
+            <div class="q-sub" id="goalSub"></div>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <button class="btn btn-primary" onclick="openBotChat()">🏋️ Тренуватись</button>
+          <button class="btn btn-ghost" onclick="goTab('rating')">🏆 Рейтинг</button>
+        </div>
+      </div>
+
+      <div class="section-title">Останнє в стрічці</div>
+      <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
+    </div>
+
+    <div class="screen" id="screen-calendar">
+      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
+      <div class="cal-card">
         <div class="cal-nav">
           <button id="prevMonth">←</button>
-          <div class="cal-month-label">${MONTH_NAMES[data.calendar.month - 1]} ${data.calendar.year}</div>
+          <div class="cal-month-label" id="calMonthLabel">—</div>
           <button id="nextMonth">→</button>
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span>🏋️ Gym</span>
-          <span>🦾 Street</span>
-          <span>🧘 Rest</span>
-          <span>🚫 Skip</span>
-          <span>🔥 Challenge</span>
+          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="header">
-          <div class="nickname">👤 ${escapeHtml(data.nickname || "Без ніку")}</div>
-          <div class="status-pill">${escapeHtml(data.status)}</div>
-        </div>
-        <div class="stats-grid">
-          <div class="stat-box"><div class="stat-label">⚡ Загальний HP</div><div class="stat-value">${data.hp_total}</div></div>
-          <div class="stat-box"><div class="stat-label">🔥 Streak</div><div class="stat-value">${data.streak}/${data.streak_max}</div></div>
-          <div class="stat-box"><div class="stat-label">🏋️ Gym</div><div class="stat-value">${data.gym_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🦾 Street</div><div class="stat-value">${data.street_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🧘 Rest</div><div class="stat-value">${data.rest_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🚫 Skip</div><div class="stat-value">${data.skip_count}</div></div>
-          <div class="stat-box"><div class="stat-label">📌 Усього дій</div><div class="stat-value">${data.activities_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🚀 Реферали</div><div class="stat-value">${data.referrals_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🏆 Досягнень</div><div class="stat-value">${data.achievements_count}</div></div>
-          <div class="stat-box"><div class="stat-label">🎯 Наступна ціль</div><div class="stat-value">${escapeHtml(data.next_goal_text)}</div></div>
-        </div>
-        <div class="stat-box" style="margin-top:10px;">
-          <div class="stat-label">🕓 Останнє досягнення</div>
-          <div class="stat-value">${escapeHtml(data.last_achievement_title)}</div>
-        </div>
+    <div class="screen" id="screen-achievements">
+      <div class="ach-head" style="margin-top:0;">
+        <div class="section-title" style="margin:0;">Досягнення</div>
+        <div class="ach-count" id="achCount">0 / 0 відкрито</div>
       </div>
-    `;
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
+      <div class="badge-grid" id="badgeGrid"></div>
+    </div>
 
-    renderCalendar(data.calendar.year, data.calendar.month, data.calendar.days);
+    <div class="screen" id="screen-rating">
+      <div class="section-title" style="margin-top:0;">Загальний рейтинг · за весь час</div>
+      <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
+    </div>
 
-    document.getElementById("prevMonth").onclick = () => changeMonth(-1);
-    document.getElementById("nextMonth").onclick = () => changeMonth(1);
+    <div class="modal-backdrop" id="shareModal">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="share-card">
+          <div class="share-icon" id="shareIcon">🏅</div>
+          <div class="share-title" id="shareTitle">Досягнення розблоковано!</div>
+          <div class="share-sub" id="shareSub">TurboTeam</div>
+          <div class="share-badge-hp" id="shareHp"></div>
+        </div>
+        <div class="cta-row">
+          <button class="btn btn-primary" onclick="saveImage()">💾 Зберегти картинку</button>
+          <button class="btn btn-ghost" onclick="shareImage()">📤 Поділитися</button>
+        </div>
+        <div class="modal-hint" onclick="closeModal()">Закрити</div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <nav class="tabbar">
+      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🔥</span>Сьогодні</button>
+      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📅</span>Календар</button>
+      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Досягнення</button>
+      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Рейтинг</button>
+    </nav>
+  `;
+
+  // ==================== TAB NAVIGATION ====================
+  function goTab(name) {
+    document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    document.getElementById("screen-" + name).classList.add("active");
+    document.querySelector(`.tab[data-tab="${name}"]`).classList.add("active");
+
+    if (name === "today") animateRing();
+    if (name === "calendar") animateCalendar();
+    if (name === "achievements") animateAchievements();
+    if (name === "rating") {
+      if (ratingLoaded) animateRanks();
+      else loadRating().then(animateRanks);
+    }
   }
 
+  // ==================== TODAY ====================
+  const RING_CIRC = 2 * Math.PI * 80;
+
+  function animateRing() {
+    if (!profileData) return;
+    const max = profileData.streak_max || 14;
+    const pct = max > 0 ? Math.min(1, profileData.streak / max) : 0;
+
+    const fill = document.getElementById("ringFill");
+    fill.style.transition = "none";
+    fill.style.strokeDashoffset = RING_CIRC;
+    void fill.offsetWidth;
+    fill.style.transition = "stroke-dashoffset 1.2s cubic-bezier(.34,1.2,.4,1)";
+    requestAnimationFrame(() => {
+      fill.style.strokeDashoffset = RING_CIRC - RING_CIRC * pct;
+    });
+  }
+
+  function wordTrainings(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "тренування";
+    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return "тренування";
+    return "тренувань";
+  }
+
+  function heroMessages(streak, max) {
+    if (streak <= 0) {
+      return ["Стрік тижня ще не розпочато", "Зроби перше тренування — і він піде вгору 🔥"];
+    }
+    if (streak >= max) {
+      return ["Максимальний стрік тижня! 🔥", `Ти зробив усі ${max} тренувань цього тижня — респект`];
+    }
+    const left = max - streak;
+    return ["Стрік росте 🔥", `Ще ${left} ${wordTrainings(left)} — і заб'єш максимум (${max})`];
+  }
+
+  function renderToday(data) {
+    document.getElementById("greetName").textContent = data.nickname || "Гравець";
+    document.getElementById("ringStreak").innerHTML = `${data.streak}<small>/${data.streak_max}</small>`;
+
+    const [msg, sub] = heroMessages(data.streak, data.streak_max || 14);
+    document.getElementById("heroMsg").textContent = msg;
+    document.getElementById("heroSub").textContent = sub;
+
+    document.getElementById("hpValue").textContent = Number(data.hp_total).toLocaleString("uk");
+    document.getElementById("goalValue").textContent = data.status || "—";
+    document.getElementById("goalSub").textContent = data.next_goal_text || "";
+  }
+
+  function openBotChat() {
+    if (!profileData || !profileData.bot_username) {
+      showToast("Відкрий бота через Telegram, щоб тренуватись 🏋️");
+      return;
+    }
+    const url = `https://t.me/${profileData.bot_username}`;
+    if (tg && tg.openTelegramLink) {
+      tg.openTelegramLink(url);
+    } else {
+      window.open(url, "_blank");
+    }
+  }
+
+  function renderFeed(items) {
+    const el = document.getElementById("feedList");
+    if (!items || !items.length) {
+      el.innerHTML = `<div class="state-msg">Ще немає активності. Зроби перше тренування — і воно з'явиться тут 🔥</div>`;
+      return;
+    }
+    el.innerHTML = items.map((it) => `
+      <div class="feed-card">
+        <div class="feed-icon">${it.icon}</div>
+        <div><div class="feed-title">${escapeHtml(it.title)}</div><div class="feed-sub">${escapeHtml(it.subtitle)}</div></div>
+      </div>`).join("");
+  }
+
+  async function loadFeed() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/feed`, { headers: authHeaders() });
+      if (!response.ok) throw new Error("bad status");
+      const data = await response.json();
+      renderFeed(data.items);
+    } catch (e) {
+      document.getElementById("feedList").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити стрічку.</div>`;
+    }
+  }
+
+  // ==================== CALENDAR ====================
   function getKyivTodayKey() {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Kyiv",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   }
 
   function renderCalendar(year, month, days) {
+    document.getElementById("calMonthLabel").textContent = `${MONTH_NAMES[month - 1]} ${year}`;
+
     const grid = document.getElementById("calGrid");
     grid.innerHTML = WEEKDAY_NAMES.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
 
@@ -256,6 +506,23 @@
       const cls = [activityCls, dayKey === todayKey ? "today" : ""].filter(Boolean).join(" ");
       grid.innerHTML += `<div class="cal-day ${cls}"><div class="num">${day}</div><div class="icon">${icons}</div></div>`;
     }
+
+    animateCalendar();
+  }
+
+  function animateCalendar() {
+    const cells = document.querySelectorAll("#calGrid .cal-day");
+    let order = 0;
+    cells.forEach((cell) => {
+      const icon = cell.querySelector(".icon");
+      if (icon && icon.textContent.trim()) {
+        icon.style.animation = "none";
+        void icon.offsetWidth;
+        icon.style.animation = "flyIn .5s cubic-bezier(.34,1.56,.64,1) both";
+        icon.style.animationDelay = (order * 0.05) + "s";
+        order++;
+      }
+    });
   }
 
   function changeMonth(delta) {
@@ -265,37 +532,233 @@
     loadProfile();
   }
 
-  function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.innerText = value ?? "";
-    return div.innerHTML;
+  // ==================== ACHIEVEMENTS ====================
+  function renderAchievements(list) {
+    achievements = list || [];
+    const unlockedCount = achievements.filter((b) => b.unlocked).length;
+    document.getElementById("achCount").textContent = `${unlockedCount} / ${achievements.length} відкрито`;
+    achPercent = achievements.length ? (unlockedCount / achievements.length) * 100 : 0;
+
+    document.getElementById("badgeGrid").innerHTML = achievements.map((b, i) => `
+      <div class="badge-card ${b.unlocked ? "unlocked" : "locked"}" data-index="${i}">
+        <div class="badge-icon">${b.unlocked ? b.icon : "🔒"}</div>
+        <div class="badge-title">${escapeHtml(b.title)}</div>
+        <div class="badge-sub">${b.unlocked ? b.threshold + " " + wordTrainings(b.threshold) : "ще " + b.remaining}</div>
+      </div>`).join("");
+
+    document.querySelectorAll("#badgeGrid .badge-card").forEach((card) => {
+      card.onclick = () => {
+        const badge = achievements[Number(card.dataset.index)];
+        if (badge.unlocked) openModal(badge);
+        else showToast(`${badge.title} — ще ${badge.remaining} ${wordTrainings(badge.remaining)}`);
+      };
+    });
+  }
+
+  function animateAchievements() {
+    const bar = document.getElementById("achBar");
+    bar.style.width = "0%";
+    requestAnimationFrame(() => { bar.style.width = achPercent + "%"; });
+    document.querySelectorAll("#badgeGrid .badge-card").forEach((c, i) => {
+      c.style.animation = "none";
+      void c.offsetWidth;
+      c.style.animation = "popIn .4s cubic-bezier(.34,1.56,.64,1) both";
+      c.style.animationDelay = (i * 0.03) + "s";
+    });
+  }
+
+  // ==================== RATING (lazy-loaded only when tab opens) ====================
+  function rankAvatar(rank) {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return "🔥";
+  }
+
+  function rowHtml(r, isMe) {
+    return `<div class="rank-row ${isMe ? "me" : ""}">
+      <div class="rank-num">${r.rank}</div>
+      <div class="rank-avatar">${rankAvatar(r.rank)}</div>
+      <div class="rank-name">${escapeHtml(r.nick)}${isMe ? " (ти)" : ""}</div>
+      <div class="rank-hp">${Number(r.hp).toLocaleString("uk")} HP</div>
+    </div>`;
+  }
+
+  function renderRating(data) {
+    const top = data.top || [];
+    const me = data.me;
+    const meInTop = !!me && top.some((r) => Number(r.telegram_user_id) === Number(me.telegram_user_id));
+
+    let html = top.map((r) => rowHtml(r, !!me && Number(r.telegram_user_id) === Number(me.telegram_user_id))).join("");
+
+    if (me && !meInTop) {
+      html += `<div class="rank-divider">···</div>` + rowHtml(me, true);
+    }
+
+    if (!top.length && !me) {
+      html = `<div class="state-msg">Рейтинг порожній. Стань першим 🚀</div>`;
+    }
+
+    document.getElementById("rankList").innerHTML = html;
+  }
+
+  function animateRanks() {
+    document.querySelectorAll("#rankList .rank-row").forEach((row, i) => {
+      row.style.animation = "none";
+      void row.offsetWidth;
+      row.style.animation = "slideIn .35s ease both";
+      row.style.animationDelay = (i * 0.06) + "s";
+    });
+  }
+
+  async function loadRating() {
+    if (ratingLoaded) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rating`, { headers: authHeaders() });
+      if (!response.ok) throw new Error("bad status");
+      const data = await response.json();
+      ratingLoaded = true;
+      renderRating(data);
+    } catch (e) {
+      document.getElementById("rankList").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити рейтинг.</div>`;
+    }
+  }
+
+  // ==================== SHARE MODAL ====================
+  function openModal(badge) {
+    activeBadge = badge;
+    document.getElementById("shareIcon").textContent = badge.icon;
+    document.getElementById("shareTitle").textContent = `«${badge.title}» розблоковано!`;
+    document.getElementById("shareSub").textContent = `${profileData?.nickname || ""} · TurboTeam`;
+    document.getElementById("shareHp").textContent = `${badge.threshold} ${wordTrainings(badge.threshold)} пройдено 💪`;
+    document.getElementById("shareModal").classList.add("show");
+  }
+
+  function closeModal() {
+    document.getElementById("shareModal").classList.remove("show");
+  }
+
+  function renderShareCanvas(badge) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 720;
+    canvas.height = 720;
+    const ctx = canvas.getContext("2d");
+
+    const grad = ctx.createLinearGradient(0, 0, 720, 720);
+    grad.addColorStop(0, "#2a1a0c");
+    grad.addColorStop(1, "#120c08");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 720, 720);
+
+    ctx.strokeStyle = "rgba(255,200,40,0.5)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(20, 20, 680, 680);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = "120px sans-serif";
+    ctx.fillText(badge.icon, 360, 320);
+
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillText(`«${badge.title}» розблоковано!`, 360, 420);
+
+    ctx.font = "26px sans-serif";
+    ctx.fillStyle = "#b9c0cc";
+    ctx.fillText(`${profileData?.nickname || ""} · TurboTeam`, 360, 470);
+
+    ctx.font = "bold 28px sans-serif";
+    ctx.fillStyle = "#ffc828";
+    ctx.fillText(`${badge.threshold} ${wordTrainings(badge.threshold)} пройдено 💪`, 360, 530);
+
+    return canvas;
+  }
+
+  function downloadCanvasBlob(blob, code) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `turboteam-${code}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function saveImage() {
+    if (!activeBadge) return;
+    renderShareCanvas(activeBadge).toBlob((blob) => {
+      if (!blob) { showToast("Не вдалося згенерувати картинку"); return; }
+      downloadCanvasBlob(blob, activeBadge.code);
+      showToast("Картинку збережено 📷");
+    }, "image/png");
+  }
+
+  function shareImage() {
+    if (!activeBadge) return;
+    const badge = activeBadge;
+    renderShareCanvas(badge).toBlob(async (blob) => {
+      if (!blob) { showToast("Не вдалося згенерувати картинку"); return; }
+      const file = new File([blob], `turboteam-${badge.code}.png`, { type: "image/png" });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: "TurboTeam",
+            text: `Розблокував «${badge.title}» в TurboTeam 🔥`,
+          });
+          return;
+        } catch (e) {
+          // user cancelled the native share sheet — fall back to saving below
+        }
+      }
+
+      downloadCanvasBlob(blob, badge.code);
+      showToast("Поділитися напряму тут не вийшло — картинку збережено, додай у Stories вручну 📷");
+    }, "image/png");
+  }
+
+  // ==================== PROFILE LOAD ====================
+  function renderProfile(data) {
+    profileData = data;
+    renderToday(data);
+    renderCalendar(data.calendar.year, data.calendar.month, data.calendar.days);
+    renderAchievements(data.achievements);
+    animateRing();
   }
 
   async function loadProfile() {
-    if (!tg || !tg.initData) {
-      app.innerHTML = `<div class="state-msg">⚠️ Відкрий цю сторінку через кнопку в Telegram-боті.</div>`;
-      return;
-    }
-
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/profile?year=${viewYear}&month=${viewMonth}`,
-        { headers: { Authorization: `tma ${tg.initData}` } }
+        { headers: authHeaders() }
       );
 
       if (!response.ok) {
-        app.innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити профіль (код ${response.status}).</div>`;
+        document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити профіль (код ${response.status}).</div>`;
         return;
       }
 
       const data = await response.json();
-      render(data);
+
+      if (!profileData) {
+        document.getElementById("app").innerHTML = SKELETON;
+        document.getElementById("prevMonth").onclick = () => changeMonth(-1);
+        document.getElementById("nextMonth").onclick = () => changeMonth(1);
+        loadFeed();
+      }
+
+      renderProfile(data);
     } catch (e) {
-      app.innerHTML = `<div class="state-msg">⚠️ Помилка з'єднання з сервером.</div>`;
+      document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Помилка з'єднання з сервером.</div>`;
     }
   }
 
-  loadProfile();
+  if (!tg || !tg.initData) {
+    document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Відкрий цю сторінку через кнопку в Telegram-боті.</div>`;
+  } else {
+    loadProfile();
+  }
 </script>
 </body>
 </html>

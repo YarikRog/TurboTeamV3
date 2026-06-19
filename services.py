@@ -68,20 +68,44 @@ TRAINING_STATUS_LEVELS = [
 ]
 
 # ==============================================================================
-# ACHIEVEMENTS (TRAINING ONLY, V1)
+# ACHIEVEMENTS (TRAINING ONLY, V2 — 15 thresholds)
 # ==============================================================================
 
 TRAINING_ACHIEVEMENTS = [
     (1, "training_1", "Перший крок"),
+    (3, "training_3", "Втягнувся"),
     (5, "training_5", "Розігрів"),
     (10, "training_10", "Перша десятка"),
+    (15, "training_15", "Стабільність"),
     (25, "training_25", "У ритмі"),
     (50, "training_50", "Півсотні"),
+    (75, "training_75", "На повну"),
     (100, "training_100", "Сотка"),
+    (150, "training_150", "Залізна дисципліна"),
     (200, "training_200", "Машина"),
+    (300, "training_300", "Турбо-режим"),
     (500, "training_500", "Монстр"),
+    (750, "training_750", "Невгамовний"),
     (1000, "training_1000", "Легенда TurboTeam"),
 ]
+
+TRAINING_ACHIEVEMENT_ICONS: dict[str, str] = {
+    "training_1": "🐣",
+    "training_3": "🔥",
+    "training_5": "💪",
+    "training_10": "🎯",
+    "training_15": "🧱",
+    "training_25": "🌀",
+    "training_50": "⚡",
+    "training_75": "🚀",
+    "training_100": "💯",
+    "training_150": "🛡️",
+    "training_200": "🤖",
+    "training_300": "🏎️",
+    "training_500": "👹",
+    "training_750": "🦾",
+    "training_1000": "👑",
+}
 
 
 # ==============================================================================
