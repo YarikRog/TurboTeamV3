@@ -1,5 +1,7 @@
 from aiogram import types
 
+from config import PROFILE_WEB_APP_SHORT_NAME
+
 
 def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMarkup:
     """Main TurboTeam inline menu."""
@@ -39,33 +41,43 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
             callback_data="weekly_challenge",
         )
 
-    return types.InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                gym_button,
-                street_button,
-            ],
-            [
-                challenge_button,
-            ],
-            [
-                types.InlineKeyboardButton(
-                    text="🧘‍♂️ Відпочинок",
-                    callback_data="action_rest",
-                ),
-                types.InlineKeyboardButton(
-                    text="🚫 Забив болт",
-                    callback_data="action_skip",
-                ),
-            ],
-            [
-                types.InlineKeyboardButton(
-                    text="📘 ПРАВИЛА СПІЛЬНОТИ",
-                    callback_data="community_rules",
-                ),
-            ],
-        ]
-    )
+    rows = [
+        [
+            gym_button,
+            street_button,
+        ],
+        [
+            challenge_button,
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="🧘‍♂️ Відпочинок",
+                callback_data="action_rest",
+            ),
+            types.InlineKeyboardButton(
+                text="🚫 Забив болт",
+                callback_data="action_skip",
+            ),
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="📘 ПРАВИЛА СПІЛЬНОТИ",
+                callback_data="community_rules",
+            ),
+        ],
+    ]
+
+    if bot_username:
+        # web_app-кнопки працюють лише в приватних чатах, тому в групі
+        # відкриваємо Mini App через пряме посилання t.me/<bot>/<short_name>.
+        rows.append([
+            types.InlineKeyboardButton(
+                text="👤 Мій профіль",
+                url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+            ),
+        ])
+
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
@@ -83,15 +95,11 @@ def get_quiz_reply_keyboard(web_app_url: str) -> types.ReplyKeyboardMarkup:
     )
 
 
-def get_rating_reply_keyboard(profile_web_app_url: str) -> types.ReplyKeyboardMarkup:
+def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [
                 types.KeyboardButton(text="🏅 Досягнення"),
-                types.KeyboardButton(
-                    text="👤 Мій профіль",
-                    web_app=types.WebAppInfo(url=profile_web_app_url),
-                ),
             ],
             [
                 types.KeyboardButton(text="🚀 Запросити друга 🔥"),
