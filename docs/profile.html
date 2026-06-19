@@ -131,6 +131,12 @@
     color: var(--text);
   }
 
+  .cal-day.today {
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 7px 1px rgba(255, 255, 255, 0.65);
+    color: var(--text);
+  }
+
   .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 4px; }
 
@@ -219,6 +225,15 @@
     document.getElementById("nextMonth").onclick = () => changeMonth(1);
   }
 
+  function getKyivTodayKey() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Kyiv",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  }
+
   function renderCalendar(year, month, days) {
     const grid = document.getElementById("calGrid");
     grid.innerHTML = WEEKDAY_NAMES.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
@@ -226,6 +241,7 @@
     const firstDay = new Date(year, month - 1, 1);
     const daysInMonth = new Date(year, month, 0).getDate();
     const leadingEmpty = (firstDay.getDay() + 6) % 7;
+    const todayKey = getKyivTodayKey();
 
     for (let i = 0; i < leadingEmpty; i++) {
       grid.innerHTML += `<div class="cal-day empty"></div>`;
@@ -236,7 +252,8 @@
       const entries = days[dayKey] || [];
       const knownEntries = entries.filter((e) => ACTION_META[e.action_name]);
       const icons = knownEntries.map((e) => ACTION_META[e.action_name].icon).join("");
-      const cls = knownEntries.length > 1 ? "multi" : (knownEntries[0] ? ACTION_META[knownEntries[0].action_name].cls : "");
+      const activityCls = knownEntries.length > 1 ? "multi" : (knownEntries[0] ? ACTION_META[knownEntries[0].action_name].cls : "");
+      const cls = [activityCls, dayKey === todayKey ? "today" : ""].filter(Boolean).join(" ");
       grid.innerHTML += `<div class="cal-day ${cls}"><div class="num">${day}</div><div class="icon">${icons}</div></div>`;
     }
   }
