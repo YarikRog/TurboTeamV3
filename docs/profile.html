@@ -39,7 +39,6 @@
   @keyframes slideIn { from { opacity:0; transform: translateX(-18px); } to { opacity:1; transform: none; } }
   @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
   @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,90,31,0); } 50% { box-shadow: 0 0 18px 2px rgba(255,90,31,0.35); } }
-  @keyframes shine { 0% { background-position: -120% 0; } 100% { background-position: 220% 0; } }
 
   /* ---------- TODAY ---------- */
   .greet { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -186,21 +185,11 @@
   }
   .modal-backdrop.show .modal-sheet { transform: translateY(0); }
   .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 16px; }
-  .share-card {
-    position: relative; overflow: hidden;
-    background: linear-gradient(160deg, #2a1a0c, #120c08);
-    border: 1px solid rgba(255,200,40,0.4);
-    border-radius: 18px; padding: 24px 16px; text-align: center; margin-bottom: 16px;
+  .share-card-img {
+    width: 100%; border-radius: 18px; display: block;
+    border: 1px solid rgba(255,200,40,0.4); margin-bottom: 10px;
   }
-  .share-card::before {
-    content: ""; position: absolute; inset: 0;
-    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.14) 50%, transparent 70%);
-    background-size: 200% 100%; animation: shine 2.6s linear infinite;
-  }
-  .share-icon { font-size: 50px; position: relative; animation: floatY 2.8s ease-in-out infinite; }
-  .share-title { font-size: 18px; font-weight: 900; margin-top: 8px; position: relative; }
-  .share-sub { font-size: 12px; color: var(--muted); margin-top: 5px; position: relative; }
-  .share-badge-hp { display:inline-block; margin-top:10px; font-size:12px; font-weight:800; color: var(--gold); position: relative; }
+  .modal-hint-save { text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
   .modal-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 12px; }
 
   .toast {
@@ -348,18 +337,13 @@
       <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
-    <div class="modal-backdrop" id="shareModal">
+    <div class="modal-backdrop" id="shareModal" onclick="if (event.target === this) closeModal()">
       <div class="modal-sheet">
         <div class="modal-handle"></div>
-        <div class="share-card">
-          <div class="share-icon" id="shareIcon">🏅</div>
-          <div class="share-title" id="shareTitle">Досягнення розблоковано!</div>
-          <div class="share-sub" id="shareSub">TurboTeam</div>
-          <div class="share-badge-hp" id="shareHp"></div>
-        </div>
+        <img class="share-card-img" id="shareCanvasImg" alt="Досягнення" />
+        <div class="modal-hint-save">Утримай картинку, щоб зберегти 📷</div>
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="saveImage()">💾 Зберегти картинку</button>
-          <button class="btn btn-ghost" onclick="shareImage()">📤 Поділитися</button>
+          <button class="btn btn-primary" onclick="shareImage()">📤 Поділитися</button>
         </div>
         <div class="modal-hint" onclick="closeModal()">Закрити</div>
       </div>
@@ -446,11 +430,19 @@
       return;
     }
     const url = profileData.group_link;
-    if (tg && tg.openTelegramLink) {
-      tg.openTelegramLink(url);
-    } else {
-      window.open(url, "_blank");
+    try {
+      if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(url);
+        return;
+      }
+      if (tg && tg.openLink) {
+        tg.openLink(url);
+        return;
+      }
+    } catch (e) {
+      // some clients throw if the WebApp wasn't launched in a context that allows this — fall through
     }
+    window.open(url, "_blank");
   }
 
   function renderFeed(items) {
@@ -627,10 +619,7 @@
   // ==================== SHARE MODAL ====================
   function openModal(badge) {
     activeBadge = badge;
-    document.getElementById("shareIcon").textContent = badge.icon;
-    document.getElementById("shareTitle").textContent = `«${badge.title}» розблоковано!`;
-    document.getElementById("shareSub").textContent = `${profileData?.nickname || ""} · TurboTeam`;
-    document.getElementById("shareHp").textContent = `${badge.threshold} ${wordTrainings(badge.threshold)} пройдено 💪`;
+    document.getElementById("shareCanvasImg").src = renderShareCanvas(badge).toDataURL("image/png");
     document.getElementById("shareModal").classList.add("show");
   }
 
@@ -673,48 +662,25 @@
     return canvas;
   }
 
-  function downloadCanvasBlob(blob, code) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `turboteam-${code}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  }
-
-  function saveImage() {
-    if (!activeBadge) return;
-    renderShareCanvas(activeBadge).toBlob((blob) => {
-      if (!blob) { showToast("Не вдалося згенерувати картинку"); return; }
-      downloadCanvasBlob(blob, activeBadge.code);
-      showToast("Картинку збережено 📷");
-    }, "image/png");
-  }
-
   function shareImage() {
     if (!activeBadge) return;
     const badge = activeBadge;
     renderShareCanvas(badge).toBlob(async (blob) => {
       if (!blob) { showToast("Не вдалося згенерувати картинку"); return; }
       const file = new File([blob], `turboteam-${badge.code}.png`, { type: "image/png" });
+      const refLine = profileData?.referral_link ? `\n${profileData.referral_link}` : "";
+      const shareText = `Розблокував «${badge.title}» в TurboTeam 🔥${refLine}`;
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({
-            files: [file],
-            title: "TurboTeam",
-            text: `Розблокував «${badge.title}» в TurboTeam 🔥`,
-          });
-          return;
+          await navigator.share({ files: [file], title: "TurboTeam", text: shareText });
         } catch (e) {
-          // user cancelled the native share sheet — fall back to saving below
+          // user cancelled the native share sheet — nothing else to do
         }
+        return;
       }
 
-      downloadCanvasBlob(blob, badge.code);
-      showToast("Поділитися напряму тут не вийшло — картинку збережено, додай у Stories вручну 📷");
+      showToast("Утримай картинку вище, щоб зберегти та поділитись 📷");
     }, "image/png");
   }
 
