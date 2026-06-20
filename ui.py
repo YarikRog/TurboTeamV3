@@ -99,9 +99,6 @@ def get_rating_reply_keyboard() -> types.ReplyKeyboardMarkup:
     return types.ReplyKeyboardMarkup(
         keyboard=[
             [
-                types.KeyboardButton(text="🏅 Досягнення"),
-            ],
-            [
                 types.KeyboardButton(text="🚀 Запросити друга 🔥"),
             ],
         ],
