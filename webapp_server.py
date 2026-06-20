@@ -314,6 +314,7 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
             chat_id=telegram_user_id,
             photo=BufferedInputFile(image_bytes, filename="achievement.png"),
             caption=caption,
+            parse_mode=None,
         )
     except Exception:
         logger.exception("Failed to send achievement photo to %s", telegram_user_id)
