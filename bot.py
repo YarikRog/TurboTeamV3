@@ -536,7 +536,7 @@ async def main():
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
     scheduler = setup_scheduler(bot)
-    webapp_runner = await run_webapp_server(PORT)
+    webapp_runner = await run_webapp_server(PORT, bot)
     try:
         await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
