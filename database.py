@@ -78,6 +78,35 @@ async def _is_auto_removed_user(telegram_user_id: int) -> bool:
     return already_removed is not None
 
 
+async def get_currently_banned_telegram_ids() -> set:
+    """All telegram_user_ids currently tracked as auto-removed (banned) in Redis."""
+    from cache import redis_client
+
+    if redis_client is None:
+        return set()
+
+    banned_ids: set = set()
+    cursor = 0
+
+    while True:
+        cursor, keys = await redis_client.scan(
+            cursor=cursor,
+            match=f"{AUTO_REMOVE_REDIS_PREFIX}:*",
+            count=100,
+        )
+
+        for key in keys:
+            try:
+                banned_ids.add(int(str(key).rsplit(":", 1)[-1]))
+            except ValueError:
+                continue
+
+        if cursor == 0:
+            break
+
+    return banned_ids
+
+
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:
     """
     Safely parses Supabase/Postgres created_at into Kyiv-aware datetime.
