@@ -7,7 +7,7 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import REPORTS_GROUP_ID, GROUP_LINK
+from config import REPORTS_GROUP_ID, GROUP_LINK, PROFILE_WEB_APP_SHORT_NAME
 from phrases import get_phrase
 from awards import sunday_final_logic
 from database import (
@@ -272,6 +272,12 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
                 InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
             ],
         ]
     )
