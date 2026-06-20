@@ -39,6 +39,11 @@
   @keyframes slideIn { from { opacity:0; transform: translateX(-18px); } to { opacity:1; transform: none; } }
   @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
   @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,90,31,0); } 50% { box-shadow: 0 0 18px 2px rgba(255,90,31,0.35); } }
+  @keyframes screenInRight { from { opacity:0; transform: translateX(26px); } to { opacity:1; transform: none; } }
+  @keyframes screenInLeft { from { opacity:0; transform: translateX(-26px); } to { opacity:1; transform: none; } }
+  @keyframes celebratePop { 0% { opacity:0; transform: scale(.4) rotate(-8deg); } 60% { opacity:1; transform: scale(1.12) rotate(4deg); } 100% { opacity:1; transform: scale(1) rotate(0); } }
+  @keyframes confettiFall { from { transform: translateY(-10px) rotate(0deg); opacity:1; } to { transform: translateY(420px) rotate(360deg); opacity:0; } }
+  @keyframes countPulse { 0% { transform: scale(1); } 40% { transform: scale(1.18); color: var(--accent); } 100% { transform: scale(1); } }
 
   /* ---------- TODAY ---------- */
   .greet { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -167,6 +172,7 @@
     transition: color .15s ease, transform .12s ease;
   }
   .tab .tab-icon { font-size: 19px; transition: transform .2s ease; }
+  .tab:active { transform: scale(0.9); }
   .tab.active { color: var(--text); }
   .tab.active .tab-icon { transform: translateY(-2px) scale(1.12); }
   .tab:active { transform: scale(0.9); }
@@ -196,6 +202,19 @@
     border: 1px solid rgba(255,200,40,0.4); margin-bottom: 10px;
   }
   .modal-hint-save { text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+
+  .celebrate-sheet {
+    position: relative; width: 100%; max-width: 480px; background: var(--bg);
+    border-radius: 22px 22px 0 0; padding: 30px 18px 30px; transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.34,1.2,.4,1); border-top: 1px solid var(--border);
+    text-align: center; overflow: hidden;
+  }
+  .modal-backdrop.show .celebrate-sheet { transform: translateY(0); }
+  .confetti-container { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .confetti-piece { position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; animation: confettiFall 1.7s ease-in forwards; }
+  .celebrate-label { font-size: 12px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+  .celebrate-icon { font-size: 64px; margin: 10px 0 6px; display: inline-block; animation: celebratePop .6s cubic-bezier(.34,1.56,.64,1) both; }
+  .celebrate-title { font-size: 19px; font-weight: 800; margin: 4px 0 20px; position: relative; }
 
   .toast {
     position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
@@ -354,6 +373,20 @@
       </div>
     </div>
 
+    <div class="modal-backdrop" id="celebrateModal" onclick="if (event.target === this) closeCelebrate()">
+      <div class="celebrate-sheet">
+        <div class="confetti-container" id="confettiContainer"></div>
+        <button class="modal-close-x" onclick="closeCelebrate()" aria-label="Закрити">✕</button>
+        <div class="celebrate-label">Нове досягнення!</div>
+        <div class="celebrate-icon" id="celebrateIcon">🏅</div>
+        <div class="celebrate-title" id="celebrateTitle"></div>
+        <div class="cta-row">
+          <button class="btn btn-ghost" onclick="closeCelebrate()">Круто!</button>
+          <button class="btn btn-primary" onclick="celebrateShare()">📤 Поділитися</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <nav class="tabbar">
@@ -365,10 +398,20 @@
   `;
 
   // ==================== TAB NAVIGATION ====================
+  const TAB_ORDER = ["today", "calendar", "achievements", "rating"];
+  let currentTabName = "today";
+
   function goTab(name) {
+    const dir = TAB_ORDER.indexOf(name) >= TAB_ORDER.indexOf(currentTabName) ? "Right" : "Left";
+    currentTabName = name;
+
     document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    document.getElementById("screen-" + name).classList.add("active");
+    const screen = document.getElementById("screen-" + name);
+    screen.classList.add("active");
+    screen.style.animation = "none";
+    void screen.offsetWidth;
+    screen.style.animation = `screenIn${dir} .26s cubic-bezier(.34,1.1,.64,1) both`;
     document.querySelector(`.tab[data-tab="${name}"]`).classList.add("active");
 
     if (name === "today") animateRing();
@@ -416,6 +459,15 @@
     return ["Стрік росте 🔥", `Ще ${left} ${wordTrainings(left)} — і заб'єш максимум (${max})`];
   }
 
+  function pulseOnChange(el, newValue) {
+    const prev = el.dataset.rawValue;
+    el.dataset.rawValue = String(newValue);
+    if (prev === undefined || Number(prev) === Number(newValue)) return;
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "countPulse .5s ease";
+  }
+
   function renderToday(data) {
     document.getElementById("greetName").textContent = data.nickname || "Гравець";
     document.getElementById("ringStreak").innerHTML = `${data.streak}<small>/${data.streak_max}</small>`;
@@ -424,7 +476,9 @@
     document.getElementById("heroMsg").textContent = msg;
     document.getElementById("heroSub").textContent = sub;
 
-    document.getElementById("hpValue").textContent = Number(data.hp_total).toLocaleString("uk");
+    const hpEl = document.getElementById("hpValue");
+    hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
+    pulseOnChange(hpEl, data.hp_total);
     document.getElementById("goalValue").textContent = data.status || "—";
     document.getElementById("goalSub").textContent = data.next_goal_text || "";
   }
@@ -726,12 +780,77 @@
     }
   }
 
+  // ==================== ACHIEVEMENT CELEBRATION ====================
+  const SEEN_ACHIEVEMENTS_KEY = "tt_seen_achievements_v1";
+  let celebrationQueue = [];
+  let currentCelebrationBadge = null;
+
+  function checkNewAchievements(list) {
+    let seen = null;
+    try { seen = JSON.parse(localStorage.getItem(SEEN_ACHIEVEMENTS_KEY)); } catch (e) { seen = null; }
+
+    const unlockedCodes = (list || []).filter((b) => b.unlocked).map((b) => b.code);
+
+    if (!Array.isArray(seen)) {
+      localStorage.setItem(SEEN_ACHIEVEMENTS_KEY, JSON.stringify(unlockedCodes));
+      return;
+    }
+
+    const newOnes = (list || []).filter((b) => b.unlocked && !seen.includes(b.code));
+    localStorage.setItem(SEEN_ACHIEVEMENTS_KEY, JSON.stringify(unlockedCodes));
+
+    if (newOnes.length) {
+      celebrationQueue = newOnes.slice(1);
+      celebrateAchievement(newOnes[0]);
+    }
+  }
+
+  function spawnConfetti() {
+    const container = document.getElementById("confettiContainer");
+    container.innerHTML = "";
+    const colors = ["#ff5a1f", "#ffc828", "#4cc9f0", "#34d399", "#f472b6"];
+    for (let i = 0; i < 26; i++) {
+      const piece = document.createElement("span");
+      piece.className = "confetti-piece";
+      piece.style.left = Math.random() * 100 + "%";
+      piece.style.background = colors[i % colors.length];
+      piece.style.animationDelay = (Math.random() * 0.35) + "s";
+      piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+      container.appendChild(piece);
+    }
+  }
+
+  function celebrateAchievement(badge) {
+    currentCelebrationBadge = badge;
+    document.getElementById("toast").classList.remove("show");
+    document.getElementById("celebrateIcon").textContent = badge.icon;
+    document.getElementById("celebrateTitle").textContent = `«${badge.title}» розблоковано!`;
+    spawnConfetti();
+    document.getElementById("celebrateModal").classList.add("show");
+    try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch (e) {}
+  }
+
+  function closeCelebrate() {
+    document.getElementById("celebrateModal").classList.remove("show");
+    if (celebrationQueue.length) {
+      const next = celebrationQueue.shift();
+      setTimeout(() => celebrateAchievement(next), 380);
+    }
+  }
+
+  function celebrateShare() {
+    const badge = currentCelebrationBadge;
+    closeCelebrate();
+    if (badge) setTimeout(() => openModal(badge), 380);
+  }
+
   // ==================== PROFILE LOAD ====================
   function renderProfile(data) {
     profileData = data;
     renderToday(data);
     renderCalendar(data.calendar.year, data.calendar.month, data.calendar.days);
     renderAchievements(data.achievements);
+    checkNewAchievements(data.achievements);
     animateRing();
   }
 
