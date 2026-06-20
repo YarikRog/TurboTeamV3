@@ -700,7 +700,21 @@
         body: JSON.stringify({ title: badge.title, image: imageDataUrl }),
       });
       if (!response.ok) throw new Error("share failed");
-      showToast("Готово! Картинку з посиланням надіслав тобі в чат з ботом — перешли її друзям 📤");
+      const data = await response.json();
+
+      let pickerOpened = false;
+      if (data.share_token && typeof tg.switchInlineQuery === "function") {
+        try {
+          tg.switchInlineQuery(data.share_token, ["users", "groups", "channels"]);
+          pickerOpened = true;
+        } catch (e) { pickerOpened = false; }
+      }
+
+      showToast(
+        pickerOpened
+          ? "Обери, кому надіслати 👇"
+          : "Готово! Картинку з посиланням надіслав тобі в чат з ботом — перешли її друзям 📤"
+      );
     } catch (err) {
       const shareLink = profileData?.referral_link || profileData?.group_link || "";
       const shareText = shareLink

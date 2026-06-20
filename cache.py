@@ -140,6 +140,11 @@ class KeyManager:
     def get_training_repeat_key(uid: int, date_str: str) -> str:
         return f"{KeyManager.PREFIX}:train_repeat:{uid}:{date_str}"
 
+    # --- Webapp share tokens ---
+    @staticmethod
+    def get_share_token_key(token: str) -> str:
+        return f"{KeyManager.PREFIX}:share:{token}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS
