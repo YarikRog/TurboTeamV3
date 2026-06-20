@@ -665,23 +665,24 @@
   function shareImage() {
     if (!activeBadge) return;
     const badge = activeBadge;
-    renderShareCanvas(badge).toBlob(async (blob) => {
-      if (!blob) { showToast("Не вдалося згенерувати картинку"); return; }
-      const file = new File([blob], `turboteam-${badge.code}.png`, { type: "image/png" });
-      const refLine = profileData?.referral_link ? `\n${profileData.referral_link}` : "";
-      const shareText = `Розблокував «${badge.title}» в TurboTeam 🔥${refLine}`;
+    const shareLink = profileData?.referral_link || profileData?.group_link || "";
+    const shareText = `Розблокував «${badge.title}» в TurboTeam 🔥`;
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: "TurboTeam", text: shareText });
-        } catch (e) {
-          // user cancelled the native share sheet — nothing else to do
-        }
+    if (!shareLink) {
+      showToast("Утримай картинку вище, щоб зберегти 📷");
+      return;
+    }
+
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+    try {
+      if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(shareUrl);
         return;
       }
-
-      showToast("Утримай картинку вище, щоб зберегти та поділитись 📷");
-    }, "image/png");
+    } catch (e) {
+      // fall through to the toast below
+    }
+    showToast("Утримай картинку вище, щоб зберегти 📷");
   }
 
   // ==================== PROFILE LOAD ====================
