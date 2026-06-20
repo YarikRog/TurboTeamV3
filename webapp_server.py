@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -6,6 +8,8 @@ import time
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qsl
 
+from aiogram import Bot
+from aiogram.types import BufferedInputFile
 from aiohttp import web
 
 from cache import KeyManager, get_data
@@ -92,7 +96,7 @@ async def cors_middleware(request: web.Request, handler):
 
     response.headers["Access-Control-Allow-Origin"] = WEBAPP_CORS_ORIGIN
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
 
 
@@ -266,19 +270,74 @@ async def handle_feed(request: web.Request) -> web.Response:
     return web.json_response({"items": items})
 
 
-def create_webapp_app() -> web.Application:
-    app = web.Application(middlewares=[cors_middleware])
+MAX_SHARE_IMAGE_BYTES = 3 * 1024 * 1024
+
+
+async def handle_share_achievement(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    telegram_user_id = auth["telegram_user_id"]
+
+    try:
+        payload = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "invalid body"}, status=400)
+
+    title = str(payload.get("title") or "").strip()
+    image_data_url = str(payload.get("image") or "")
+    if not title or not image_data_url:
+        return web.json_response({"error": "missing title or image"}, status=400)
+
+    if "," in image_data_url:
+        image_data_url = image_data_url.split(",", 1)[1]
+
+    try:
+        image_bytes = base64.b64decode(image_data_url, validate=True)
+    except (binascii.Error, ValueError):
+        return web.json_response({"error": "invalid image"}, status=400)
+
+    if not image_bytes or len(image_bytes) > MAX_SHARE_IMAGE_BYTES:
+        return web.json_response({"error": "invalid image"}, status=400)
+
+    bot_username = await get_data(KeyManager.get_bot_username_key())
+    referral_link = (
+        f"https://t.me/{bot_username}?start={telegram_user_id}" if bot_username else GROUP_LINK
+    )
+
+    caption = f"🏆 Розблоковано: «{title}»\n\nПриєднуйся до TurboTeam 🔥\n{referral_link}"
+
+    bot: Bot = request.app["bot"]
+    try:
+        await bot.send_photo(
+            chat_id=telegram_user_id,
+            photo=BufferedInputFile(image_bytes, filename="achievement.png"),
+            caption=caption,
+        )
+    except Exception:
+        logger.exception("Failed to send achievement photo to %s", telegram_user_id)
+        return web.json_response({"error": "send failed"}, status=502)
+
+    return web.json_response({"ok": True})
+
+
+def create_webapp_app(bot: Bot) -> web.Application:
+    app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
+    app["bot"] = bot
     app.router.add_get("/api/profile", handle_profile)
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/feed", handle_feed)
+    app.router.add_post("/api/share-achievement", handle_share_achievement)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/share-achievement", lambda request: web.Response())
     return app
 
 
-async def run_webapp_server(port: int) -> web.AppRunner:
-    app = create_webapp_app()
+async def run_webapp_server(port: int, bot: Bot) -> web.AppRunner:
+    app = create_webapp_app(bot)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
