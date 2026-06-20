@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 
+from cache import KeyManager, get_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
@@ -127,6 +128,7 @@ async def handle_profile(request: web.Request) -> web.Response:
     unlocked_achievements = await get_user_achievements(user_uuid, limit=200)
     last_achievement = await get_last_user_achievement(user_uuid)
     calendar_days = await get_user_calendar_month(user_uuid, year, month)
+    bot_username = await get_data(KeyManager.get_bot_username_key())
 
     gym_count = sum(1 for a in activities if a.get("action_name") == "Gym")
     street_count = sum(1 for a in activities if a.get("action_name") == "Street")
@@ -174,6 +176,9 @@ async def handle_profile(request: web.Request) -> web.Response:
         )
 
     nickname = user_row.get("nickname") or auth["user"].get("first_name") or ""
+    referral_link = (
+        f"https://t.me/{bot_username}?start={telegram_user_id}" if bot_username else None
+    )
 
     return web.json_response(
         {
@@ -193,6 +198,7 @@ async def handle_profile(request: web.Request) -> web.Response:
             "next_goal_text": next_goal_text,
             "training_count": training_count,
             "group_link": GROUP_LINK,
+            "referral_link": referral_link,
             "achievements": achievements_payload,
             "calendar": {
                 "year": year,
