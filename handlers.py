@@ -838,6 +838,13 @@ async def _run_broadcast(bot, admin_chat_id: int, status_message_id: int, text: 
     users = await get_all_users()
     banned_ids = await get_currently_banned_telegram_ids()
 
+    me = await bot.get_me()
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🤖 Перейти в бота", url=f"https://t.me/{me.username}")],
+        ]
+    )
+
     sent_count = 0
     skipped_banned = 0
     failed_count = 0
@@ -854,7 +861,12 @@ async def _run_broadcast(bot, admin_chat_id: int, status_message_id: int, text: 
             continue
 
         try:
-            await bot.send_message(chat_id=telegram_user_id, text=text, entities=entities)
+            await bot.send_message(
+                chat_id=telegram_user_id,
+                text=text,
+                entities=entities,
+                reply_markup=keyboard,
+            )
             sent_count += 1
         except Exception as e:
             failed_count += 1
