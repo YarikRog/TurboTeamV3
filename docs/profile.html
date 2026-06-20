@@ -347,7 +347,7 @@
         <button class="modal-close-x" onclick="closeModal()" aria-label="Закрити">✕</button>
         <div class="modal-handle"></div>
         <img class="share-card-img" id="shareCanvasImg" alt="Досягнення" />
-        <div class="modal-hint-save">Утримай картинку, щоб зберегти 📷</div>
+        <div class="modal-hint-save">Бот надішле цю картинку з посиланням тобі в чат 📤</div>
         <div class="cta-row">
           <button class="btn btn-primary" onclick="shareImage()">📤 Поділитися</button>
         </div>
@@ -686,17 +686,30 @@
     return Promise.resolve();
   }
 
-  function shareImage() {
-    if (!activeBadge) return;
+  async function shareImage() {
+    if (!activeBadge || !tg?.initData) return;
     const badge = activeBadge;
-    const shareLink = profileData?.referral_link || profileData?.group_link || "";
-    const shareText = shareLink
-      ? `Розблокував «${badge.title}» в TurboTeam 🔥\n${shareLink}`
-      : `Розблокував «${badge.title}» в TurboTeam 🔥`;
+    const imageDataUrl = document.getElementById("shareCanvasImg").src;
 
-    copyToClipboard(shareText)
-      .then(() => showToast("Текст скопійовано — встав у будь-який чат 📋"))
-      .catch(() => showToast("Не вдалося скопіювати. Утримай картинку вище, щоб зберегти 📷"));
+    showToast("Надсилаю картинку...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/share-achievement`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title: badge.title, image: imageDataUrl }),
+      });
+      if (!response.ok) throw new Error("share failed");
+      showToast("Готово! Картинку з посиланням надіслав тобі в чат з ботом — перешли її друзям 📤");
+    } catch (err) {
+      const shareLink = profileData?.referral_link || profileData?.group_link || "";
+      const shareText = shareLink
+        ? `Розблокував «${badge.title}» в TurboTeam 🔥\n${shareLink}`
+        : `Розблокував «${badge.title}» в TurboTeam 🔥`;
+      copyToClipboard(shareText)
+        .then(() => showToast("Не вдалося надіслати картинку. Текст скопійовано — встав у будь-який чат 📋"))
+        .catch(() => showToast("Не вдалося надіслати. Спробуй ще раз 🙏"));
+    }
   }
 
   // ==================== PROFILE LOAD ====================
