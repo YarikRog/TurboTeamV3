@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import time
+import uuid
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qsl
 
@@ -12,7 +13,7 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from aiohttp import web
 
-from cache import KeyManager, get_data
+from cache import KeyManager, get_data, set_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
@@ -271,6 +272,7 @@ async def handle_feed(request: web.Request) -> web.Response:
 
 
 MAX_SHARE_IMAGE_BYTES = 3 * 1024 * 1024
+SHARE_TOKEN_TTL_SECONDS = 600
 
 
 async def handle_share_achievement(request: web.Request) -> web.Response:
@@ -310,7 +312,7 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
 
     bot: Bot = request.app["bot"]
     try:
-        await bot.send_photo(
+        sent_message = await bot.send_photo(
             chat_id=telegram_user_id,
             photo=BufferedInputFile(image_bytes, filename="achievement.png"),
             caption=caption,
@@ -320,7 +322,15 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
         logger.exception("Failed to send achievement photo to %s", telegram_user_id)
         return web.json_response({"error": "send failed"}, status=502)
 
-    return web.json_response({"ok": True})
+    token = uuid.uuid4().hex
+    file_id = sent_message.photo[-1].file_id
+    await set_data(
+        KeyManager.get_share_token_key(token),
+        {"file_id": file_id, "caption": caption},
+        ex=SHARE_TOKEN_TTL_SECONDS,
+    )
+
+    return web.json_response({"ok": True, "share_token": token})
 
 
 def create_webapp_app(bot: Bot) -> web.Application:

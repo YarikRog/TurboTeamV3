@@ -8,10 +8,13 @@ try:
 except ImportError:
     sentry_sdk = None
 
+import uuid as uuid_lib
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
+from aiogram.types import InlineQueryResultCachedPhoto
 
 from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
@@ -25,7 +28,7 @@ from reports import router as reports_router
 from tasks import setup_scheduler
 from awards import send_test_fifa_card
 
-from cache import redis_client, set_data, delete_data, KeyManager, acquire_lock
+from cache import redis_client, set_data, get_data, delete_data, KeyManager, acquire_lock
 from services import validate_quiz
 from ui import get_inline_menu, get_quiz_reply_keyboard, get_rating_reply_keyboard
 from webapp_server import run_webapp_server
@@ -466,6 +469,23 @@ async def start_handler(message: types.Message, command: CommandObject):
         except Exception:
             pass
         await message.answer("⚠️ Сталася помилка під час перевірки. Спробуй ще раз.")
+
+
+@dp.inline_query()
+async def share_achievement_inline_query(inline_query: types.InlineQuery):
+    token = (inline_query.query or "").strip()
+    payload = await get_data(KeyManager.get_share_token_key(token)) if token else None
+
+    if not payload or not payload.get("file_id"):
+        return await inline_query.answer([], cache_time=1, is_personal=True)
+
+    result = InlineQueryResultCachedPhoto(
+        id=uuid_lib.uuid4().hex,
+        photo_file_id=payload["file_id"],
+        caption=payload.get("caption") or "",
+        parse_mode=None,
+    )
+    await inline_query.answer([result], cache_time=1, is_personal=True)
 
 
 @dp.message(F.web_app_data)
