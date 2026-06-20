@@ -14,16 +14,12 @@ from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
 from cache import get_data, set_flag, delete_data, KeyManager
-from database import get_user_stats, check_user_exists, update_user_activity
+from database import check_user_exists, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
 from reports import rollback_training_report
 from services import safe_create_task, auto_delete, validate_quiz
 from supabase_db import (
-    get_user_by_telegram_id,
-    get_user_activities,
-    get_referrals_count,
-    get_user_achievements,
     get_all_users,
     get_all_activities,
     get_all_activities_in_period,
@@ -64,108 +60,6 @@ TRAINING_STATUS_LEVELS = [
 ]
 
 TRAINING_GOALS = [1, 3, 5, 10, 15, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000]
-
-TRAINING_ACHIEVEMENTS = [
-    (1, "training_1", "Перший крок"),
-    (3, "training_3", "Втягнувся"),
-    (5, "training_5", "Розігрів"),
-    (10, "training_10", "Перша десятка"),
-    (15, "training_15", "Стабільність"),
-    (25, "training_25", "У ритмі"),
-    (50, "training_50", "Півсотні"),
-    (75, "training_75", "На повну"),
-    (100, "training_100", "Сотка"),
-    (150, "training_150", "Залізна дисципліна"),
-    (200, "training_200", "Машина"),
-    (300, "training_300", "Турбо-режим"),
-    (500, "training_500", "Монстр"),
-    (750, "training_750", "Невгамовний"),
-    (1000, "training_1000", "Легенда TurboTeam"),
-]
-
-
-def _build_progress_bar(current: int, target: int, width: int = 10) -> str:
-    current = max(0, int(current or 0))
-    target = max(1, int(target or 1))
-    width = max(5, int(width or 10))
-
-    filled = round((min(current, target) / target) * width)
-    filled = min(width, max(0, filled))
-    empty = width - filled
-
-    return "█" * filled + "░" * empty
-
-
-def _count_training_from_activities(activities: list[dict]) -> int:
-    training_count = 0
-    rollback_count = 0
-
-    for activity in activities:
-        action_name = str(activity.get("action_name") or "").strip()
-
-        if action_name in {"Gym", "Street"}:
-            training_count += 1
-        elif action_name in {"Gym Rollback", "Street Rollback"}:
-            rollback_count += 1
-
-    return max(0, training_count - rollback_count)
-
-
-def _build_achievements_text(
-    nickname: str,
-    training_count: int,
-    unlocked_codes: set[str],
-    hp_total: int,
-    streak: int,
-    referrals_count: int,
-) -> str:
-    total = len(TRAINING_ACHIEVEMENTS)
-    unlocked_count = sum(
-        1
-        for threshold, code, title in TRAINING_ACHIEVEMENTS
-        if code in unlocked_codes or training_count >= threshold
-    )
-
-    percent = round((unlocked_count / total) * 100) if total > 0 else 0
-    bar = _build_progress_bar(unlocked_count, total, width=10)
-
-    lines = [
-        "🏅 <b>ДОСЯГНЕННЯ TURBOTEAM</b>",
-        "",
-        f"👤 Гравець: <b>{escape(str(nickname))}</b>",
-        f"⚡ HP: <b>{int(hp_total)}</b>",
-        f"🔥 Streak: <b>{int(streak)}/{WEEKLY_STREAK_MAX}</b>",
-        f"🚀 Реферали: <b>{int(referrals_count)}</b>",
-        "",
-        f"📦 Відкрито: <b>{unlocked_count}/{total}</b> — <b>{percent}%</b>",
-        f"{bar}",
-        "",
-        "🏋️ <b>Тренувальні бейджі</b>",
-    ]
-
-    for threshold, code, title in TRAINING_ACHIEVEMENTS:
-        if code in unlocked_codes or training_count >= threshold:
-            lines.append(f"✅ <b>{escape(title)}</b> — {threshold} {word_trainings(threshold)}")
-        else:
-            left = max(0, threshold - training_count)
-            lines.append(f"🔒 {escape(title)} — ще <b>{left}</b>")
-
-    next_locked = None
-    for threshold, code, title in TRAINING_ACHIEVEMENTS:
-        if code not in unlocked_codes and training_count < threshold:
-            next_locked = (threshold, title, threshold - training_count)
-            break
-
-    lines.append("")
-
-    if next_locked:
-        threshold, title, left = next_locked
-        lines.append("🎯 <b>Найближча ціль</b>")
-        lines.append(f"До “{escape(title)}” — ще <b>{left}</b> {word_trainings(left)}")
-    else:
-        lines.append("🏆 Усі базові тренувальні досягнення відкрито. Це вже режим легенди.")
-
-    return "\n".join(lines)
 
 
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
@@ -963,65 +857,6 @@ async def handle_return_to_group(message: Message):
 
     except Exception as e:
         logger.error(f"[HANDLERS] handle_return_to_group error: {e}", exc_info=True)
-
-
-@router.message(F.text == "🏅 Досягнення")
-async def handle_my_achievements(message: Message):
-    telegram_user_id = message.from_user.id
-
-    try:
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        stats = await get_user_stats(telegram_user_id)
-        user_row = await get_user_by_telegram_id(telegram_user_id)
-
-        if not stats or not user_row:
-            sent_msg = await message.answer(
-                "⚠️ Досягнення не знайдено. Спочатку зареєструйся в TurboTeam."
-            )
-            safe_create_task(auto_delete(sent_msg, 5))
-            return
-
-        user_uuid = user_row.get("id")
-        if not user_uuid:
-            sent_msg = await message.answer("⚠️ Не вдалося завантажити досягнення.")
-            safe_create_task(auto_delete(sent_msg, 5))
-            return
-
-        activities = await get_user_activities(str(user_uuid), limit=5000)
-        achievements = await get_user_achievements(str(user_uuid), limit=200)
-        referrals_count = await get_referrals_count(str(user_uuid))
-
-        unlocked_codes = {
-            str(item.get("achievement_code") or "").strip()
-            for item in achievements
-            if str(item.get("achievement_code") or "").strip()
-        }
-
-        training_count = _count_training_from_activities(activities)
-        nickname = user_row.get("nickname") or message.from_user.first_name or "Учасник"
-        hp_total = int(stats.get("hp_total", 0) or 0)
-        streak = int(stats.get("streak", 0) or 0)
-
-        text = _build_achievements_text(
-            nickname=str(nickname),
-            training_count=training_count,
-            unlocked_codes=unlocked_codes,
-            hp_total=hp_total,
-            streak=streak,
-            referrals_count=referrals_count,
-        )
-
-        sent_msg = await message.answer(text, parse_mode="HTML")
-        safe_create_task(auto_delete(sent_msg, 180))
-
-    except Exception as e:
-        logger.error(f"[HANDLERS] handle_my_achievements error: {e}", exc_info=True)
-        sent_msg = await message.answer("⚠️ Не вдалося завантажити досягнення. Спробуй ще раз.")
-        safe_create_task(auto_delete(sent_msg, 10))
 
 
 @router.message(F.text == "🚀 Запросити друга 🔥")
