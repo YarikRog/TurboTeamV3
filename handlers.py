@@ -14,7 +14,7 @@ from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
 from cache import get_data, set_flag, delete_data, KeyManager
-from database import check_user_exists, update_user_activity
+from database import check_user_exists, get_currently_banned_telegram_ids, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
 from reports import rollback_training_report
@@ -406,7 +406,8 @@ def _build_admin_help_text() -> str:
         "/loadtest 50 — безпечний тест паралельного навантаження\n\n"
         "🧹 <b>АДМІН-ДІЇ</b>\n"
         "/wipeuser 123456789 — видалити юзера за Telegram ID\n"
-        "/wipeuser @username — видалити юзера за ніком\n\n"
+        "/wipeuser @username — видалити юзера за ніком\n"
+        "/broadcast — reply на текст, щоб розіслати його всім зареєстрованим (крім тих, хто в бані)\n\n"
         "📘 <b>ІНШЕ</b>\n"
         "/rules — текст правил"
     )
@@ -828,6 +829,75 @@ async def handle_admin_help(message: Message):
         logger.error(f"[HANDLERS] handle_admin_help error: {e}", exc_info=True)
         sent = await message.answer("⚠️ Не вдалося відкрити список адмін-команд.")
         safe_create_task(auto_delete(sent, 10))
+
+
+BROADCAST_SEND_DELAY_SECONDS = 0.05
+
+
+async def _run_broadcast(bot, admin_chat_id: int, status_message_id: int, text: str, entities) -> None:
+    users = await get_all_users()
+    banned_ids = await get_currently_banned_telegram_ids()
+
+    sent_count = 0
+    skipped_banned = 0
+    failed_count = 0
+
+    for user in users:
+        raw_id = user.get("telegram_user_id")
+        if not raw_id:
+            continue
+
+        telegram_user_id = int(raw_id)
+
+        if telegram_user_id in banned_ids:
+            skipped_banned += 1
+            continue
+
+        try:
+            await bot.send_message(chat_id=telegram_user_id, text=text, entities=entities)
+            sent_count += 1
+        except Exception as e:
+            failed_count += 1
+            logger.debug(f"[BROADCAST] Failed to send to user_id={telegram_user_id}: {e}")
+
+        await asyncio.sleep(BROADCAST_SEND_DELAY_SECONDS)
+
+    try:
+        await bot.edit_message_text(
+            chat_id=admin_chat_id,
+            message_id=status_message_id,
+            text=(
+                "✅ Розсилку завершено.\n\n"
+                f"📨 Надіслано: <b>{sent_count}</b>\n"
+                f"🚫 Пропущено (в бані): <b>{skipped_banned}</b>\n"
+                f"⚠️ Не вдалося надіслати: <b>{failed_count}</b>"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"[BROADCAST] Failed to edit status message: {e}", exc_info=True)
+
+
+@router.message(Command("broadcast"))
+async def handle_broadcast(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    target = message.reply_to_message
+    if not target or not target.text:
+        sent = await message.answer(
+            "⚠️ Напиши повідомлення для розсилки, а потім дай на нього reply командою /broadcast"
+        )
+        safe_create_task(auto_delete(sent, 10))
+        return
+
+    status = await message.answer(
+        "🚀 Починаю розсилку всім зареєстрованим юзерам (крім тих, хто зараз у бані)..."
+    )
+
+    safe_create_task(
+        _run_broadcast(message.bot, status.chat.id, status.message_id, target.text, target.entities)
+    )
 
 
 @router.message(F.text == "🏎️ ПОВЕРНУТИСЯ В ГРУПУ")
