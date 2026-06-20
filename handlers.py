@@ -838,10 +838,9 @@ async def _run_broadcast(bot, admin_chat_id: int, status_message_id: int, text: 
     users = await get_all_users()
     banned_ids = await get_currently_banned_telegram_ids()
 
-    me = await bot.get_me()
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🤖 Перейти в бота", url=f"https://t.me/{me.username}")],
+            [InlineKeyboardButton(text="🏎️ Перейти в групу", url=GROUP_LINK)],
         ]
     )
 
