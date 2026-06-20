@@ -179,18 +179,23 @@
   }
   .modal-backdrop.show { opacity: 1; pointer-events: auto; }
   .modal-sheet {
+    position: relative;
     width: 100%; max-width: 480px; background: var(--bg); border-radius: 22px 22px 0 0;
     padding: 18px 18px 26px; transform: translateY(100%);
     transition: transform .28s cubic-bezier(.34,1.2,.4,1); border-top: 1px solid var(--border);
   }
   .modal-backdrop.show .modal-sheet { transform: translateY(0); }
   .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 16px; }
+  .modal-close-x {
+    position: absolute; top: 14px; right: 14px; width: 30px; height: 30px;
+    border-radius: 50%; border: none; background: var(--card-2); color: var(--text);
+    font-size: 14px; font-weight: 800; cursor: pointer; z-index: 1;
+  }
   .share-card-img {
     width: 100%; border-radius: 18px; display: block;
     border: 1px solid rgba(255,200,40,0.4); margin-bottom: 10px;
   }
   .modal-hint-save { text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-  .modal-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 12px; }
 
   .toast {
     position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
@@ -339,13 +344,13 @@
 
     <div class="modal-backdrop" id="shareModal" onclick="if (event.target === this) closeModal()">
       <div class="modal-sheet">
+        <button class="modal-close-x" onclick="closeModal()" aria-label="Закрити">✕</button>
         <div class="modal-handle"></div>
         <img class="share-card-img" id="shareCanvasImg" alt="Досягнення" />
         <div class="modal-hint-save">Утримай картинку, щоб зберегти 📷</div>
         <div class="cta-row">
           <button class="btn btn-primary" onclick="shareImage()">📤 Поділитися</button>
         </div>
-        <div class="modal-hint" onclick="closeModal()">Закрити</div>
       </div>
     </div>
 
@@ -662,27 +667,36 @@
     return canvas;
   }
 
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      ta.remove();
+    }
+    return Promise.resolve();
+  }
+
   function shareImage() {
     if (!activeBadge) return;
     const badge = activeBadge;
     const shareLink = profileData?.referral_link || profileData?.group_link || "";
-    const shareText = `Розблокував «${badge.title}» в TurboTeam 🔥`;
+    const shareText = shareLink
+      ? `Розблокував «${badge.title}» в TurboTeam 🔥\n${shareLink}`
+      : `Розблокував «${badge.title}» в TurboTeam 🔥`;
 
-    if (!shareLink) {
-      showToast("Утримай картинку вище, щоб зберегти 📷");
-      return;
-    }
-
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
-    try {
-      if (tg && tg.openTelegramLink) {
-        tg.openTelegramLink(shareUrl);
-        return;
-      }
-    } catch (e) {
-      // fall through to the toast below
-    }
-    showToast("Утримай картинку вище, щоб зберегти 📷");
+    copyToClipboard(shareText)
+      .then(() => showToast("Текст скопійовано — встав у будь-який чат 📋"))
+      .catch(() => showToast("Не вдалося скопіювати. Утримай картинку вище, щоб зберегти 📷"));
   }
 
   // ==================== PROFILE LOAD ====================
