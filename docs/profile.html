@@ -44,6 +44,8 @@
   @keyframes celebratePop { 0% { opacity:0; transform: scale(.4) rotate(-8deg); } 60% { opacity:1; transform: scale(1.12) rotate(4deg); } 100% { opacity:1; transform: scale(1) rotate(0); } }
   @keyframes confettiFall { from { transform: translateY(-10px) rotate(0deg); opacity:1; } to { transform: translateY(420px) rotate(360deg); opacity:0; } }
   @keyframes countPulse { 0% { transform: scale(1); } 40% { transform: scale(1.18); color: var(--accent); } 100% { transform: scale(1); } }
+  @keyframes confettiFallFull { from { transform: translateY(-20px) rotate(0deg); opacity:1; } to { transform: translateY(110vh) rotate(540deg); opacity:0; } }
+  @keyframes championPop { 0% { opacity:0; transform: scale(.5) translateY(20px); } 60% { opacity:1; transform: scale(1.08) translateY(-4px); } 100% { opacity:1; transform: scale(1) translateY(0); } }
 
   /* ---------- TODAY ---------- */
   .greet { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -227,12 +229,42 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   .state-msg { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 14px; }
+
+  /* ---------- WEEKLY CHAMPION CELEBRATION ---------- */
+  .champion-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: radial-gradient(circle at 50% 18%, rgba(255,200,40,0.25), rgba(10,12,16,0.96) 65%);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .25s ease;
+  }
+  .champion-overlay.show { opacity: 1; pointer-events: auto; }
+  .champion-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .champion-confetti-piece { position: absolute; top: -16px; border-radius: 2px; animation: confettiFallFull 2.4s ease-in forwards; }
+  .champion-content { position: relative; text-align: center; padding: 24px; max-width: 360px; animation: championPop .55s cubic-bezier(.34,1.56,.64,1) both; }
+  .champion-trophy { font-size: 88px; animation: floatY 2.4s ease-in-out infinite; filter: drop-shadow(0 0 24px rgba(255,200,40,.55)); }
+  .champion-eyebrow { font-size: 13px; font-weight: 800; letter-spacing: .12em; color: var(--gold); text-transform: uppercase; margin-top: 6px; }
+  .champion-name { font-size: 26px; font-weight: 900; margin-top: 8px; }
+  .champion-hp { font-size: 17px; font-weight: 800; color: var(--gold); margin-top: 4px; }
+  .champion-sub { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
+  .champion-btn { margin-top: 22px; width: 100%; }
 </style>
 </head>
 <body>
 
 <div id="app">
   <div class="state-msg" id="boot">⏳ Завантаження профілю...</div>
+</div>
+
+<div class="champion-overlay" id="championOverlay">
+  <div class="champion-confetti" id="championConfetti"></div>
+  <div class="champion-content">
+    <div class="champion-trophy">🏆</div>
+    <div class="champion-eyebrow">Чемпіон тижня</div>
+    <div class="champion-name" id="championName">—</div>
+    <div class="champion-hp" id="championHp">—</div>
+    <div class="champion-sub">Топ-1 тижня — твій. Респект 🔥</div>
+    <button class="btn btn-primary champion-btn" onclick="closeChampionCelebrate()">Дякую, погнали далі 🔥</button>
+  </div>
 </div>
 
 <script>
@@ -844,6 +876,40 @@
     if (badge) setTimeout(() => openModal(badge), 380);
   }
 
+  // ==================== WEEKLY CHAMPION CELEBRATION ====================
+  let championCelebrationShown = false;
+
+  function spawnChampionConfetti() {
+    const container = document.getElementById("championConfetti");
+    container.innerHTML = "";
+    const colors = ["#ff5a1f", "#ffc828", "#4cc9f0", "#34d399", "#f472b6", "#ffffff"];
+    for (let i = 0; i < 90; i++) {
+      const piece = document.createElement("span");
+      piece.className = "champion-confetti-piece";
+      const size = 6 + Math.random() * 6;
+      piece.style.width = size + "px";
+      piece.style.height = (size * 1.6) + "px";
+      piece.style.left = Math.random() * 100 + "%";
+      piece.style.background = colors[i % colors.length];
+      piece.style.animationDelay = (Math.random() * 0.6) + "s";
+      piece.style.animationDuration = (2 + Math.random() * 1.2) + "s";
+      piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+      container.appendChild(piece);
+    }
+  }
+
+  function celebrateChampion(info) {
+    document.getElementById("championName").textContent = (info && info.nickname) || profileData?.nickname || "Ти";
+    document.getElementById("championHp").textContent = `${Number((info && info.hp) || 0).toLocaleString("uk")} HP за тиждень`;
+    spawnChampionConfetti();
+    document.getElementById("championOverlay").classList.add("show");
+    try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch (e) {}
+  }
+
+  function closeChampionCelebrate() {
+    document.getElementById("championOverlay").classList.remove("show");
+  }
+
   // ==================== PROFILE LOAD ====================
   function renderProfile(data) {
     profileData = data;
@@ -852,6 +918,11 @@
     renderAchievements(data.achievements);
     checkNewAchievements(data.achievements);
     animateRing();
+
+    if (data.weekly_champion && !championCelebrationShown) {
+      championCelebrationShown = true;
+      setTimeout(() => celebrateChampion(data.weekly_champion), 450);
+    }
   }
 
   async function loadProfile() {
