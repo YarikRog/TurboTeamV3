@@ -8,8 +8,11 @@ from PIL import Image, ImageDraw, ImageFont
 from aiogram import Bot
 from aiogram.types import FSInputFile
 
+from cache import KeyManager, set_data
 from config import REPORTS_GROUP_ID
 from database import get_weekly_top_users, reset_weekly_stats
+
+WEEKLY_CHAMPION_FLAG_TTL_SECONDS = 8 * 24 * 60 * 60
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +235,14 @@ async def sunday_final_logic(bot: Bot) -> None:
         if hp_score <= 0:
             logger.info("[AWARDS] Активності за тиждень не було. Пропускаємо.")
             return
+
+        leader_telegram_id = leader.get("telegram_user_id")
+        if leader_telegram_id:
+            await set_data(
+                KeyManager.get_weekly_champion_key(int(leader_telegram_id)),
+                {"nickname": str(nickname), "hp": hp_score},
+                ex=WEEKLY_CHAMPION_FLAG_TTL_SECONDS,
+            )
 
         safe_nickname = escape(str(nickname))
 

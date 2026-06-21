@@ -145,6 +145,11 @@ class KeyManager:
     def get_share_token_key(token: str) -> str:
         return f"{KeyManager.PREFIX}:share:{token}"
 
+    # --- Weekly champion celebration (consumed once on next profile open) ---
+    @staticmethod
+    def get_weekly_champion_key(uid: int) -> str:
+        return f"{KeyManager.PREFIX}:weekly_champion:{uid}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS
