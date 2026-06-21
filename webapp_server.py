@@ -13,7 +13,7 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from aiohttp import web
 
-from cache import KeyManager, get_data, set_data
+from cache import KeyManager, delete_data, get_data, set_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
@@ -185,9 +185,15 @@ async def handle_profile(request: web.Request) -> web.Response:
         f"https://t.me/{bot_username}?start={telegram_user_id}" if bot_username else None
     )
 
+    champion_key = KeyManager.get_weekly_champion_key(telegram_user_id)
+    weekly_champion = await get_data(champion_key)
+    if weekly_champion:
+        await delete_data(champion_key)
+
     return web.json_response(
         {
             "nickname": nickname,
+            "weekly_champion": weekly_champion,
             "status": status_title,
             "hp_total": int(stats.get("hp_total", 0) or 0),
             "streak": int(stats.get("streak", 0) or 0),
