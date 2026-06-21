@@ -914,19 +914,17 @@ async def handle_broadcast(message: Message):
 
 @router.message(Command("test_champion"))
 async def handle_test_champion(message: Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
+    telegram_user_id = message.from_user.id
 
-    for admin_id in ADMIN_IDS:
-        await set_data(
-            KeyManager.get_weekly_champion_key(admin_id),
-            {"nickname": None, "hp": 1337},
-            ex=600,
-        )
+    await set_data(
+        KeyManager.get_weekly_champion_key(telegram_user_id),
+        {"nickname": None, "hp": 1337},
+        ex=600,
+    )
 
     sent = await message.answer(
-        f"✅ Флаг чемпіона тижня встановлено для всіх адмінів ({len(ADMIN_IDS)}) на 10 хв. "
-        "Кожен може відкрити профіль у вебаппі — побачить celebration 🏆"
+        "✅ Флаг чемпіона тижня встановлено на 10 хв. "
+        "Відкрий профіль у вебаппі — побачиш celebration 🏆"
     )
     safe_create_task(auto_delete(sent, 15))
 
