@@ -13,7 +13,7 @@ from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
-from cache import get_data, set_flag, delete_data, KeyManager
+from cache import get_data, set_data, set_flag, delete_data, KeyManager
 from database import check_user_exists, get_currently_banned_telegram_ids, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
@@ -403,7 +403,8 @@ def _build_admin_help_text() -> str:
         "🧪 <b>ТЕСТИ</b>\n"
         "/testaward — тестова FIFA-картка\n"
         "/testref — тест реферального повідомлення\n"
-        "/loadtest 50 — безпечний тест паралельного навантаження\n\n"
+        "/loadtest 50 — безпечний тест паралельного навантаження\n"
+        "/test_champion — тест celebration чемпіона тижня у вебаппі (на 10 хв, для тебе)\n\n"
         "🧹 <b>АДМІН-ДІЇ</b>\n"
         "/wipeuser 123456789 — видалити юзера за Telegram ID\n"
         "/wipeuser @username — видалити юзера за ніком\n"
@@ -909,6 +910,25 @@ async def handle_broadcast(message: Message):
     safe_create_task(
         _run_broadcast(message.bot, status.chat.id, status.message_id, target.text, target.entities)
     )
+
+
+@router.message(Command("test_champion"))
+async def handle_test_champion(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    for admin_id in ADMIN_IDS:
+        await set_data(
+            KeyManager.get_weekly_champion_key(admin_id),
+            {"nickname": None, "hp": 1337},
+            ex=600,
+        )
+
+    sent = await message.answer(
+        f"✅ Флаг чемпіона тижня встановлено для всіх адмінів ({len(ADMIN_IDS)}) на 10 хв. "
+        "Кожен може відкрити профіль у вебаппі — побачить celebration 🏆"
+    )
+    safe_create_task(auto_delete(sent, 15))
 
 
 @router.message(F.text == "🏎️ ПОВЕРНУТИСЯ В ГРУПУ")
