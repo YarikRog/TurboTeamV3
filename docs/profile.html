@@ -520,6 +520,8 @@
   }
 
   function openGroupChat() {
+    // TEMP DEBUG: confirms the handler actually fires on devices where we have no console access.
+    try { fetch(`${API_BASE_URL}/api/ping?src=train_btn`).catch(() => {}); } catch (e) {}
     if (!profileData || !profileData.group_link) {
       showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
       return;
