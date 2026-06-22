@@ -359,7 +359,7 @@
         </div>
 
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="openGroupChat()">🏋️ Тренуватись</button>
+          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
           <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
         </div>
       </div>
@@ -517,19 +517,6 @@
     pulseOnChange(hpEl, data.hp_total);
     document.getElementById("statusValue").textContent = data.status || "—";
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
-  }
-
-  function openGroupChat() {
-    if (!profileData || !profileData.group_link) {
-      showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
-      return;
-    }
-    const url = profileData.group_link;
-    if (tg && tg.openTelegramLink) {
-      tg.openTelegramLink(url);
-    } else {
-      window.location.href = url;
-    }
   }
 
   function renderFeed(items) {
