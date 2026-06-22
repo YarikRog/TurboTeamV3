@@ -339,6 +339,13 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "share_token": token})
 
 
+async def handle_ping(request: web.Request) -> web.Response:
+    """Temporary diagnostic endpoint to confirm a client-side handler actually fired."""
+    src = request.query.get("src", "")
+    logger.info(f"[PING] src={src!r} ua={request.headers.get('User-Agent', '')!r}")
+    return web.json_response({"ok": True})
+
+
 def create_webapp_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
     app["bot"] = bot
@@ -346,6 +353,7 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/feed", handle_feed)
     app.router.add_post("/api/share-achievement", handle_share_achievement)
+    app.router.add_get("/api/ping", handle_ping)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
