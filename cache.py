@@ -150,6 +150,11 @@ class KeyManager:
     def get_weekly_champion_key(uid: int) -> str:
         return f"{KeyManager.PREFIX}:weekly_champion:{uid}"
 
+    # --- Webapp API rate limiting ---
+    @staticmethod
+    def get_api_rate_limit_key(uid: int, bucket: str) -> str:
+        return f"{KeyManager.PREFIX}:api_rl:{bucket}:{uid}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS
@@ -216,6 +221,25 @@ async def set_flag(key: str, ex: Optional[int] = None) -> bool:
     Helper for storing flag value "1".
     """
     return await set_data(key, "1", ex=ex)
+
+
+async def check_rate_limit(key: str, limit: int, window_seconds: int) -> bool:
+    """
+    Fixed-window rate limiter via Redis INCR+EXPIRE.
+    Returns True if the call is allowed, False if the limit was exceeded
+    within the current window. Fails open (allows the request) if Redis
+    is unavailable, since a broken limiter must never take down the API.
+    """
+    if redis_client is None:
+        return True
+    try:
+        current = await redis_client.incr(key)
+        if current == 1:
+            await redis_client.expire(key, window_seconds)
+        return current <= limit
+    except Exception as e:
+        logger.error(f"[CACHE] Rate limit error key={key}: {e}")
+        return True
 
 
 async def acquire_lock(key: str, ex: int = 86400) -> bool:

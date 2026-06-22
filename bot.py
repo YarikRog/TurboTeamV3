@@ -14,8 +14,9 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
-from aiogram.types import InlineQueryResultCachedPhoto
+from aiogram.types import InlineQueryResultCachedPhoto, ErrorEvent
 
+from alerts import notify_admins_about_error
 from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELECTED, USER_REGISTERED
 from architecture.orchestrator import flow_event_bus
 from challenge import get_challenge_stats
@@ -74,6 +75,13 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode="Markdown", link_preview_is_disabled=True)
 )
 dp = Dispatcher(storage=storage)
+
+
+@dp.errors()
+async def handle_dispatcher_error(event: ErrorEvent) -> bool:
+    logger.exception("Unhandled error while processing update", exc_info=event.exception)
+    await notify_admins_about_error(bot, "dispatcher", event.exception)
+    return True
 
 
 @dp.message(Command("rules"))

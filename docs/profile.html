@@ -264,6 +264,30 @@
   .champion-hp { font-size: 17px; font-weight: 800; color: var(--gold); margin-top: 4px; }
   .champion-sub { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
   .champion-btn { margin-top: 22px; width: 100%; }
+
+  /* ---------- ONBOARDING ---------- */
+  .onboarding-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(2,2,4,0.92);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .25s ease;
+  }
+  .onboarding-overlay.show { opacity: 1; pointer-events: auto; }
+  .onboarding-content {
+    position: relative; text-align: center; padding: 26px 22px; max-width: 360px;
+    animation: championPop .5s cubic-bezier(.34,1.56,.64,1) both;
+  }
+  .onboarding-title { font-size: 21px; font-weight: 900; }
+  .onboarding-sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .onboarding-list { display: flex; flex-direction: column; gap: 10px; margin: 22px 0 6px; text-align: left; }
+  .onboarding-item {
+    display: flex; align-items: center; gap: 12px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px;
+  }
+  .onboarding-item .oi-icon { font-size: 20px; width: 26px; text-align: center; }
+  .onboarding-item .oi-title { font-size: 13px; font-weight: 800; }
+  .onboarding-item .oi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .onboarding-btn { margin-top: 20px; width: 100%; }
 </style>
 </head>
 <body>
@@ -287,6 +311,32 @@
     <div class="skel skel-feed"></div>
     <div class="skel skel-feed"></div>
     <div class="skel skel-feed"></div>
+  </div>
+</div>
+
+<div class="onboarding-overlay" id="onboardingOverlay">
+  <div class="onboarding-content">
+    <div class="onboarding-title">Привіт у TurboTeam 🔥</div>
+    <div class="onboarding-sub">Тут все, що треба, щоб бачити свій прогрес</div>
+    <div class="onboarding-list">
+      <div class="onboarding-item">
+        <div class="oi-icon">🔥</div>
+        <div><div class="oi-title">Сьогодні</div><div class="oi-sub">Твій стрік тижня та останні дії</div></div>
+      </div>
+      <div class="onboarding-item">
+        <div class="oi-icon">📅</div>
+        <div><div class="oi-title">Календар</div><div class="oi-sub">Всі тренування по днях</div></div>
+      </div>
+      <div class="onboarding-item">
+        <div class="oi-icon">🏅</div>
+        <div><div class="oi-title">Досягнення</div><div class="oi-sub">Бейджі за прогрес, можна поділитись</div></div>
+      </div>
+      <div class="onboarding-item">
+        <div class="oi-icon">🏆</div>
+        <div><div class="oi-title">Рейтинг</div><div class="oi-sub">Місце серед усієї команди</div></div>
+      </div>
+    </div>
+    <button class="btn btn-primary onboarding-btn" onclick="closeOnboarding()">Зрозуміло, погнали 🔥</button>
   </div>
 </div>
 
@@ -359,6 +409,15 @@
       if (type === "selection") tg?.HapticFeedback?.selectionChanged?.();
       else tg?.HapticFeedback?.impactOccurred?.(type || "light");
     } catch (e) {}
+  }
+
+  function track(eventName, meta) {
+    if (!tg?.initData) return;
+    fetch(`${API_BASE_URL}/api/track`, {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ event: eventName, meta: meta || {} }),
+    }).catch(() => {});
   }
 
   document.addEventListener("click", (e) => {
@@ -494,6 +553,7 @@
 
   function goTab(name) {
     const dir = TAB_ORDER.indexOf(name) >= TAB_ORDER.indexOf(currentTabName) ? "Right" : "Left";
+    if (name !== currentTabName) track("tab_switch", { tab: name });
     currentTabName = name;
 
     document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
@@ -839,6 +899,7 @@
     const badge = activeBadge;
     const imageDataUrl = document.getElementById("shareCanvasImg").src;
 
+    track("share_click", { achievement: badge.code });
     showToast("Надсилаю картинку...");
 
     try {
@@ -921,6 +982,7 @@
     document.getElementById("celebrateTitle").textContent = `«${badge.title}» розблоковано!`;
     spawnConfetti();
     document.getElementById("celebrateModal").classList.add("show");
+    track("achievement_view", { achievement: badge.code });
     try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch (e) {}
   }
 
@@ -972,6 +1034,20 @@
     document.getElementById("championOverlay").classList.remove("show");
   }
 
+  // ==================== ONBOARDING ====================
+  const ONBOARDING_SEEN_KEY = "tt_onboarding_seen_v1";
+
+  function maybeShowOnboarding() {
+    if (localStorage.getItem(ONBOARDING_SEEN_KEY)) return;
+    document.getElementById("onboardingOverlay").classList.add("show");
+  }
+
+  function closeOnboarding() {
+    localStorage.setItem(ONBOARDING_SEEN_KEY, "1");
+    document.getElementById("onboardingOverlay").classList.remove("show");
+    track("onboarding_complete");
+  }
+
   // ==================== PROFILE LOAD ====================
   function renderProfile(data) {
     profileData = data;
@@ -984,6 +1060,8 @@
     if (data.weekly_champion && !championCelebrationShown) {
       championCelebrationShown = true;
       setTimeout(() => celebrateChampion(data.weekly_champion), 450);
+    } else {
+      setTimeout(maybeShowOnboarding, 450);
     }
   }
 
@@ -1017,6 +1095,7 @@
   if (!tg || !tg.initData) {
     document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Відкрий цю сторінку через кнопку в Telegram-боті.</div>`;
   } else {
+    track("app_open");
     loadProfile();
   }
 </script>

@@ -346,6 +346,31 @@ async def add_referral(
     return response.data[0]
 
 
+async def log_webapp_event(
+    telegram_user_id: int,
+    event_name: str,
+    meta: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Records a Mini App analytics event. Best-effort: a logging failure must
+    never break the webapp API, so errors are swallowed and logged only.
+    """
+    payload = {
+        "telegram_user_id": telegram_user_id,
+        "event_name": event_name,
+        "meta": meta or {},
+    }
+
+    def _query():
+        sb = get_supabase()
+        return sb.table("webapp_events").insert(payload).execute()
+
+    try:
+        await _run_sync(_query)
+    except Exception as e:
+        logger.error(f"[SUPABASE] Failed to log webapp event {event_name}: {e}")
+
+
 async def get_referrals_count(referrer_user_id: str) -> int:
     def _query():
         sb = get_supabase()
