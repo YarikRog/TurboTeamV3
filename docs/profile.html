@@ -134,6 +134,9 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
+  .cal-stats-text { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 1.7; }
+  .cal-stats-text .stats-summary { font-weight: 700; }
+  .cal-stats-text .stats-breakdown { color: var(--muted); margin-top: 2px; }
 
   /* ---------- ACHIEVEMENTS ---------- */
   .ach-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
@@ -494,6 +497,7 @@
         <div class="legend">
           <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
+        <div class="cal-stats-text" id="calStatsText"></div>
       </div>
     </div>
 
@@ -623,6 +627,13 @@
     return "тренувань";
   }
 
+  function wordDays(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "день";
+    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return "дні";
+    return "днів";
+  }
+
   function heroMessages(streak, max) {
     if (streak <= 0) {
       return ["Стрік тижня ще не розпочато", "Зроби перше тренування — і він піде вгору 🔥"];
@@ -712,7 +723,51 @@
       grid.innerHTML += `<div class="cal-day ${cls}"><div class="num">${day}</div><div class="icon">${icons}</div></div>`;
     }
 
+    renderCalendarStats(year, month, days);
     animateCalendar();
+  }
+
+  function computeMonthStats(year, month, days) {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const todayKey = getKyivTodayKey();
+    const [tYear, tMonth, tDay] = todayKey.split("-").map(Number);
+
+    const isFutureMonth = year > tYear || (year === tYear && month > tMonth);
+    const isCurrentMonth = year === tYear && month === tMonth;
+    const lastDay = isFutureMonth ? 0 : (isCurrentMonth ? tDay : daysInMonth);
+
+    const counts = { Gym: 0, Street: 0, Rest: 0, Skipped: 0, "Weekly Challenge": 0 };
+    let trainedDays = 0;
+    let missedDays = 0;
+
+    for (let day = 1; day <= lastDay; day++) {
+      const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const entries = days[dayKey] || [];
+
+      if (!entries.length) {
+        missedDays++;
+        continue;
+      }
+
+      let hasTraining = false;
+      entries.forEach((e) => {
+        if (counts.hasOwnProperty(e.action_name)) counts[e.action_name]++;
+        if (e.action_name === "Gym" || e.action_name === "Street") hasTraining = true;
+      });
+      if (hasTraining) trainedDays++;
+    }
+
+    return { counts, trainedDays, missedDays };
+  }
+
+  function renderCalendarStats(year, month, days) {
+    const { counts, trainedDays, missedDays } = computeMonthStats(year, month, days);
+    const el = document.getElementById("calStatsText");
+
+    el.innerHTML = `
+      <div class="stats-summary">✅ Тренувався: ${trainedDays} ${wordDays(trainedDays)} · ❌ Пропустив: ${missedDays} ${wordDays(missedDays)}</div>
+      <div class="stats-breakdown">🦾 Street ${counts.Street} · 🏋️ Gym ${counts.Gym} · 🧘 Rest ${counts.Rest} · 🚫 Skip ${counts.Skipped} · 🔥 Challenge ${counts["Weekly Challenge"]}</div>
+    `;
   }
 
   function animateCalendar() {
