@@ -26,6 +26,7 @@ from handlers import router as action_router
 from phrases import get_phrase
 from referral import router as ref_router
 from reports import router as reports_router
+from reactions import router as reactions_router
 from tasks import setup_scheduler
 from awards import send_test_fifa_card
 
@@ -542,6 +543,7 @@ async def web_app_receive(message: types.Message):
 
 
 dp.include_router(reports_router)
+dp.include_router(reactions_router)
 dp.include_router(ref_router)
 dp.include_router(action_router)
 
