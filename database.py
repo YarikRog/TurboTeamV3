@@ -1082,6 +1082,49 @@ async def get_users_for_last_warning() -> List[Dict[str, Any]]:
         return []
 
 
+async def get_users_with_zero_weekly_streak() -> List[Dict[str, Any]]:
+    """
+    Users with 0 Gym/Street trainings in the current Turbo-week.
+    Used for the Sunday 17:00 reminder, 3 hours before the week resets.
+    """
+    try:
+        users = await get_all_users()
+        zero_streak_users: List[Dict[str, Any]] = []
+
+        for user in users:
+            telegram_user_id = user.get("telegram_user_id")
+            user_uuid = user.get("id")
+            nickname = str(user.get("nickname") or telegram_user_id or "Учасник").strip()
+
+            if not telegram_user_id or not user_uuid:
+                continue
+
+            if await _is_auto_removed_user(int(telegram_user_id)):
+                continue
+
+            activities = await get_user_activities(str(user_uuid), limit=1000)
+            streak = _calculate_training_streak(activities)
+
+            if streak != 0:
+                continue
+
+            display_name = escape(nickname)
+            zero_streak_users.append(
+                {
+                    "telegram_user_id": int(telegram_user_id),
+                    "user_uuid": str(user_uuid),
+                    "nickname": nickname,
+                    "mention_html": f'<a href="tg://user?id={telegram_user_id}">{display_name}</a>',
+                }
+            )
+
+        return zero_streak_users
+
+    except Exception as e:
+        logger.error(f"[DB] failed to get users with zero weekly streak: {e}", exc_info=True)
+        return []
+
+
 async def get_users_for_auto_removal() -> List[Dict[str, Any]]:
     try:
         users = await get_all_users()

@@ -13,7 +13,8 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from aiohttp import web
 
-from cache import KeyManager, delete_data, get_data, set_data
+from alerts import notify_admins_about_error
+from cache import KeyManager, check_rate_limit, delete_data, get_data, set_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
@@ -30,6 +31,7 @@ from supabase_db import (
     get_user_achievements,
     get_user_activities,
     get_user_by_telegram_id,
+    log_webapp_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,11 +96,32 @@ async def cors_middleware(request: web.Request, handler):
             response = await handler(request)
         except web.HTTPException as exc:
             response = exc
+        except Exception as exc:
+            logger.exception("Unhandled error in webapp handler %s", request.path)
+            bot: Optional[Bot] = request.app.get("bot")
+            if bot is not None:
+                await notify_admins_about_error(bot, f"webapp:{request.path}", exc)
+            response = web.json_response({"error": "internal error"}, status=500)
 
     response.headers["Access-Control-Allow-Origin"] = WEBAPP_CORS_ORIGIN
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+
+async def _enforce_rate_limit(
+    request: web.Request, telegram_user_id: int, bucket: str, limit: int, window_seconds: int
+) -> Optional[web.Response]:
+    """Returns a 429 response if the caller exceeded the limit, else None."""
+    key = KeyManager.get_api_rate_limit_key(telegram_user_id, bucket)
+    allowed = await check_rate_limit(key, limit, window_seconds)
+    if allowed:
+        return None
+    return web.json_response(
+        {"error": "rate limited"},
+        status=429,
+        headers={"Retry-After": str(window_seconds)},
+    )
 
 
 async def handle_profile(request: web.Request) -> web.Response:
@@ -107,6 +130,10 @@ async def handle_profile(request: web.Request) -> web.Response:
         return web.json_response({"error": "unauthorized"}, status=401)
 
     telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "profile", 30, 30)
+    if limited:
+        return limited
 
     user_row = await get_user_by_telegram_id(telegram_user_id)
     stats = await get_user_stats(telegram_user_id)
@@ -226,6 +253,11 @@ async def handle_rating(request: web.Request) -> web.Response:
         return web.json_response({"error": "unauthorized"}, status=401)
 
     telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "rating", 30, 30)
+    if limited:
+        return limited
+
     rows = await get_all_time_rating()
 
     top = [
@@ -265,7 +297,13 @@ async def handle_feed(request: web.Request) -> web.Response:
     if not auth:
         return web.json_response({"error": "unauthorized"}, status=401)
 
-    user_row = await get_user_by_telegram_id(auth["telegram_user_id"])
+    telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "feed", 30, 30)
+    if limited:
+        return limited
+
+    user_row = await get_user_by_telegram_id(telegram_user_id)
     if not user_row:
         return web.json_response({"error": "profile not found"}, status=404)
 
@@ -287,6 +325,10 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
         return web.json_response({"error": "unauthorized"}, status=401)
 
     telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "share", 5, 60)
+    if limited:
+        return limited
 
     try:
         payload = await request.json()
@@ -339,6 +381,44 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "share_token": token})
 
 
+ALLOWED_TRACK_EVENTS = {
+    "app_open",
+    "tab_switch",
+    "share_click",
+    "achievement_view",
+    "onboarding_complete",
+    "onboarding_skip",
+}
+
+
+async def handle_track(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "track", 60, 30)
+    if limited:
+        return limited
+
+    try:
+        payload = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "invalid body"}, status=400)
+
+    event_name = str(payload.get("event") or "").strip()
+    if event_name not in ALLOWED_TRACK_EVENTS:
+        return web.json_response({"error": "unknown event"}, status=400)
+
+    meta = payload.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+
+    await log_webapp_event(telegram_user_id, event_name, meta)
+    return web.json_response({"ok": True})
+
+
 def create_webapp_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
     app["bot"] = bot
@@ -346,10 +426,12 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/feed", handle_feed)
     app.router.add_post("/api/share-achievement", handle_share_achievement)
+    app.router.add_post("/api/track", handle_track)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/share-achievement", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/track", lambda request: web.Response())
     return app
 
 
