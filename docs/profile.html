@@ -520,35 +520,30 @@
   }
 
   function openGroupChat() {
-    // TEMP DEBUG: confirms the handler actually fires on devices where we have no console access.
-    try { fetch(`${API_BASE_URL}/api/ping?src=train_btn`).catch(() => {}); } catch (e) {}
     if (!profileData || !profileData.group_link) {
       showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
       return;
     }
     const url = profileData.group_link;
-    if (!tg || (!tg.openTelegramLink && !tg.openLink)) {
-      window.location.href = url;
-      return;
-    }
-    // openTelegramLink/openLink can silently no-op on some clients without
-    // throwing, so we can't trust them alone — arm a same-tab fallback and
-    // cancel it only if the app actually loses visibility (i.e. it worked).
-    let settled = false;
-    const onVisibilityChange = () => {
-      if (document.hidden) settled = true;
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    setTimeout(() => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      if (!settled) window.location.href = url;
-    }, 400);
+    // TEMP DEBUG: confirms the handler fires and shows the exact URL we're trying to open.
+    try { fetch(`${API_BASE_URL}/api/ping?src=train_btn&url=${encodeURIComponent(url)}`).catch(() => {}); } catch (e) {}
+    // Telegram's embedded WebView can silently ignore window.location changes to
+    // external domains, and openTelegramLink/openLink can no-op without throwing
+    // depending on how the Mini App was launched — so we throw everything we have
+    // at it: the native WebApp methods, a real <a> click (Telegram intercepts
+    // anchor taps even when it ignores scripted navigation), and location.href.
+    try { tg?.openTelegramLink?.(url); } catch (e) {}
+    try { tg?.openLink?.(url); } catch (e) {}
     try {
-      if (tg.openTelegramLink) tg.openTelegramLink(url);
-      else tg.openLink(url);
-    } catch (e) {
-      // fall through to the timeout-based fallback above
-    }
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {}
+    try { window.location.href = url; } catch (e) {}
   }
 
   function renderFeed(items) {
