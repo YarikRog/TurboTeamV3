@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 REACTION_BONUS_THRESHOLD = 3
 REACTION_BONUS_HP = 20
 REACTION_BONUS_ACTION_NAME = "Reaction Bonus"
-REACTION_BONUS_LOCK_TTL = 172800  # 48 hours, matches report meta TTL
+REACTION_BONUS_LOCK_TTL = 172800  # 48 hours, just an idempotency guard
 
 REACTION_BONUS_FEEDBACK_TEXT = (
     f"🔥 Суспільство одобрило твоє тренування! Нараховано +{REACTION_BONUS_HP} HP 💪"
@@ -33,6 +33,10 @@ async def handle_message_reaction_count(update: MessageReactionCountUpdated, bot
 
     meta = await get_data(KeyManager.get_report_meta_key(message_id))
     if not isinstance(meta, dict):
+        return
+
+    window_open = await get_data(KeyManager.get_reaction_window_key(message_id))
+    if not window_open:
         return
 
     target_uid = int(meta.get("target_uid") or 0)
