@@ -519,32 +519,17 @@
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
   }
 
-  // This profile webapp is opened as a Direct Link Mini App (t.me/<bot>/<name>),
-  // because Telegram only allows web_app-attached launches (which support
-  // openTelegramLink) from private chats, not groups. Direct Link launches
-  // don't reliably support any in-app navigation back to a chat, so instead
-  // of fighting that, the backend DMs the user a native inline button — a
-  // plain Telegram button always works, regardless of Mini App API quirks.
-  async function openGroupChat() {
+  function openGroupChat() {
     if (!profileData || !profileData.group_link) {
       showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
       return;
     }
-    if (!tg?.initData) {
-      window.location.href = profileData.group_link;
-      return;
+    const url = profileData.group_link;
+    if (tg && tg.openTelegramLink) {
+      tg.openTelegramLink(url);
+    } else {
+      window.location.href = url;
     }
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/open-group`, {
-        method: "POST",
-        headers: authHeaders(),
-      });
-      if (!response.ok) throw new Error("bad status");
-    } catch (e) {
-      showToast("Не вдалося надіслати посилання, спробуй ще раз 🙏");
-      return;
-    }
-    tg.close();
   }
 
   function renderFeed(items) {
