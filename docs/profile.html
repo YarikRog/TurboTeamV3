@@ -519,44 +519,32 @@
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
   }
 
-  // Converts a t.me link into Telegram's own tg:// scheme. The OS hands tg://
-  // links straight to the Telegram app (it owns that scheme), whereas a plain
-  // https://t.me link opened via "_blank" gets routed to the default browser.
-  function toTelegramDeepLink(url) {
-    try {
-      const u = new URL(url);
-      if (!/(^|\.)t\.me$/.test(u.hostname)) return null;
-      const path = u.pathname.replace(/^\/+/, "");
-      let m;
-      if ((m = path.match(/^\+([\w-]+)$/)) || (m = path.match(/^joinchat\/([\w-]+)$/))) {
-        return `tg://join?invite=${m[1]}`;
-      }
-      if ((m = path.match(/^([A-Za-z0-9_]{4,})$/))) {
-        return `tg://resolve?domain=${m[1]}`;
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  function openGroupChat() {
+  // This profile webapp is opened as a Direct Link Mini App (t.me/<bot>/<name>),
+  // because Telegram only allows web_app-attached launches (which support
+  // openTelegramLink) from private chats, not groups. Direct Link launches
+  // don't reliably support any in-app navigation back to a chat, so instead
+  // of fighting that, the backend DMs the user a native inline button — a
+  // plain Telegram button always works, regardless of Mini App API quirks.
+  async function openGroupChat() {
     if (!profileData || !profileData.group_link) {
       showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
       return;
     }
-    const url = profileData.group_link;
-    // TEMP DEBUG: confirms the handler fires and shows the exact URL we're trying to open.
-    try { fetch(`${API_BASE_URL}/api/ping?src=train_btn&url=${encodeURIComponent(url)}`).catch(() => {}); } catch (e) {}
-    // tg.openLink() is documented to open links in the *external* browser by
-    // design — that's what was sending us to Chrome, not the anchor fallback.
-    // Only openTelegramLink is meant to switch within Telegram itself.
-    try { tg?.openTelegramLink?.(url); } catch (e) {}
-    // Same-window navigation to the tg:// scheme: the OS hands schemes it
-    // doesn't own (i.e. ones Telegram registered) straight back to the
-    // Telegram app, so no browser ever gets a chance to claim it.
-    const deepLink = toTelegramDeepLink(url);
-    if (deepLink) {
-      try { window.location.href = deepLink; } catch (e) {}
+    if (!tg?.initData) {
+      window.location.href = profileData.group_link;
+      return;
     }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/open-group`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!response.ok) throw new Error("bad status");
+    } catch (e) {
+      showToast("Не вдалося надіслати посилання, спробуй ще раз 🙏");
+      return;
+    }
+    tg.close();
   }
 
   function renderFeed(items) {

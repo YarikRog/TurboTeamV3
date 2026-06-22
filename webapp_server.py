@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qsl
 
 from aiogram import Bot
-from aiogram.types import BufferedInputFile
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiohttp import web
 
 from cache import KeyManager, delete_data, get_data, set_data
@@ -339,10 +339,29 @@ async def handle_share_achievement(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "share_token": token})
 
 
-async def handle_ping(request: web.Request) -> web.Response:
-    """Temporary diagnostic endpoint to confirm a client-side handler actually fired."""
-    src = request.query.get("src", "")
-    logger.info(f"[PING] src={src!r} ua={request.headers.get('User-Agent', '')!r}")
+async def handle_open_group(request: web.Request) -> web.Response:
+    """Direct Link Mini Apps don't reliably support openTelegramLink/openLink to
+    switch back to a group chat, so instead of relying on in-WebApp navigation,
+    send the user a DM with a native inline button — that always works."""
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    telegram_user_id = auth["telegram_user_id"]
+    bot: Bot = request.app["bot"]
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🏎️ Перейти в групу", url=GROUP_LINK)]]
+    )
+    try:
+        await bot.send_message(
+            chat_id=telegram_user_id,
+            text="Тиць, щоб повернутись у групу й тренуватись 👇",
+            reply_markup=keyboard,
+        )
+    except Exception:
+        logger.exception("Failed to send group-link DM to %s", telegram_user_id)
+        return web.json_response({"error": "send failed"}, status=502)
+
     return web.json_response({"ok": True})
 
 
@@ -353,10 +372,11 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/feed", handle_feed)
     app.router.add_post("/api/share-achievement", handle_share_achievement)
-    app.router.add_get("/api/ping", handle_ping)
+    app.router.add_post("/api/open-group", handle_open_group)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/open-group", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/share-achievement", lambda request: web.Response())
     return app
 
