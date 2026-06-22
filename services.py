@@ -19,6 +19,7 @@ from database import (
     update_user_activity,
     get_cached_supabase_user_id,
     get_kyiv_day_bounds_utc_strings,
+    get_seconds_until_kyiv_midnight,
 )
 from phrases import get_phrase
 from config import GROUP_LINK
@@ -1144,11 +1145,18 @@ class ActivityService:
             "text_group_message_id": group_text_msg.message_id if group_text_msg else None,
         }
 
+        reaction_window_ttl = get_seconds_until_kyiv_midnight()
+
         if group_video_msg:
             await set_data(
                 KeyManager.get_report_meta_key(group_video_msg.message_id),
                 report_meta,
                 ex=REPORT_META_TTL,
+            )
+            await set_data(
+                KeyManager.get_reaction_window_key(group_video_msg.message_id),
+                True,
+                ex=reaction_window_ttl,
             )
 
         if group_text_msg:
@@ -1156,6 +1164,11 @@ class ActivityService:
                 KeyManager.get_report_meta_key(group_text_msg.message_id),
                 report_meta,
                 ex=REPORT_META_TTL,
+            )
+            await set_data(
+                KeyManager.get_reaction_window_key(group_text_msg.message_id),
+                True,
+                ex=reaction_window_ttl,
             )
 
         await set_data(rollback_key, report_meta, ex=REPORT_META_TTL)

@@ -160,6 +160,10 @@ class KeyManager:
     def get_reaction_bonus_lock_key(group_message_id: int) -> str:
         return f"{KeyManager.PREFIX}:reaction_bonus_lock:{group_message_id}"
 
+    @staticmethod
+    def get_reaction_window_key(group_message_id: int) -> str:
+        return f"{KeyManager.PREFIX}:reaction_window:{group_message_id}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS
