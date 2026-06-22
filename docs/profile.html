@@ -526,18 +526,19 @@
     }
     const url = profileData.group_link;
     try {
-      if (tg && tg.openTelegramLink) {
+      if (tg && tg.openTelegramLink && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.1"))) {
         tg.openTelegramLink(url);
         return;
       }
-      if (tg && tg.openLink) {
+      if (tg && tg.openLink && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.0"))) {
         tg.openLink(url);
         return;
       }
     } catch (e) {
       // some clients throw if the WebApp wasn't launched in a context that allows this — fall through
     }
-    window.open(url, "_blank");
+    // window.open is frequently blocked/no-op inside Telegram's embedded WebView — same-tab nav is reliable everywhere
+    window.location.href = url;
   }
 
   function renderFeed(items) {
