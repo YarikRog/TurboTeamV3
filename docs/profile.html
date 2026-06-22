@@ -82,13 +82,14 @@
   .hero-msg { font-size: 15px; font-weight: 800; margin-top: 12px; }
   .hero-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
-  .quick-row { display: flex; gap: 10px; margin-top: 16px; }
+  .quick-row { display: flex; gap: 8px; margin-top: 16px; }
   .quick-pill {
-    flex: 1; background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 11px 12px; text-align: left;
+    flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 10px 9px; text-align: left;
   }
-  .quick-pill .q-label { font-size: 11px; color: var(--muted); }
+  .quick-pill .q-label { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
   .quick-pill .q-value { font-size: 17px; font-weight: 800; margin-top: 3px; }
+  .quick-pill .q-value.q-value-sm { font-size: 13px; line-height: 1.25; }
   .quick-pill .q-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 
   .cta-row { display: flex; gap: 10px; margin-top: 16px; }
@@ -344,13 +345,16 @@
 
         <div class="quick-row">
           <div class="quick-pill">
-            <div class="q-label">⚡ Загальний HP</div>
+            <div class="q-label">⚡ HP</div>
             <div class="q-value" id="hpValue">0</div>
           </div>
           <div class="quick-pill">
-            <div class="q-label">🎯 Наступна ціль</div>
-            <div class="q-value" id="goalValue">—</div>
-            <div class="q-sub" id="goalSub"></div>
+            <div class="q-label">🏆 Рівень</div>
+            <div class="q-value" id="statusValue">—</div>
+          </div>
+          <div class="quick-pill">
+            <div class="q-label">🎯 Ціль</div>
+            <div class="q-value q-value-sm" id="goalValue">—</div>
           </div>
         </div>
 
@@ -511,8 +515,8 @@
     const hpEl = document.getElementById("hpValue");
     hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
     pulseOnChange(hpEl, data.hp_total);
-    document.getElementById("goalValue").textContent = data.status || "—";
-    document.getElementById("goalSub").textContent = data.next_goal_text || "";
+    document.getElementById("statusValue").textContent = data.status || "—";
+    document.getElementById("goalValue").textContent = data.next_goal_text || "—";
   }
 
   function openGroupChat() {
