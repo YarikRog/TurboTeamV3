@@ -134,9 +134,18 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
-  .cal-stats-text { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 1.7; }
-  .cal-stats-text .stats-summary { font-weight: 700; }
-  .cal-stats-text .stats-breakdown { color: var(--muted); margin-top: 2px; }
+  .cal-stats { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .stats-summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stats-summary-tile { border-radius: 14px; padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
+  .stats-summary-tile.good { background: rgba(61,220,132,.12); border-color: rgba(61,220,132,.35); }
+  .stats-summary-tile.bad { background: rgba(220,60,60,.12); border-color: rgba(220,60,60,.35); }
+  .ss-icon { font-size: 15px; }
+  .ss-value { font-size: 19px; font-weight: 800; margin-top: 2px; }
+  .ss-label { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .stats-breakdown-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+  .sb-cell { background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 7px 2px; text-align: center; }
+  .sb-icon { font-size: 13px; }
+  .sb-value { font-size: 12px; font-weight: 700; margin-top: 2px; color: var(--muted); }
 
   /* ---------- ACHIEVEMENTS ---------- */
   .ach-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
@@ -497,7 +506,7 @@
         <div class="legend">
           <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
-        <div class="cal-stats-text" id="calStatsText"></div>
+        <div class="cal-stats" id="calStatsText"></div>
       </div>
     </div>
 
@@ -765,8 +774,25 @@
     const el = document.getElementById("calStatsText");
 
     el.innerHTML = `
-      <div class="stats-summary">✅ Тренувався: ${trainedDays} ${wordDays(trainedDays)} · ❌ Пропустив: ${missedDays} ${wordDays(missedDays)}</div>
-      <div class="stats-breakdown">🦾 Street ${counts.Street} · 🏋️ Gym ${counts.Gym} · 🧘 Rest ${counts.Rest} · 🚫 Skip ${counts.Skipped} · 🔥 Challenge ${counts["Weekly Challenge"]}</div>
+      <div class="stats-summary-grid">
+        <div class="stats-summary-tile good">
+          <div class="ss-icon">✅</div>
+          <div class="ss-value">${trainedDays}</div>
+          <div class="ss-label">тренувався, ${wordDays(trainedDays)}</div>
+        </div>
+        <div class="stats-summary-tile bad">
+          <div class="ss-icon">❌</div>
+          <div class="ss-value">${missedDays}</div>
+          <div class="ss-label">пропустив, ${wordDays(missedDays)}</div>
+        </div>
+      </div>
+      <div class="stats-breakdown-grid">
+        <div class="sb-cell"><div class="sb-icon">🦾</div><div class="sb-value">${counts.Street}</div></div>
+        <div class="sb-cell"><div class="sb-icon">🏋️</div><div class="sb-value">${counts.Gym}</div></div>
+        <div class="sb-cell"><div class="sb-icon">🧘</div><div class="sb-value">${counts.Rest}</div></div>
+        <div class="sb-cell"><div class="sb-icon">🚫</div><div class="sb-value">${counts.Skipped}</div></div>
+        <div class="sb-cell"><div class="sb-icon">🔥</div><div class="sb-value">${counts["Weekly Challenge"]}</div></div>
+      </div>
     `;
   }
 
