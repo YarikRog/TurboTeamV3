@@ -155,6 +155,11 @@ class KeyManager:
     def get_api_rate_limit_key(uid: int, bucket: str) -> str:
         return f"{KeyManager.PREFIX}:api_rl:{bucket}:{uid}"
 
+    # --- Reaction bonus (HP for community-approved training reports) ---
+    @staticmethod
+    def get_reaction_bonus_lock_key(group_message_id: int) -> str:
+        return f"{KeyManager.PREFIX}:reaction_bonus_lock:{group_message_id}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS

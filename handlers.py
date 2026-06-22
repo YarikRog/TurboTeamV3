@@ -41,6 +41,7 @@ REAL_ACTIVITY_ACTIONS = {
     "Welcome Bonus",
     "Returned",
     "Weekly Challenge",
+    "Reaction Bonus",
 }
 
 TRAINING_ACTIONS = {"Gym", "Street"}
