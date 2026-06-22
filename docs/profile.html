@@ -546,22 +546,17 @@
     const url = profileData.group_link;
     // TEMP DEBUG: confirms the handler fires and shows the exact URL we're trying to open.
     try { fetch(`${API_BASE_URL}/api/ping?src=train_btn&url=${encodeURIComponent(url)}`).catch(() => {}); } catch (e) {}
+    // tg.openLink() is documented to open links in the *external* browser by
+    // design — that's what was sending us to Chrome, not the anchor fallback.
+    // Only openTelegramLink is meant to switch within Telegram itself.
     try { tg?.openTelegramLink?.(url); } catch (e) {}
-    try { tg?.openLink?.(url); } catch (e) {}
-    // A real <a target="_blank"> click is the one thing that reliably gets the
-    // OS to act on the link from inside Telegram's embedded WebView — but for a
-    // plain https://t.me URL that means the system default browser. Use the
-    // tg:// deep link instead so the handoff goes straight back to Telegram.
-    const openVia = toTelegramDeepLink(url) || url;
-    try {
-      const a = document.createElement("a");
-      a.href = openVia;
-      a.target = "_blank";
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {}
+    // Same-window navigation to the tg:// scheme: the OS hands schemes it
+    // doesn't own (i.e. ones Telegram registered) straight back to the
+    // Telegram app, so no browser ever gets a chance to claim it.
+    const deepLink = toTelegramDeepLink(url);
+    if (deepLink) {
+      try { window.location.href = deepLink; } catch (e) {}
+    }
   }
 
   function renderFeed(items) {
