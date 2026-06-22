@@ -525,20 +525,28 @@
       return;
     }
     const url = profileData.group_link;
-    try {
-      if (tg && tg.openTelegramLink && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.1"))) {
-        tg.openTelegramLink(url);
-        return;
-      }
-      if (tg && tg.openLink && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.0"))) {
-        tg.openLink(url);
-        return;
-      }
-    } catch (e) {
-      // some clients throw if the WebApp wasn't launched in a context that allows this — fall through
+    if (!tg || (!tg.openTelegramLink && !tg.openLink)) {
+      window.location.href = url;
+      return;
     }
-    // window.open is frequently blocked/no-op inside Telegram's embedded WebView — same-tab nav is reliable everywhere
-    window.location.href = url;
+    // openTelegramLink/openLink can silently no-op on some clients without
+    // throwing, so we can't trust them alone — arm a same-tab fallback and
+    // cancel it only if the app actually loses visibility (i.e. it worked).
+    let settled = false;
+    const onVisibilityChange = () => {
+      if (document.hidden) settled = true;
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    setTimeout(() => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (!settled) window.location.href = url;
+    }, 400);
+    try {
+      if (tg.openTelegramLink) tg.openTelegramLink(url);
+      else tg.openLink(url);
+    } catch (e) {
+      // fall through to the timeout-based fallback above
+    }
   }
 
   function renderFeed(items) {
