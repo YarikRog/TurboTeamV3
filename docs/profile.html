@@ -519,6 +519,25 @@
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
   }
 
+  // Converts a t.me link into Telegram's own tg:// scheme. The OS hands tg://
+  // links straight to the Telegram app (it owns that scheme), whereas a plain
+  // https://t.me link opened via "_blank" gets routed to the default browser.
+  function toTelegramDeepLink(url) {
+    try {
+      const u = new URL(url);
+      if (!/(^|\.)t\.me$/.test(u.hostname)) return null;
+      const path = u.pathname.replace(/^\/+/, "");
+      let m;
+      if ((m = path.match(/^\+([\w-]+)$/)) || (m = path.match(/^joinchat\/([\w-]+)$/))) {
+        return `tg://join?invite=${m[1]}`;
+      }
+      if ((m = path.match(/^([A-Za-z0-9_]{4,})$/))) {
+        return `tg://resolve?domain=${m[1]}`;
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function openGroupChat() {
     if (!profileData || !profileData.group_link) {
       showToast("Відкрий групу TurboTeam через Telegram, щоб тренуватись 🏋️");
@@ -527,23 +546,22 @@
     const url = profileData.group_link;
     // TEMP DEBUG: confirms the handler fires and shows the exact URL we're trying to open.
     try { fetch(`${API_BASE_URL}/api/ping?src=train_btn&url=${encodeURIComponent(url)}`).catch(() => {}); } catch (e) {}
-    // Telegram's embedded WebView can silently ignore window.location changes to
-    // external domains, and openTelegramLink/openLink can no-op without throwing
-    // depending on how the Mini App was launched — so we throw everything we have
-    // at it: the native WebApp methods, a real <a> click (Telegram intercepts
-    // anchor taps even when it ignores scripted navigation), and location.href.
     try { tg?.openTelegramLink?.(url); } catch (e) {}
     try { tg?.openLink?.(url); } catch (e) {}
+    // A real <a target="_blank"> click is the one thing that reliably gets the
+    // OS to act on the link from inside Telegram's embedded WebView — but for a
+    // plain https://t.me URL that means the system default browser. Use the
+    // tg:// deep link instead so the handoff goes straight back to Telegram.
+    const openVia = toTelegramDeepLink(url) || url;
     try {
       const a = document.createElement("a");
-      a.href = url;
+      a.href = openVia;
       a.target = "_blank";
       a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       a.remove();
     } catch (e) {}
-    try { window.location.href = url; } catch (e) {}
   }
 
   function renderFeed(items) {
