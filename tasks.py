@@ -13,6 +13,7 @@ from awards import sunday_final_logic
 from database import (
     get_users_for_last_warning,
     get_users_for_auto_removal,
+    get_users_with_zero_weekly_streak,
     get_kyiv_now,
     get_weekly_top_users,
 )
@@ -28,6 +29,7 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 AUTO_REMOVE_BAN_DAYS = 7
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
+WEEKLY_STREAK_REMINDER_REDIS_PREFIX = "turbo:weekly_streak_reminder"
 
 INACTIVE_DAYS_THRESHOLD = 3
 LAST_WARNING_DAYS_THRESHOLD = 7
@@ -70,6 +72,10 @@ def _get_auto_removed_key(user_id: int) -> str:
 
 def _get_last_warning_key(user_id: int) -> str:
     return f"{LAST_WARNING_REDIS_PREFIX}:{user_id}"
+
+
+def _get_weekly_streak_reminder_key(user_id: int, date_str: str) -> str:
+    return f"{WEEKLY_STREAK_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
 
 
 def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
@@ -691,6 +697,63 @@ async def send_last_day_warning(bot) -> None:
         skipped_already_warned,
         skipped_overdue,
     )
+
+
+@safe_job
+async def send_weekly_streak_reminder(bot) -> None:
+    """Sunday 17:00 Kyiv: reminds users with 0 trainings this week, 3 hours before the week resets."""
+    zero_streak_users = await get_users_with_zero_weekly_streak()
+    if not zero_streak_users:
+        logger.info("[TASKS] Weekly streak reminder: no users with zero streak")
+        return
+
+    today_str = get_kyiv_now().strftime("%Y-%m-%d")
+
+    reminded_count = 0
+    skipped_not_in_group = 0
+    skipped_already_reminded = 0
+
+    for user in zero_streak_users:
+        user_id = int(user["telegram_user_id"])
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            skipped_not_in_group += 1
+            continue
+
+        reminder_key = _get_weekly_streak_reminder_key(user_id, today_str)
+        already_reminded = await get_data(reminder_key)
+        if already_reminded is not None:
+            skipped_already_reminded += 1
+            continue
+
+        mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
+
+        try:
+            await bot.send_message(
+                chat_id=REPORTS_GROUP_ID,
+                text=(
+                    f"🔥 {mention_html}, тиждень майже закінчився, а тренувань ще не було!\n"
+                    f"Зроби хоча б одне тренування сьогодні — не лінуйся, ще встигнеш 💪"
+                ),
+                parse_mode="HTML",
+            )
+            await set_data(reminder_key, "1", ex=86400)
+            reminded_count += 1
+        except Exception as e:
+            logger.error(
+                f"[TASKS] Failed to send weekly streak reminder user_id={user_id}: {e}",
+                exc_info=True,
+            )
+
+    logger.info(
+        "[TASKS] Weekly streak reminder finished. Reminded: %s, skipped_not_in_group=%s, skipped_already_reminded=%s",
+        reminded_count,
+        skipped_not_in_group,
+        skipped_already_reminded,
+    )
+
+
 @safe_job
 async def auto_remove_inactive_users(bot) -> None:
     removable_users = await get_users_for_auto_removal()
@@ -894,6 +957,7 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     scheduler.add_job(send_last_day_warning, "cron", hour=19, minute=0, args=[bot])
     scheduler.add_job(send_second_day_private_reminder, "cron", hour=19, minute=30, args=[bot])
     scheduler.add_job(send_evening_motivation, "cron", hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_weekly_streak_reminder, "cron", day_of_week="sun", hour=17, minute=0, args=[bot])
     scheduler.add_job(run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot])
 
     scheduler.add_job(
