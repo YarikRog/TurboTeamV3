@@ -231,6 +231,17 @@
 
   .state-msg { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 14px; }
 
+  /* ---------- SKELETON LOADER ---------- */
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  .skel { background: linear-gradient(90deg, var(--card) 25%, var(--card-2) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; border-radius: 14px; }
+  .skel-screen { padding: 16px; max-width: 480px; margin: 0 auto; }
+  .skel-greet { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .skel-avatar { width: 40px; height: 40px; border-radius: 50%; }
+  .skel-hero { height: 270px; border-radius: 26px; margin-bottom: 16px; }
+  .skel-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  .skel-row .skel { flex: 1; height: 48px; border-radius: 14px; }
+  .skel-feed { height: 54px; border-radius: 16px; margin-bottom: 8px; }
+
   /* ---------- WEEKLY CHAMPION CELEBRATION ---------- */
   .champion-overlay {
     position: fixed; inset: 0; z-index: 500;
@@ -253,7 +264,21 @@
 <body>
 
 <div id="app">
-  <div class="state-msg" id="boot">⏳ Завантаження профілю...</div>
+  <div class="skel-screen">
+    <div class="skel-greet">
+      <div class="skel" style="height:30px;width:150px;border-radius:8px;"></div>
+      <div class="skel skel-avatar"></div>
+    </div>
+    <div class="skel skel-hero"></div>
+    <div class="skel-row">
+      <div class="skel"></div>
+      <div class="skel"></div>
+      <div class="skel"></div>
+    </div>
+    <div class="skel skel-feed"></div>
+    <div class="skel skel-feed"></div>
+    <div class="skel skel-feed"></div>
+  </div>
 </div>
 
 <div class="champion-overlay" id="championOverlay">
@@ -271,7 +296,16 @@
 <script>
   const API_BASE_URL = "https://worker-production-b767.up.railway.app";
   const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    // Апка має власну фіксовану темну тему (бренд-кольори), тож синхронізуємо
+    // не кольори інтерфейсу з темою юзера, а хром Telegram (хедер/фон) з темою апки —
+    // щоб не було білого "шву" зверху при відкритті.
+    try { tg.setHeaderColor("#0a0c10"); } catch (e) {}
+    try { tg.setBackgroundColor("#0a0c10"); } catch (e) {}
+    try { tg.setBottomBarColor?.("#0a0c10"); } catch (e) {}
+  }
 
   const today = new Date();
   let viewYear = today.getFullYear();
@@ -310,6 +344,18 @@
     clearTimeout(window._toastTimer);
     window._toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
   }
+
+  function haptic(type) {
+    try {
+      if (type === "selection") tg?.HapticFeedback?.selectionChanged?.();
+      else tg?.HapticFeedback?.impactOccurred?.(type || "light");
+    } catch (e) {}
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".tab")) haptic("selection");
+    else if (e.target.closest(".btn, .badge-card, .cal-nav button")) haptic("light");
+  });
 
   // ==================== SKELETON ====================
   const SKELETON = `
@@ -458,6 +504,30 @@
       else loadRating().then(animateRanks);
     }
   }
+
+  // ==================== SWIPE BETWEEN TABS ====================
+  (function setupSwipeNav() {
+    let startX = 0, startY = 0, tracking = false;
+    document.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      tracking = true;
+    }, { passive: true });
+
+    document.addEventListener("touchend", (e) => {
+      if (!tracking) return;
+      tracking = false;
+      if (document.querySelector(".modal-backdrop.show") || document.getElementById("championOverlay")?.classList.contains("show")) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (Math.abs(dx) < 60 || Math.abs(dy) > 50) return;
+      const idx = TAB_ORDER.indexOf(currentTabName);
+      if (dx < 0 && idx < TAB_ORDER.length - 1) goTab(TAB_ORDER[idx + 1]);
+      else if (dx > 0 && idx > 0) goTab(TAB_ORDER[idx - 1]);
+    }, { passive: true });
+  })();
 
   // ==================== TODAY ====================
   const RING_CIRC = 2 * Math.PI * 80;
