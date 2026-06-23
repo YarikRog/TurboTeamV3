@@ -21,7 +21,7 @@ from architecture.events import EventEnvelope, TRAINING_SELECTED, CHALLENGE_SELE
 from architecture.orchestrator import flow_event_bus
 from challenge import get_challenge_stats
 from config import BOT_TOKEN, WEB_APP_URL, GROUP_LINK, REPORTS_GROUP_ID, ADMIN_IDS, PORT
-from database import check_user_exists, close_db_session, get_kyiv_now
+from database import check_user_exists, close_db_session, get_kyiv_now, get_kyiv_week_start_utc_string
 from handlers import router as action_router
 from phrases import get_phrase
 from referral import router as ref_router
@@ -44,6 +44,7 @@ from supabase_db import (
     add_referral,
     get_referrals_count,
     get_user_activities_count,
+    get_top_webapp_opens,
 )
 
 logging.basicConfig(
@@ -143,6 +144,32 @@ async def supabase_test(message: types.Message):
     except Exception as e:
         logger.error(f"[SUPABASE] /sbtest error: {e}", exc_info=True)
         await message.answer("❌ Supabase test failed. Дивись логи.")
+
+
+@dp.message(Command("webapp"))
+async def webapp_top_opens(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        period_start = get_kyiv_week_start_utc_string()
+        rows = await get_top_webapp_opens(period_start, limit=10)
+    except Exception as e:
+        logger.error(f"[SUPABASE] /webapp error: {e}", exc_info=True)
+        await message.answer("❌ Не вдалось отримати статистику. Дивись логи.")
+        return
+
+    if not rows:
+        await message.answer("Поки що нуль відкриттів вебапу з початку тижня.")
+        return
+
+    lines = ["📊 *Топ відкриттів вебапу з початку тижня:*\n"]
+    for i, row in enumerate(rows, start=1):
+        nickname = row.get("nickname") or f"ID:{row.get('telegram_user_id')}"
+        open_count = row.get("open_count", 0)
+        lines.append(f"{i}. {nickname} — {open_count}")
+
+    await message.answer("\n".join(lines))
 
 
 @dp.message(Command("sbadd"))
