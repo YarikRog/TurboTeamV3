@@ -225,6 +225,11 @@ def _get_current_week_period() -> tuple[str, str]:
     return week_start.isoformat(), week_end.isoformat()
 
 
+def get_current_week_period() -> tuple[str, str]:
+    """Public wrapper for the current (in-progress) Sunday-20:00-Kyiv week window."""
+    return _get_current_week_period()
+
+
 def _get_current_week_period_dt() -> tuple[datetime, datetime]:
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
@@ -261,6 +266,11 @@ def _get_last_finished_week_period() -> tuple[str, str]:
     week_start = week_end - timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()
+
+
+def get_last_finished_week_period() -> tuple[str, str]:
+    """Public wrapper for the same Sunday-20:00-Kyiv window used by the weekly rating/reset job."""
+    return _get_last_finished_week_period()
 
 
 async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
@@ -383,6 +393,37 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
 
     valid_training_count = max(0, training_count - rollback_count)
     return min(valid_training_count, WEEKLY_STREAK_MAX)
+
+
+def get_consecutive_day_streak_status(activities: List[Dict[str, Any]]) -> tuple[int, bool]:
+    """
+    Consecutive-calendar-day Gym/Street streak (same definition as ratings.py's /rating
+    display), split into the streak already locked in through yesterday and whether
+    today already has a training. Used by the "streak is about to burn" reminder.
+    """
+    training_dates = set()
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+        if action_name not in {"Gym", "Street"}:
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        training_dates.add(created_at.date())
+
+    today = get_kyiv_now().date()
+    trained_today = today in training_dates
+
+    streak = 0
+    cursor = today - timedelta(days=1)
+    while cursor in training_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return streak, trained_today
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:

@@ -16,10 +16,15 @@ from database import (
     get_users_with_zero_weekly_streak,
     get_kyiv_now,
     get_weekly_top_users,
+    get_last_finished_week_period,
+    get_current_week_period,
+    get_consecutive_day_streak_status,
 )
 from supabase_db import (
     get_all_users,
     get_user_activities,
+    get_user_activities_in_period,
+    get_weekly_rating,
 )
 from cache import get_data, set_data, delete_data
 
@@ -30,6 +35,12 @@ AUTO_REMOVE_BAN_DAYS = 7
 AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
 WEEKLY_STREAK_REMINDER_REDIS_PREFIX = "turbo:weekly_streak_reminder"
+
+STREAK_AT_RISK_THRESHOLD = 5
+STREAK_AT_RISK_REDIS_PREFIX = "turbo:streak_at_risk"
+
+RANK_OVERTAKE_REDIS_PREFIX = "turbo:rank_overtake"
+RANK_OVERTAKE_SNAPSHOT_REDIS_PREFIX = "turbo:rank_snapshot"
 
 INACTIVE_DAYS_THRESHOLD = 3
 LAST_WARNING_DAYS_THRESHOLD = 7
@@ -81,6 +92,18 @@ def _get_weekly_streak_reminder_key(user_id: int, date_str: str) -> str:
 
 def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
     return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
+
+
+def _get_streak_at_risk_key(user_id: int, date_str: str) -> str:
+    return f"{STREAK_AT_RISK_REDIS_PREFIX}:{user_id}:{date_str}"
+
+
+def _get_rank_overtake_reminder_key(user_id: int, date_str: str) -> str:
+    return f"{RANK_OVERTAKE_REDIS_PREFIX}:{user_id}:{date_str}"
+
+
+def _get_rank_snapshot_key() -> str:
+    return RANK_OVERTAKE_SNAPSHOT_REDIS_PREFIX
 
 
 def _normalize_iso_datetime_string(raw: str) -> str:
@@ -937,10 +960,326 @@ async def auto_unban_inactive_users(bot) -> None:
     )
 
 
+def build_weekly_personal_report_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    )
+
+
+@safe_job
+async def send_weekly_personal_reports(bot) -> None:
+    """Sunday 20:00 Kyiv, right after the champion announcement: DMs everyone else their weekly recap."""
+    top_users = await get_weekly_top_users(finished_week=True)
+    champion_id = None
+    if top_users and int(top_users[0].get("hp") or 0) > 0:
+        champion_id = top_users[0].get("telegram_user_id")
+
+    users = await get_all_users()
+    if not users:
+        logger.info("[TASKS] Weekly personal report: no users")
+        return
+
+    period_start, period_end = get_last_finished_week_period()
+    me = await bot.get_me()
+    keyboard = build_weekly_personal_report_keyboard(me.username)
+
+    sent_count = 0
+    skipped_champion = 0
+    skipped_not_in_group = 0
+    skipped_no_activity = 0
+    skipped_errors = 0
+
+    for user in users:
+        telegram_user_id = user.get("telegram_user_id")
+        user_uuid = user.get("id")
+        if not telegram_user_id or not user_uuid:
+            continue
+
+        user_id = int(telegram_user_id)
+
+        if champion_id and user_id == int(champion_id):
+            skipped_champion += 1
+            continue
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            skipped_not_in_group += 1
+            continue
+
+        try:
+            activities = await get_user_activities_in_period(str(user_uuid), period_start, period_end)
+        except Exception as e:
+            logger.error(
+                f"[TASKS] Failed to get weekly activities for user_id={user_id}: {e}",
+                exc_info=True,
+            )
+            skipped_errors += 1
+            continue
+
+        if not activities:
+            skipped_no_activity += 1
+            continue
+
+        hp = sum(int(a.get("hp_change") or 0) for a in activities)
+        trainings = sum(1 for a in activities if a.get("action_name") in ("Gym", "Street"))
+        rests = sum(1 for a in activities if a.get("action_name") == "Rest")
+        challenges = sum(1 for a in activities if a.get("action_name") == "Weekly Challenge")
+
+        text = (
+            "📊 <b>Твій тижневий звіт</b>\n\n"
+            f"💪 HP за тиждень: <b>{hp}</b>\n"
+            f"🏋️ Тренувань: <b>{trainings}</b>\n"
+            f"🧘 Рестів: <b>{rests}</b>\n"
+            f"🔥 Челенджів: <b>{challenges}</b>\n\n"
+            "Новий тиждень почався — покажи на що здатен 🏎️💨"
+        )
+
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            sent_count += 1
+        except Exception as e:
+            logger.debug(f"[TASKS] Failed to send weekly personal report user_id={user_id}: {e}")
+            skipped_errors += 1
+
+    logger.info(
+        "[TASKS] Weekly personal report finished. Sent: %s, skipped_champion=%s, skipped_not_in_group=%s, skipped_no_activity=%s, skipped_errors=%s",
+        sent_count,
+        skipped_champion,
+        skipped_not_in_group,
+        skipped_no_activity,
+        skipped_errors,
+    )
+
+
+def build_streak_at_risk_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📅 Відкрити календар",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    )
+
+
+@safe_job
+async def send_streak_at_risk_reminder(bot) -> None:
+    """Daily 20:00 Kyiv: warns users with a 5+ day streak who haven't trained today that it's about to reset."""
+    users = await get_all_users()
+    if not users:
+        logger.info("[TASKS] Streak-at-risk reminder: no users")
+        return
+
+    today_str = get_kyiv_now().strftime("%Y-%m-%d")
+    me = await bot.get_me()
+    keyboard = build_streak_at_risk_keyboard(me.username)
+
+    sent_count = 0
+    skipped_not_in_group = 0
+    skipped_already_reminded = 0
+    skipped_trained_today = 0
+    skipped_below_threshold = 0
+    skipped_errors = 0
+
+    for user in users:
+        telegram_user_id = user.get("telegram_user_id")
+        user_uuid = user.get("id")
+        if not telegram_user_id or not user_uuid:
+            continue
+
+        user_id = int(telegram_user_id)
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            skipped_not_in_group += 1
+            continue
+
+        reminder_key = _get_streak_at_risk_key(user_id, today_str)
+        already_reminded = await get_data(reminder_key)
+        if already_reminded is not None:
+            skipped_already_reminded += 1
+            continue
+
+        try:
+            activities = await get_user_activities(str(user_uuid), limit=500)
+        except Exception as e:
+            logger.error(
+                f"[TASKS] Failed to get activities for streak-at-risk user_id={user_id}: {e}",
+                exc_info=True,
+            )
+            skipped_errors += 1
+            continue
+
+        streak, trained_today = get_consecutive_day_streak_status(activities)
+
+        if trained_today:
+            skipped_trained_today += 1
+            continue
+
+        if streak < STREAK_AT_RISK_THRESHOLD:
+            skipped_below_threshold += 1
+            continue
+
+        text = (
+            f"⏰ Ти не тренувався сьогодні, стрік <b>{streak}</b> тренувань згорить через 4 години!\n\n"
+            f"Встигни зробити Gym або Street, щоб не втратити серію 💪"
+        )
+
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            await set_data(reminder_key, "1", ex=86400)
+            sent_count += 1
+        except Exception as e:
+            logger.debug(f"[TASKS] Failed to send streak-at-risk reminder user_id={user_id}: {e}")
+            skipped_errors += 1
+
+    logger.info(
+        "[TASKS] Streak-at-risk reminder finished. Sent: %s, skipped_not_in_group=%s, "
+        "skipped_already_reminded=%s, skipped_trained_today=%s, skipped_below_threshold=%s, skipped_errors=%s",
+        sent_count,
+        skipped_not_in_group,
+        skipped_already_reminded,
+        skipped_trained_today,
+        skipped_below_threshold,
+        skipped_errors,
+    )
+
+
+def build_rank_overtake_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    )
+
+
+@safe_job
+async def send_rank_overtake_reminder(bot) -> None:
+    """Wed/Sat: compares current weekly rank to the last saved snapshot and DMs anyone who got overtaken."""
+    period_start, period_end = get_current_week_period()
+    current_rows = await get_weekly_rating(period_start, period_end)
+
+    if not current_rows:
+        logger.info("[TASKS] Rank overtake reminder: no rating rows")
+        return
+
+    snapshot_key = _get_rank_snapshot_key()
+    saved_snapshot = await get_data(snapshot_key)
+    if not isinstance(saved_snapshot, dict):
+        saved_snapshot = {}
+
+    # A snapshot from a previous TurboTeam week is meaningless here — ranks reset every
+    # week, so comparing against it would falsely flag "overtakes" right after the reset.
+    if saved_snapshot.get("week_start") == period_start:
+        previous_ranks = saved_snapshot.get("ranks") or {}
+    else:
+        previous_ranks = {}
+
+    current_ranks = {}
+    for row in current_rows:
+        telegram_user_id = row.get("telegram_user_id")
+        if telegram_user_id:
+            current_ranks[str(telegram_user_id)] = int(row.get("rank") or 0)
+
+    new_snapshot = {"week_start": period_start, "ranks": current_ranks}
+
+    if not previous_ranks:
+        await set_data(snapshot_key, new_snapshot, ex=7 * 24 * 60 * 60)
+        logger.info("[TASKS] Rank overtake reminder: no comparable previous snapshot, saved baseline")
+        return
+
+    today_str = get_kyiv_now().strftime("%Y-%m-%d")
+    me = await bot.get_me()
+    keyboard = build_rank_overtake_keyboard(me.username)
+
+    sent_count = 0
+    skipped_not_in_group = 0
+    skipped_already_reminded = 0
+    skipped_errors = 0
+
+    for row in current_rows:
+        telegram_user_id = row.get("telegram_user_id")
+        hp = int(row.get("hp") or 0)
+        if not telegram_user_id or hp <= 0:
+            continue
+
+        user_id = int(telegram_user_id)
+        current_rank = int(row.get("rank") or 0)
+        previous_rank = previous_ranks.get(str(user_id))
+
+        if previous_rank is None or current_rank <= previous_rank:
+            continue
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            skipped_not_in_group += 1
+            continue
+
+        reminder_key = _get_rank_overtake_reminder_key(user_id, today_str)
+        already_reminded = await get_data(reminder_key)
+        if already_reminded is not None:
+            skipped_already_reminded += 1
+            continue
+
+        text = (
+            "📉 Тебе обігнали в рейтингу!\n\n"
+            "Подивись актуальний рейтинг командою /rating або у вебапі 👇"
+        )
+
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            await set_data(reminder_key, "1", ex=86400)
+            sent_count += 1
+        except Exception as e:
+            logger.debug(f"[TASKS] Failed to send rank overtake reminder user_id={user_id}: {e}")
+            skipped_errors += 1
+
+    await set_data(snapshot_key, new_snapshot, ex=7 * 24 * 60 * 60)
+
+    logger.info(
+        "[TASKS] Rank overtake reminder finished. Sent: %s, skipped_not_in_group=%s, "
+        "skipped_already_reminded=%s, skipped_errors=%s",
+        sent_count,
+        skipped_not_in_group,
+        skipped_already_reminded,
+        skipped_errors,
+    )
+
+
 @safe_job
 async def run_sunday_final(bot) -> None:
     logger.info("[TASKS] Sunday Final started...")
     await sunday_final_logic(bot)
+    await send_weekly_personal_reports(bot)
     logger.info("[TASKS] Sunday Final finished.")
 
 
@@ -960,6 +1299,8 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     scheduler.add_job(send_evening_motivation, "cron", hour=21, minute=0, args=[bot])
     scheduler.add_job(send_weekly_streak_reminder, "cron", day_of_week="sun", hour=17, minute=0, args=[bot])
     scheduler.add_job(run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot])
+    scheduler.add_job(send_streak_at_risk_reminder, "cron", hour=20, minute=0, args=[bot])
+    scheduler.add_job(send_rank_overtake_reminder, "cron", day_of_week="wed,sat", hour=13, minute=0, args=[bot])
 
     scheduler.add_job(
         auto_unban_inactive_users,

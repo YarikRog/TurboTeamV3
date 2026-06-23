@@ -1070,9 +1070,17 @@ class ActivityService:
             current_status_title = ActivityService.get_current_training_status(training_count)
             new_status_title = ActivityService.get_new_training_status_by_exact_count(training_count)
 
+        try:
+            me = await message.bot.get_me()
+            bot_username = me.username
+        except Exception as e:
+            logger.warning("[SERVICE] Failed to get bot username for report keyboard: %s", e)
+            bot_username = None
+
         report_kb = build_report_keyboard(
             target_uid=user.id,
             action_type=action_type,
+            bot_username=bot_username,
         )
 
         group_video_msg = None
