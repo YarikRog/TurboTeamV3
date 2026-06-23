@@ -36,7 +36,7 @@ from supabase_db import (
 
 logger = logging.getLogger(__name__)
 
-INIT_DATA_MAX_AGE_SECONDS = 86400
+INIT_DATA_MAX_AGE_SECONDS = 3600
 
 
 def verify_init_data(init_data: str, bot_token: str) -> Optional[Dict[str, Any]]:
