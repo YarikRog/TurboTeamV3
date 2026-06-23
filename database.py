@@ -69,6 +69,18 @@ def get_seconds_until_kyiv_midnight() -> int:
     return max(1, int((next_midnight - now).total_seconds()))
 
 
+def get_kyiv_week_start_utc_string() -> str:
+    """Monday 00:00 Kyiv time of the current week, as a UTC ISO string."""
+    now = get_kyiv_now()
+    monday = (now - timedelta(days=now.weekday())).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    return monday.astimezone(pytz.UTC).isoformat()
+
+
 def _get_auto_removed_key(user_id: int) -> str:
     return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
 
