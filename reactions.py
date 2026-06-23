@@ -4,7 +4,7 @@ from aiogram import Bot, Router
 from aiogram.types import MessageReactionUpdated, ReplyParameters
 
 from cache import KeyManager, acquire_lock, get_data, redis_client
-from config import ADMIN_IDS, REPORTS_GROUP_ID
+from config import REPORTS_GROUP_ID
 from database import update_user_activity
 
 router = Router()
@@ -43,8 +43,7 @@ async def handle_message_reaction(update: MessageReactionUpdated, bot: Bot):
         await redis_client.srem(set_key, reactor_id)
 
     total_reactors = await redis_client.scard(set_key)
-    is_admin_bypass = reactor_id in ADMIN_IDS
-    if total_reactors < REACTION_BONUS_THRESHOLD and not is_admin_bypass:
+    if total_reactors < REACTION_BONUS_THRESHOLD:
         return
 
     meta = await get_data(KeyManager.get_report_meta_key(message_id))
@@ -83,11 +82,10 @@ async def handle_message_reaction(update: MessageReactionUpdated, bot: Bot):
         return
 
     logger.info(
-        "[REACTIONS] reaction bonus awarded target_uid=%s message_id=%s reactors=%s admin_bypass=%s",
+        "[REACTIONS] reaction bonus awarded target_uid=%s message_id=%s reactors=%s",
         target_uid,
         message_id,
         total_reactors,
-        is_admin_bypass,
     )
 
     try:
