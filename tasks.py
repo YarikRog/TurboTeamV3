@@ -36,8 +36,13 @@ AUTO_REMOVE_REDIS_PREFIX = "turbo:auto_removed"
 LAST_WARNING_REDIS_PREFIX = "turbo:last_warning"
 WEEKLY_STREAK_REMINDER_REDIS_PREFIX = "turbo:weekly_streak_reminder"
 
-STREAK_AT_RISK_THRESHOLD = 5
-STREAK_AT_RISK_REDIS_PREFIX = "turbo:streak_at_risk"
+WEEKLY_MILESTONE_REDIS_PREFIX = "turbo:weekly_milestone"
+
+WEEKLY_MILESTONE_THRESHOLDS = {
+    6: (7, 50),
+    9: (10, 100),
+    13: (14, 125),
+}
 
 RANK_OVERTAKE_REDIS_PREFIX = "turbo:rank_overtake"
 RANK_OVERTAKE_SNAPSHOT_REDIS_PREFIX = "turbo:rank_snapshot"
@@ -94,8 +99,8 @@ def _get_second_day_reminder_key(user_id: int, date_str: str) -> str:
     return f"{SECOND_DAY_REMINDER_REDIS_PREFIX}:{user_id}:{date_str}"
 
 
-def _get_streak_at_risk_key(user_id: int, date_str: str) -> str:
-    return f"{STREAK_AT_RISK_REDIS_PREFIX}:{user_id}:{date_str}"
+def _get_weekly_milestone_key(user_id: int, date_str: str) -> str:
+    return f"{WEEKLY_MILESTONE_REDIS_PREFIX}:{user_id}:{date_str}"
 
 
 def _get_rank_overtake_reminder_key(user_id: int, date_str: str) -> str:
@@ -1063,12 +1068,12 @@ async def send_weekly_personal_reports(bot) -> None:
     )
 
 
-def build_streak_at_risk_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+def build_weekly_milestone_keyboard(bot_username: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📅 Відкрити календар",
+                    text="👤 Мій профіль",
                     url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]
@@ -1077,22 +1082,21 @@ def build_streak_at_risk_keyboard(bot_username: str) -> InlineKeyboardMarkup:
 
 
 @safe_job
-async def send_streak_at_risk_reminder(bot) -> None:
-    """Daily 20:00 Kyiv: warns users with a 5+ day streak who haven't trained today that it's about to reset."""
+async def send_weekly_milestone_reminder(bot) -> None:
+    """Daily 19:00 Kyiv: reminds users with 6/9/13 trainings to go for the next milestone (7/10/14)."""
     users = await get_all_users()
     if not users:
-        logger.info("[TASKS] Streak-at-risk reminder: no users")
+        logger.info("[TASKS] Weekly milestone reminder: no users")
         return
 
     today_str = get_kyiv_now().strftime("%Y-%m-%d")
     me = await bot.get_me()
-    keyboard = build_streak_at_risk_keyboard(me.username)
+    keyboard = build_weekly_milestone_keyboard(me.username)
 
     sent_count = 0
     skipped_not_in_group = 0
     skipped_already_reminded = 0
-    skipped_trained_today = 0
-    skipped_below_threshold = 0
+    skipped_not_at_threshold = 0
     skipped_errors = 0
 
     for user in users:
@@ -1108,7 +1112,7 @@ async def send_streak_at_risk_reminder(bot) -> None:
             skipped_not_in_group += 1
             continue
 
-        reminder_key = _get_streak_at_risk_key(user_id, today_str)
+        reminder_key = _get_weekly_milestone_key(user_id, today_str)
         already_reminded = await get_data(reminder_key)
         if already_reminded is not None:
             skipped_already_reminded += 1
@@ -1118,25 +1122,24 @@ async def send_streak_at_risk_reminder(bot) -> None:
             activities = await get_user_activities(str(user_uuid), limit=500)
         except Exception as e:
             logger.error(
-                f"[TASKS] Failed to get activities for streak-at-risk user_id={user_id}: {e}",
+                f"[TASKS] Failed to get activities for weekly milestone user_id={user_id}: {e}",
                 exc_info=True,
             )
             skipped_errors += 1
             continue
 
-        streak, trained_today = get_consecutive_day_streak_status(activities)
+        from database import _calculate_training_streak
+        weekly_count = _calculate_training_streak(activities)
 
-        if trained_today:
-            skipped_trained_today += 1
+        if weekly_count not in WEEKLY_MILESTONE_THRESHOLDS:
+            skipped_not_at_threshold += 1
             continue
 
-        if streak < STREAK_AT_RISK_THRESHOLD:
-            skipped_below_threshold += 1
-            continue
+        next_milestone, bonus = WEEKLY_MILESTONE_THRESHOLDS[weekly_count]
 
         text = (
-            f"⏰ Ти не тренувався сьогодні, стрік <b>{streak}</b> тренувань згорить через 4 години!\n\n"
-            f"Встигни зробити Gym або Street, щоб не втратити серію 💪"
+            f"💪 У тебе вже <b>{weekly_count}</b> тренувань за цей тиждень!\n\n"
+            f"Зроби ще одне і отримай <b>+{bonus} HP</b> на {next_milestone}-му тренуванні 🔥"
         )
 
         try:
@@ -1149,17 +1152,16 @@ async def send_streak_at_risk_reminder(bot) -> None:
             await set_data(reminder_key, "1", ex=86400)
             sent_count += 1
         except Exception as e:
-            logger.debug(f"[TASKS] Failed to send streak-at-risk reminder user_id={user_id}: {e}")
+            logger.debug(f"[TASKS] Failed to send weekly milestone reminder user_id={user_id}: {e}")
             skipped_errors += 1
 
     logger.info(
-        "[TASKS] Streak-at-risk reminder finished. Sent: %s, skipped_not_in_group=%s, "
-        "skipped_already_reminded=%s, skipped_trained_today=%s, skipped_below_threshold=%s, skipped_errors=%s",
+        "[TASKS] Weekly milestone reminder finished. Sent: %s, skipped_not_in_group=%s, "
+        "skipped_already_reminded=%s, skipped_not_at_threshold=%s, skipped_errors=%s",
         sent_count,
         skipped_not_in_group,
         skipped_already_reminded,
-        skipped_trained_today,
-        skipped_below_threshold,
+        skipped_not_at_threshold,
         skipped_errors,
     )
 
@@ -1299,7 +1301,7 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     scheduler.add_job(send_evening_motivation, "cron", hour=21, minute=0, args=[bot])
     scheduler.add_job(send_weekly_streak_reminder, "cron", day_of_week="sun", hour=17, minute=0, args=[bot])
     scheduler.add_job(run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot])
-    scheduler.add_job(send_streak_at_risk_reminder, "cron", hour=20, minute=0, args=[bot])
+    scheduler.add_job(send_weekly_milestone_reminder, "cron", hour=19, minute=0, args=[bot])
     scheduler.add_job(send_rank_overtake_reminder, "cron", day_of_week="wed,sat", hour=13, minute=0, args=[bot])
 
     scheduler.add_job(

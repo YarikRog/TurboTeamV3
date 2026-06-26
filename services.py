@@ -1028,8 +1028,8 @@ class ActivityService:
 
         if streak_bonus > 0:
             await message.answer(
-                f"🔥 <b>STREAK BONUS!</b>\n"
-                f"Серія: <b>{streak_days}/{WEEKLY_STREAK_MAX}</b>\n"
+                f"🔥 <b>MILESTONE!</b>\n"
+                f"За цей тиждень у тебе <b>{streak_days}</b> тренувань\n"
                 f"+<b>{streak_bonus}</b> HP",
                 parse_mode="HTML",
             )
@@ -1043,10 +1043,10 @@ class ActivityService:
             await message.bot.send_message(
                 REPORTS_GROUP_ID,
                 (
-                    f"🔥 <b>STREAK BONUS!</b>\n\n"
-                    f"{mention_text} тримає серію: <b>{streak_days}/{WEEKLY_STREAK_MAX}</b>\n"
-                    f"+<b>{streak_bonus}</b> HP за дисципліну.\n\n"
-                    f"Оце вже не випадковість — це система 🏎️🔥"
+                    f"🔥 <b>MILESTONE!</b>\n\n"
+                    f"{mention_text} набрав <b>{streak_days}</b> тренувань за тиждень\n"
+                    f"+<b>{streak_bonus}</b> HP за наполегливість!\n\n"
+                    f"Так тримати! 🏎️💨"
                 ),
                 parse_mode="HTML",
             )
