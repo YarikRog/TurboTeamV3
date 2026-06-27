@@ -416,10 +416,26 @@ async def send_evening_motivation(bot) -> None:
     top3 = await build_top3_text()
     text = build_motivation_text("evening", top3)
 
+    additional_text = "\n\n<b>А поки що можеш перейти по кнопці в Мій профіль і подивитися свої результати 👇</b>"
+    text += additional_text
+
+    me = await bot.get_me()
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    )
+
     await bot.send_message(
         chat_id=REPORTS_GROUP_ID,
         text=text,
         parse_mode="HTML",
+        reply_markup=keyboard,
     )
     logger.info("[TASKS] Evening motivation sent")
 
