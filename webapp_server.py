@@ -126,6 +126,48 @@ async def _enforce_rate_limit(
     )
 
 
+async def _filter_active_in_period(rows: list, days: int) -> list:
+    """Фільтрує користувачів, активних за останні `days` днів"""
+    from datetime import timedelta
+    filtered = []
+    period_start = get_kyiv_now() - timedelta(days=days)
+
+    for row in rows:
+        telegram_user_id = row.get("telegram_user_id")
+        try:
+            user_row = await get_user_by_telegram_id(telegram_user_id)
+            if not user_row:
+                continue
+
+            user_uuid = str(user_row.get("id") or "")
+            if not user_uuid:
+                continue
+
+            activities = await get_user_activities(user_uuid, limit=1000)
+            has_recent = False
+
+            for activity in activities:
+                created_at_str = activity.get("created_at")
+                if not created_at_str:
+                    continue
+
+                try:
+                    from datetime import datetime
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if created_at.replace(tzinfo=None) >= period_start:
+                        has_recent = True
+                        break
+                except Exception:
+                    continue
+
+            if has_recent:
+                filtered.append(row)
+        except Exception:
+            continue
+
+    return filtered
+
+
 async def handle_profile(request: web.Request) -> web.Response:
     auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
     if not auth:
@@ -261,6 +303,7 @@ async def handle_rating(request: web.Request) -> web.Response:
         return limited
 
     rows = await get_all_time_rating()
+    rows = await _filter_active_in_period(rows, days=30)
 
     top = [
         {
@@ -307,6 +350,7 @@ async def handle_weekly_rating(request: web.Request) -> web.Response:
 
     period_start, period_end = get_current_week_period()
     rows = await get_weekly_rating(period_start, period_end)
+    rows = await _filter_active_in_period(rows, days=7)
 
     top = [
         {
