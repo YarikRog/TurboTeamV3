@@ -772,16 +772,29 @@ async def send_weekly_streak_reminder(bot) -> None:
             skipped_already_reminded += 1
             continue
 
-        mention_html = str(user.get("mention_html") or escape(str(user.get("nickname") or user_id)))
+        nickname = str(user.get("nickname") or user_id)
+
+        me = await bot.get_me()
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="👤 Мій профіль",
+                        url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                    ),
+                ]
+            ]
+        )
 
         try:
             await bot.send_message(
-                chat_id=REPORTS_GROUP_ID,
+                chat_id=user_id,
                 text=(
-                    f"🔥 {mention_html}, тиждень майже закінчився, а тренувань ще не було!\n"
+                    f"🔥 {escape(nickname)}, тиждень майже закінчився, а тренувань ще не було!\n"
                     f"Зроби хоча б одне тренування сьогодні — не лінуйся, ще встигнеш 💪"
                 ),
                 parse_mode="HTML",
+                reply_markup=keyboard,
             )
             await set_data(reminder_key, "1", ex=86400)
             reminded_count += 1
