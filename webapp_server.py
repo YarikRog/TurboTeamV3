@@ -270,7 +270,7 @@ async def handle_rating(request: web.Request) -> web.Response:
             "referrals_count": int(row.get("referrals_count", 0) or 0),
             "rank": int(row.get("rank", 0) or 0),
         }
-        for row in rows[:5]
+        for row in rows[:10]
     ]
 
     me = None
@@ -316,7 +316,7 @@ async def handle_weekly_rating(request: web.Request) -> web.Response:
             "referrals_count": int(row.get("referrals_count", 0) or 0),
             "rank": int(row.get("rank", 0) or 0),
         }
-        for row in rows[:5]
+        for row in rows[:10]
     ]
 
     me = None
