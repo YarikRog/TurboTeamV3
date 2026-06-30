@@ -8,9 +8,9 @@ from html import escape
 import pytz
 
 from aiogram import types
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID
+from config import RANDOM_HP_RANGE, HP_GYM, HP_STREET, HP_REST, HP_SKIP, REPORTS_GROUP_ID, PROFILE_WEB_APP_SHORT_NAME
 from cache import KeyManager, acquire_lock, get_data, redis_client, set_data
 from database import (
     get_kyiv_now,
@@ -1121,15 +1121,37 @@ class ActivityService:
                 else escape(str(user.full_name or user.first_name or 'Учасник'))
             )
 
+            level_up_text = (
+                f"🎖️ <b>НОВИЙ РІВЕНЬ У TURBOTEAM!</b>\n\n"
+                f"{mention_text} переходить на рівень:\n"
+                f"🔥 <b>{escape(str(new_status_title))}</b>\n\n"
+                f"Тренувань виконано: <b>{training_count}</b>\n\n"
+                f"<b>Та дивись свій рівень у вебапп 👇</b>"
+            )
+
+            try:
+                me = await message.bot.get_me()
+                bot_username = me.username
+            except Exception as e:
+                logger.warning("[SERVICE] Failed to get bot username for level-up keyboard: %s", e)
+                bot_username = None
+
+            level_up_kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="👤 Мій профіль",
+                            url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                        ),
+                    ]
+                ]
+            ) if bot_username else None
+
             await message.bot.send_message(
                 REPORTS_GROUP_ID,
-                (
-                    f"🎖️ <b>НОВИЙ РІВЕНЬ У TURBOTEAM!</b>\n\n"
-                    f"{mention_text} переходить на рівень:\n"
-                    f"🔥 <b>{escape(str(new_status_title))}</b>\n\n"
-                    f"Тренувань виконано: <b>{training_count}</b>"
-                ),
+                level_up_text,
                 parse_mode="HTML",
+                reply_markup=level_up_kb,
             )
 
         today = get_kyiv_now().strftime("%Y-%m-%d")
