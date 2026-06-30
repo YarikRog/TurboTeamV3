@@ -335,6 +335,23 @@ def get_kyiv_month_bounds_utc_strings(year: int, month: int) -> tuple[str, str]:
     )
 
 
+def get_last_finished_month_period() -> tuple[str, str]:
+    """Get the previous month's period (from 1st to 1st of next month) in UTC ISO format."""
+    now = get_kyiv_now()
+    current_month = now.month
+    current_year = now.year
+
+    # Get previous month
+    if current_month == 1:
+        prev_month = 12
+        prev_year = current_year - 1
+    else:
+        prev_month = current_month - 1
+        prev_year = current_year
+
+    return get_kyiv_month_bounds_utc_strings(prev_year, prev_month)
+
+
 async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[str, List[Dict[str, Any]]]:
     """All activities per Kyiv calendar day: {"YYYY-MM-DD": [{"action_name", "hp_change"}, ...]}."""
     period_from, period_to = get_kyiv_month_bounds_utc_strings(year, month)
