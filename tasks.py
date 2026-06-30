@@ -19,6 +19,7 @@ from database import (
     get_last_finished_week_period,
     get_current_week_period,
     get_consecutive_day_streak_status,
+    get_last_finished_month_period,
 )
 from supabase_db import (
     get_all_users,
@@ -1097,6 +1098,145 @@ async def send_weekly_personal_reports(bot) -> None:
     )
 
 
+def build_monthly_personal_report_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    )
+
+
+@safe_job
+async def send_monthly_personal_reports(bot) -> None:
+    """1st of each month at 07:00 Kyiv: sends everyone their monthly recap."""
+    users = await get_all_users()
+    if not users:
+        logger.info("[TASKS] Monthly personal report: no users")
+        return
+
+    period_start, period_end = get_last_finished_month_period()
+    me = await bot.get_me()
+    keyboard = build_monthly_personal_report_keyboard(me.username)
+
+    # Get month name in Ukrainian
+    now = get_kyiv_now()
+    if now.month == 1:
+        prev_month = 12
+        prev_year = now.year - 1
+    else:
+        prev_month = now.month - 1
+        prev_year = now.year
+
+    month_names = {
+        1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
+        5: "травня", 6: "червня", 7: "липня", 8: "серпня",
+        9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня"
+    }
+    month_name = month_names.get(prev_month, "місяця")
+
+    sent_count = 0
+    skipped_not_in_group = 0
+    skipped_no_activity = 0
+    skipped_errors = 0
+
+    for user in users:
+        telegram_user_id = user.get("telegram_user_id")
+        user_uuid = user.get("id")
+        if not telegram_user_id or not user_uuid:
+            continue
+
+        user_id = int(telegram_user_id)
+
+        in_group = await _is_user_in_group(bot, user_id)
+        if not in_group:
+            skipped_not_in_group += 1
+            continue
+
+        try:
+            activities = await get_user_activities_in_period(str(user_uuid), period_start, period_end)
+        except Exception as e:
+            logger.error(
+                f"[TASKS] Failed to get monthly activities for user_id={user_id}: {e}",
+                exc_info=True,
+            )
+            skipped_errors += 1
+            continue
+
+        if not activities:
+            skipped_no_activity += 1
+            continue
+
+        # Calculate statistics
+        gym_trainings = sum(1 for a in activities if a.get("action_name") == "Gym")
+        street_trainings = sum(1 for a in activities if a.get("action_name") == "Street")
+        total_trainings = gym_trainings + street_trainings
+        rest_days = sum(1 for a in activities if a.get("action_name") == "Rest")
+
+        # Calculate days with no activity (entire month days without any action)
+        period_start_dt = datetime.fromisoformat(period_start).astimezone(KYIV_TZ)
+        period_end_dt = datetime.fromisoformat(period_end).astimezone(KYIV_TZ)
+
+        # Get set of days with any activity
+        active_days = set()
+        for activity in activities:
+            created_at_str = activity.get("created_at")
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str)
+                    if created_at.tzinfo is None:
+                        created_at = pytz.UTC.localize(created_at)
+                    day_key = created_at.astimezone(KYIV_TZ).strftime("%Y-%m-%d")
+                    active_days.add(day_key)
+                except Exception:
+                    pass
+
+        # Count all days in the month
+        current_day = period_start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        total_month_days = 0
+        while current_day < period_end_dt:
+            total_month_days += 1
+            current_day += timedelta(days=1)
+
+        # Days with no activity
+        inactive_days = total_month_days - len(active_days)
+
+        text = (
+            f"Привіт! 👋 За минулий <b>{month_name}</b> у тебе було <b>{total_trainings}</b> тренувань.\n\n"
+            f"📊 <b>Статистика</b>:\n"
+            f"• <b>Всього тренувань</b>: {total_trainings}\n"
+            f"• 🏋️ <b>Gym</b>: {gym_trainings}\n"
+            f"• 🏃 <b>Street</b>: {street_trainings}\n"
+            f"• 😴 <b>Дні без активності</b>: {inactive_days}\n\n"
+            f"Ти можеш ознайомитися з календарем своїх тренувань по цій кнопці 👇\n\n"
+            f"Новий місяць — нові можливості! 🚀 Давай роби вітер і досягай своїх цілей! 💪"
+        )
+
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            sent_count += 1
+        except Exception as e:
+            logger.debug(f"[TASKS] Failed to send monthly personal report user_id={user_id}: {e}")
+            skipped_errors += 1
+
+    logger.info(
+        "[TASKS] Monthly personal report finished. Sent: %s, skipped_not_in_group=%s, skipped_no_activity=%s, skipped_errors=%s",
+        sent_count,
+        skipped_not_in_group,
+        skipped_no_activity,
+        skipped_errors,
+    )
+
+
 def build_weekly_milestone_keyboard(bot_username: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1332,6 +1472,7 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     scheduler.add_job(run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot])
     scheduler.add_job(send_weekly_milestone_reminder, "cron", hour=19, minute=0, args=[bot])
     scheduler.add_job(send_rank_overtake_reminder, "cron", day_of_week="wed,sat", hour=13, minute=0, args=[bot])
+    scheduler.add_job(send_monthly_personal_reports, "cron", day=1, hour=7, minute=0, args=[bot])
 
     scheduler.add_job(
         auto_unban_inactive_users,
