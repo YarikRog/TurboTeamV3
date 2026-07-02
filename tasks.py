@@ -1371,10 +1371,14 @@ async def send_rank_overtake_reminder(bot) -> None:
         previous_ranks = {}
 
     current_ranks = {}
+    rank_to_nickname = {}
     for row in current_rows:
         telegram_user_id = row.get("telegram_user_id")
+        rank = int(row.get("rank") or 0)
+        nickname = row.get("nickname") or row.get("nick") or "Учасник"
         if telegram_user_id:
-            current_ranks[str(telegram_user_id)] = int(row.get("rank") or 0)
+            current_ranks[str(telegram_user_id)] = rank
+            rank_to_nickname[rank] = nickname
 
     new_snapshot = {"week_start": period_start, "ranks": current_ranks}
 
@@ -1416,8 +1420,12 @@ async def send_rank_overtake_reminder(bot) -> None:
             skipped_already_reminded += 1
             continue
 
+        # Find who overtook this user (user with rank one position better)
+        overtaker_nickname = rank_to_nickname.get(current_rank - 1, "Учасник")
+        overtaker_text = f"@{escape(str(overtaker_nickname))}"
+
         text = (
-            "📉 Тебе обігнали в рейтингу!\n\n"
+            f"📉 <b>{overtaker_text}</b> обігнав тебе в рейтингу!\n\n"
             "Подивись актуальний рейтинг командою /rating або у вебапі 👇"
         )
 
