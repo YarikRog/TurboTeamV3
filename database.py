@@ -69,6 +69,18 @@ def get_seconds_until_kyiv_midnight() -> int:
     return max(1, int((next_midnight - now).total_seconds()))
 
 
+def get_kyiv_week_start_utc_string() -> str:
+    """Monday 00:00 Kyiv time of the current week, as a UTC ISO string."""
+    now = get_kyiv_now()
+    monday = (now - timedelta(days=now.weekday())).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    return monday.astimezone(pytz.UTC).isoformat()
+
+
 def _get_auto_removed_key(user_id: int) -> str:
     return f"{AUTO_REMOVE_REDIS_PREFIX}:{user_id}"
 
@@ -213,6 +225,11 @@ def _get_current_week_period() -> tuple[str, str]:
     return week_start.isoformat(), week_end.isoformat()
 
 
+def get_current_week_period() -> tuple[str, str]:
+    """Public wrapper for the current (in-progress) Sunday-20:00-Kyiv week window."""
+    return _get_current_week_period()
+
+
 def _get_current_week_period_dt() -> tuple[datetime, datetime]:
     now = get_kyiv_now()
     current_sunday_20 = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(
@@ -249,6 +266,11 @@ def _get_last_finished_week_period() -> tuple[str, str]:
     week_start = week_end - timedelta(days=7)
 
     return week_start.isoformat(), week_end.isoformat()
+
+
+def get_last_finished_week_period() -> tuple[str, str]:
+    """Public wrapper for the same Sunday-20:00-Kyiv window used by the weekly rating/reset job."""
+    return _get_last_finished_week_period()
 
 
 async def _get_supabase_user_row(user_id: int) -> Optional[Dict[str, Any]]:
@@ -313,6 +335,124 @@ def get_kyiv_month_bounds_utc_strings(year: int, month: int) -> tuple[str, str]:
     )
 
 
+def get_last_finished_month_period() -> tuple[str, str]:
+    """Get the previous month's period (from 1st to 1st of next month) in UTC ISO format."""
+    now = get_kyiv_now()
+    current_month = now.month
+    current_year = now.year
+
+    # Get previous month
+    if current_month == 1:
+        prev_month = 12
+        prev_year = current_year - 1
+    else:
+        prev_month = current_month - 1
+        prev_year = current_year
+
+    return get_kyiv_month_bounds_utc_strings(prev_year, prev_month)
+
+
+async def use_streak_save(user_id: int) -> bool:
+    """
+    Дозволяє юзеру використати Streak Save (один раз на місяц).
+    Без цього одне пропущене тренування скидає мультик на 1x.
+    """
+    month_str = get_kyiv_now().strftime("%Y-%m")
+    save_key = KeyManager.get_streak_save_key(user_id, month_str)
+
+    # Перевіряємо, чи вже використав
+    already_used = await get_data(save_key)
+    if already_used is not None:
+        return False
+
+    # Позначаємо як використане на цей місяц
+    ttl_days = 30
+    await set_data(save_key, "1", ex=ttl_days * 24 * 60 * 60)
+
+    logger.info(f"[STREAK] User {user_id} used Streak Save for month {month_str}")
+    return True
+
+
+async def get_user_streak_multiplier(user_id: int) -> dict:
+    """
+    Розраховує поточний мультик HP юзера за послідовними днями активності.
+
+    Returns:
+    {
+      "consecutive_days": int,
+      "multiplier": float (1.0, 1.5, 2.0, 3.0, 5.0),
+      "next_milestone": int,
+      "has_save_available": bool
+    }
+    """
+    user_uuid = await get_cached_supabase_user_id(user_id)
+    if not user_uuid:
+        return {
+            "consecutive_days": 0,
+            "multiplier": 1.0,
+            "next_milestone": 3,
+            "has_save_available": False
+        }
+
+    try:
+        activities = await get_user_activities(str(user_uuid), limit=100)
+    except Exception as e:
+        logger.error(f"[STREAK] Failed to get activities: {e}")
+        return {
+            "consecutive_days": 0,
+            "multiplier": 1.0,
+            "next_milestone": 3,
+            "has_save_available": False
+        }
+
+    # Рахуємо послідовні дні з активністю
+    consecutive_days = 0
+    current_date = get_kyiv_now().date()
+
+    for i in range(60):
+        check_date = current_date - timedelta(days=i)
+        has_activity = any(
+            a for a in activities
+            if a.get("action_name") in ("Gym", "Street", "Rest", "Skip", "Weekly Challenge")
+            and _parse_activity_created_at(a.get("created_at"))
+            and _parse_activity_created_at(a.get("created_at")).date() == check_date
+        )
+        if has_activity:
+            consecutive_days += 1
+        else:
+            break
+
+    # Визначаємо мультик за днями
+    if consecutive_days <= 3:
+        multiplier = 1.0
+        next_milestone = 3
+    elif consecutive_days <= 7:
+        multiplier = 1.5
+        next_milestone = 7
+    elif consecutive_days <= 14:
+        multiplier = 2.0
+        next_milestone = 14
+    elif consecutive_days <= 30:
+        multiplier = 3.0
+        next_milestone = 30
+    else:
+        multiplier = 5.0
+        next_milestone = 999
+
+    # Перевіряємо доступність Streak Save
+    today_str = get_kyiv_now().strftime("%Y-%m")
+    save_key = KeyManager.get_streak_save_key(user_id, today_str)
+    has_save = await get_data(save_key)
+    has_save_available = has_save is None
+
+    return {
+        "consecutive_days": consecutive_days,
+        "multiplier": multiplier,
+        "next_milestone": next_milestone,
+        "has_save_available": has_save_available
+    }
+
+
 async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[str, List[Dict[str, Any]]]:
     """All activities per Kyiv calendar day: {"YYYY-MM-DD": [{"action_name", "hp_change"}, ...]}."""
     period_from, period_to = get_kyiv_month_bounds_utc_strings(year, month)
@@ -371,6 +511,37 @@ def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
 
     valid_training_count = max(0, training_count - rollback_count)
     return min(valid_training_count, WEEKLY_STREAK_MAX)
+
+
+def get_consecutive_day_streak_status(activities: List[Dict[str, Any]]) -> tuple[int, bool]:
+    """
+    Consecutive-calendar-day Gym/Street streak (same definition as ratings.py's /rating
+    display), split into the streak already locked in through yesterday and whether
+    today already has a training. Used by the "streak is about to burn" reminder.
+    """
+    training_dates = set()
+
+    for activity in activities:
+        action_name = str(activity.get("action_name", "")).strip()
+        if action_name not in {"Gym", "Street"}:
+            continue
+
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if not created_at:
+            continue
+
+        training_dates.add(created_at.date())
+
+    today = get_kyiv_now().date()
+    trained_today = today in training_dates
+
+    streak = 0
+    cursor = today - timedelta(days=1)
+    while cursor in training_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return streak, trained_today
 
 
 def _get_last_real_activity_date(activities: List[Dict[str, Any]]) -> Optional[datetime.date]:

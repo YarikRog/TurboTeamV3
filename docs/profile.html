@@ -82,6 +82,77 @@
   .hero-msg { font-size: 15px; font-weight: 800; margin-top: 12px; }
   .hero-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
+  /* ---------- STREAK MULTIPLIER ---------- */
+  .streak-multiplier {
+    background: linear-gradient(135deg, rgba(255,90,31,0.12), rgba(255,200,40,0.08));
+    border: 1px solid rgba(255,90,31,0.25);
+    border-radius: 16px;
+    padding: 12px 14px;
+    margin-top: 14px;
+  }
+  .streak-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .streak-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .streak-value {
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--gold);
+  }
+  .streak-bar-wrap {
+    position: relative;
+    height: 8px;
+    background: var(--card-2);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .streak-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius: 999px;
+    transition: width 0.8s cubic-bezier(.34,1.2,.4,1);
+    box-shadow: 0 0 8px rgba(255,90,31,0.4);
+  }
+  .streak-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .streak-days {
+    font-weight: 700;
+    color: var(--text);
+  }
+  .streak-next {
+    color: var(--muted);
+  }
+  .streak-save-btn {
+    width: 100%;
+    background: rgba(255,90,31,0.15);
+    border: 1px solid rgba(255,90,31,0.4);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .12s ease;
+  }
+  .streak-save-btn:active {
+    transform: scale(0.96);
+    background: rgba(255,90,31,0.25);
+  }
+
   .quick-row { display: flex; gap: 8px; margin-top: 16px; }
   .quick-pill {
     flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border);
@@ -469,6 +540,25 @@
         <div class="hero-msg" id="heroMsg">—</div>
         <div class="hero-sub" id="heroSub">—</div>
 
+        <!-- STREAK MULTIPLIER BLOCK -->
+        <div class="streak-multiplier">
+          <div class="streak-header">
+            <span class="streak-label">🔥 Мультик HP</span>
+            <span class="streak-value" id="streakMultiplier">1x</span>
+          </div>
+          <div class="streak-bar-wrap">
+            <div class="streak-bar-bg"></div>
+            <div class="streak-bar-fill" id="streakBarFill" style="width: 0%"></div>
+          </div>
+          <div class="streak-info">
+            <div class="streak-days" id="streakDays">0 днів підряд</div>
+            <div class="streak-next" id="streakNext">До 1.5x: 4 дні</div>
+          </div>
+          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display: none;">
+            🆘 Страховка (1/мес)
+          </button>
+        </div>
+
         <div class="quick-row">
           <div class="quick-pill">
             <div class="q-label">⚡ HP</div>
@@ -663,6 +753,80 @@
     el.style.animation = "countPulse .5s ease";
   }
 
+  async function loadStreakMultiplier(userId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/${userId}/streak`, {
+        headers: authHeaders()
+      });
+      const streakData = await response.json();
+      renderStreakMultiplier(streakData);
+    } catch (e) {
+      console.error("[STREAK] Failed to load:", e);
+    }
+  }
+
+  function renderStreakMultiplier(data) {
+    const { consecutive_days, multiplier, next_milestone } = data;
+
+    // Обновляем значение мультика
+    document.getElementById("streakMultiplier").textContent = `${multiplier}x`;
+
+    // Обновляем информацию о днях
+    document.getElementById("streakDays").textContent = `${consecutive_days} днів підряд`;
+
+    // Рассчитываем прогрес до следующего мільйона
+    let progressText = "Максимум достигнут!";
+    let progress = 100;
+
+    if (consecutive_days < 3) {
+      progressText = `До 1x: ${3 - consecutive_days} дн`;
+      progress = (consecutive_days / 3) * 100;
+    } else if (consecutive_days < 7) {
+      progressText = `До 1.5x: ${7 - consecutive_days} дн`;
+      progress = ((consecutive_days - 3) / 4) * 100;
+    } else if (consecutive_days < 14) {
+      progressText = `До 2x: ${14 - consecutive_days} дн`;
+      progress = ((consecutive_days - 7) / 7) * 100;
+    } else if (consecutive_days < 30) {
+      progressText = `До 3x: ${30 - consecutive_days} дн`;
+      progress = ((consecutive_days - 14) / 16) * 100;
+    } else if (consecutive_days < 999) {
+      progressText = `До 5x: ${999 - consecutive_days} дн`;
+      progress = 100;
+    }
+
+    document.getElementById("streakNext").textContent = progressText;
+    document.getElementById("streakBarFill").style.width = Math.min(progress, 100) + "%";
+
+    // Показываем кнопку Save только если нужна
+    const saveBtn = document.getElementById("streakSaveBtn");
+    if (data.has_save_available) {
+      saveBtn.style.display = "block";
+    } else {
+      saveBtn.style.display = "none";
+    }
+  }
+
+  async function useStreakSave() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/me/streak/save`, {
+        method: "POST",
+        headers: authHeaders()
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        alert("🆘 Страховка використана! Стрік збережено на один день");
+        loadStreakMultiplier(tg.initDataUnsafe.user.id);
+      } else {
+        alert(result.message || "❌ Не вдалося використати страховку");
+      }
+    } catch (e) {
+      console.error("[STREAK SAVE] Error:", e);
+      alert("⚠️ Помилка при використанні страховки");
+    }
+  }
+
   function renderToday(data) {
     document.getElementById("greetName").textContent = data.nickname || "Гравець";
     document.getElementById("ringStreak").innerHTML = `${data.streak}<small>/${data.streak_max}</small>`;
@@ -676,6 +840,11 @@
     pulseOnChange(hpEl, data.hp_total);
     document.getElementById("statusValue").textContent = data.status || "—";
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
+
+    // Загружаем данные о Streak Multiplier
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      loadStreakMultiplier(tg.initDataUnsafe.user.id);
+    }
   }
 
   function renderFeed(items) {
