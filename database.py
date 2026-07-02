@@ -355,7 +355,7 @@ def get_last_finished_month_period() -> tuple[str, str]:
 async def use_streak_save(user_id: int) -> bool:
     """
     Дозволяє юзеру використати Streak Save (один раз на місяц).
-    Без цього одне пропущене тренування скидає мультик на 1x.
+    Страховка цього місяця.
     """
     month_str = get_kyiv_now().strftime("%Y-%m")
     save_key = KeyManager.get_streak_save_key(user_id, month_str)
@@ -375,12 +375,13 @@ async def use_streak_save(user_id: int) -> bool:
 
 async def get_user_streak_multiplier(user_id: int) -> dict:
     """
-    Розраховує поточний мультик HP юзера за послідовними днями активності.
+    Розраховує поточний мультик HP юзера за кількістю тренувань цього місяця.
+    Множник скидається першого числа наступного місяця.
 
     Returns:
     {
-      "consecutive_days": int,
-      "multiplier": float (1.0, 1.5, 2.0, 3.0, 5.0),
+      "training_count": int,
+      "multiplier": float (1.0, 1.5, 2.0, 3.0),
       "next_milestone": int,
       "has_save_available": bool
     }
@@ -388,56 +389,56 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
     user_uuid = await get_cached_supabase_user_id(user_id)
     if not user_uuid:
         return {
-            "consecutive_days": 0,
+            "training_count": 0,
             "multiplier": 1.0,
             "next_milestone": 3,
             "has_save_available": False
         }
 
     try:
-        activities = await get_user_activities(str(user_uuid), limit=100)
+        # Отримуємо границі поточного місяця
+        now = get_kyiv_now()
+        month_start_kyiv = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            next_month_start = now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            next_month_start = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        period_from = month_start_kyiv.astimezone(pytz.UTC).isoformat()
+        period_to = next_month_start.astimezone(pytz.UTC).isoformat()
+
+        activities = await get_user_activities_in_period(str(user_uuid), period_from, period_to, limit=1000)
     except Exception as e:
         logger.error(f"[STREAK] Failed to get activities: {e}")
         return {
-            "consecutive_days": 0,
+            "training_count": 0,
             "multiplier": 1.0,
             "next_milestone": 3,
             "has_save_available": False
         }
 
-    # Рахуємо послідовні дні з активністю
-    consecutive_days = 0
-    current_date = get_kyiv_now().date()
+    # Рахуємо тренування Gym/Street цього місяця
+    training_count = sum(
+        1 for a in activities
+        if a.get("action_name") in ("Gym", "Street")
+    )
 
-    for i in range(60):
-        check_date = current_date - timedelta(days=i)
-        has_activity = any(
-            a for a in activities
-            if a.get("action_name") in ("Gym", "Street", "Rest", "Skip", "Weekly Challenge")
-            and _parse_activity_created_at(a.get("created_at"))
-            and _parse_activity_created_at(a.get("created_at")).date() == check_date
-        )
-        if has_activity:
-            consecutive_days += 1
-        else:
-            break
-
-    # Визначаємо мультик за днями
-    if consecutive_days <= 3:
+    # Визначаємо мультик за кількістю тренувань
+    if training_count < 3:
         multiplier = 1.0
         next_milestone = 3
-    elif consecutive_days <= 7:
-        multiplier = 1.5
+    elif training_count < 7:
+        multiplier = 1.0
         next_milestone = 7
-    elif consecutive_days <= 14:
-        multiplier = 2.0
+    elif training_count < 14:
+        multiplier = 1.5
         next_milestone = 14
-    elif consecutive_days <= 30:
-        multiplier = 3.0
+    elif training_count < 30:
+        multiplier = 2.0
         next_milestone = 30
     else:
-        multiplier = 5.0
-        next_milestone = 999
+        multiplier = 3.0
+        next_milestone = 30
 
     # Перевіряємо доступність Streak Save
     today_str = get_kyiv_now().strftime("%Y-%m")
@@ -446,7 +447,7 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
     has_save_available = has_save is None
 
     return {
-        "consecutive_days": consecutive_days,
+        "training_count": training_count,
         "multiplier": multiplier,
         "next_milestone": next_milestone,
         "has_save_available": has_save_available
