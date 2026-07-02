@@ -20,6 +20,7 @@ from database import (
     get_cached_supabase_user_id,
     get_kyiv_day_bounds_utc_strings,
     get_seconds_until_kyiv_midnight,
+    get_user_streak_multiplier,
 )
 from phrases import get_phrase
 from config import GROUP_LINK
@@ -981,15 +982,24 @@ class ActivityService:
     async def process_training_full_cycle(message: Message, action_type: str) -> bool:
         """
         Full training orchestration:
-        1. calculate HP
+        1. calculate HP with streak multiplier
         2. write activity
         3. publish report to group with complaint button
         4. save mapping for manual/admin rollback
         """
         user = message.from_user
         nickname = user.full_name
-        hp = ActivityService.calculate_training_hp(action_type)
+        base_hp = ActivityService.calculate_training_hp(action_type)
         video_id = message.video_note.file_id if message.video_note else ""
+
+        streak_info = await get_user_streak_multiplier(user.id)
+        multiplier = streak_info.get("multiplier", 1.0)
+        hp = int(base_hp * multiplier)
+
+        logger.info(
+            f"[SERVICE] Streak multiplier applied: uid={user.id} "
+            f"base_hp={base_hp} multiplier={multiplier}x final_hp={hp}"
+        )
 
         granted, streak_bonus, streak_days = await ActivityService.grant_hp(
             user.id,
@@ -1021,8 +1031,9 @@ class ActivityService:
             ]
         )
 
+        multiplier_text = f" 🔥 x{multiplier}" if multiplier > 1.0 else ""
         await message.answer(
-            f"✅ {action_type} зафіксовано. +{hp} HP",
+            f"✅ {action_type} зафіксовано. +{hp} HP{multiplier_text}",
             reply_markup=back_to_group_kb,
         )
 
