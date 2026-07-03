@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
-from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK
+from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK, PROFILE_WEB_APP_SHORT_NAME
 from cache import get_data, set_flag, delete_data, KeyManager
 from database import check_user_exists, get_currently_banned_telegram_ids, update_user_activity
 from referral import send_invite_prompt
@@ -910,6 +910,55 @@ async def handle_broadcast(message: Message):
     safe_create_task(
         _run_broadcast(message.bot, status.chat.id, status.message_id, target.text, target.entities)
     )
+
+
+@router.message(Command("announce_multiplier"))
+async def handle_announce_multiplier(message: Message):
+    """Одноразове оголошення в групу про нову систему множника HP (тільки адмін)."""
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    announce_text = (
+        "🔥 <b>НОВА СИСТЕМА HP — МНОЖНИК!</b>\n\n"
+        "Тепер твій HP за тренування множиться залежно від того, "
+        "скільки тренувань ти зробив цього місяця:\n\n"
+        "💪 7 тренувань — множник <b>1.5x</b>\n"
+        "💪💪 14 тренувань — множник <b>2x</b>\n"
+        "💪💪💪 30 тренувань — множник <b>3x</b> (максимум)\n\n"
+        "Приклад: тренування дає 110 HP, множник 2x → отримуєш <b>220 HP</b> 😎\n\n"
+        "✅ Тренування, які ти вже зробив цього місяця, вже зараховано в лічильник.\n\n"
+        "🔄 1-го числа кожного місяця лічильник обнуляється — "
+        "і гонка починається заново 🏎️\n\n"
+        "Свій множник і прогрес дивись у профілі 👇"
+    )
+
+    try:
+        me = await message.bot.get_me()
+        bot_username = me.username
+    except Exception as e:
+        logger.warning("[HANDLERS] Failed to get bot username for announce keyboard: %s", e)
+        bot_username = None
+
+    announce_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
+            ]
+        ]
+    ) if bot_username else None
+
+    await message.bot.send_message(
+        REPORTS_GROUP_ID,
+        announce_text,
+        parse_mode="HTML",
+        reply_markup=announce_kb,
+    )
+
+    sent = await message.answer("✅ Оголошення про множник відправлено в групу")
+    safe_create_task(auto_delete(sent, 10))
 
 
 @router.message(F.text == "🏎️ ПОВЕРНУТИСЯ В ГРУПУ")
