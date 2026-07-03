@@ -38,12 +38,7 @@ from supabase_db import (
     get_supabase,
     get_user_by_telegram_id,
     get_user_by_nickname,
-    create_user,
     delete_user_by_id,
-    add_activity,
-    add_referral,
-    get_referrals_count,
-    get_user_activities_count,
     get_top_webapp_opens,
 )
 
@@ -170,133 +165,6 @@ async def webapp_top_opens(message: types.Message):
         lines.append(f"{i}. {nickname} — {open_count}")
 
     await message.answer("\n".join(lines))
-
-
-@dp.message(Command("sbadd"))
-async def supabase_add_user(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        telegram_user_id = message.from_user.id
-        nickname = message.from_user.username or message.from_user.first_name
-
-        existing_user = await get_user_by_telegram_id(telegram_user_id)
-        if existing_user:
-            await message.answer(
-                "ℹ️ Юзер уже є в Supabase\n"
-                f"nickname: {existing_user.get('nickname')}\n"
-                f"telegram_user_id: {existing_user.get('telegram_user_id')}"
-            )
-            return
-
-        new_user = await create_user(
-            telegram_user_id=telegram_user_id,
-            nickname=nickname,
-        )
-
-        await message.answer(
-            "✅ Юзера створено в Supabase\n"
-            f"id: {new_user.get('id')}\n"
-            f"nickname: {new_user.get('nickname')}\n"
-            f"telegram_user_id: {new_user.get('telegram_user_id')}"
-        )
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbadd error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add user failed. Дивись логи.")
-
-
-@dp.message(Command("sbaddactivity"))
-async def supabase_add_activity(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        telegram_user_id = message.from_user.id
-        existing_user = await get_user_by_telegram_id(telegram_user_id)
-
-        if not existing_user:
-            await message.answer("❌ Юзера немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        await add_activity(
-            user_id=existing_user["id"],
-            action_name="Gym",
-            hp_change=100,
-            video_status="✅",
-            video_id="sbtest-video",
-        )
-
-        await message.answer("✅ Активність додано в Supabase")
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbaddactivity error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add activity failed. Дивись логи.")
-
-
-@dp.message(Command("sbaddref"))
-async def supabase_add_ref(message: types.Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        args = (command.args or "").strip()
-        if not args.isdigit():
-            await message.answer("❌ Використання: /sbaddref 1118823479")
-            return
-
-        new_user = await get_user_by_telegram_id(message.from_user.id)
-        if not new_user:
-            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        referrer_telegram_id = int(args)
-        referrer_user = await get_user_by_telegram_id(referrer_telegram_id)
-        if not referrer_user:
-            await message.answer("❌ Реферера з таким Telegram ID немає в Supabase")
-            return
-
-        if referrer_user["id"] == new_user["id"]:
-            await message.answer("❌ Не можна створити реферал самому собі")
-            return
-
-        await add_referral(
-            referrer_user_id=referrer_user["id"],
-            new_user_id=new_user["id"],
-            points=150,
-        )
-
-        await message.answer("✅ Реферал додано в Supabase")
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbaddref error: {e}", exc_info=True)
-        await message.answer("❌ Supabase add referral failed. Дивись логи.")
-
-
-@dp.message(Command("sbme"))
-async def supabase_me(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    try:
-        telegram_user_id = message.from_user.id
-        user = await get_user_by_telegram_id(telegram_user_id)
-
-        if not user:
-            await message.answer("❌ Тебе немає в Supabase. Спочатку виконай /sbadd")
-            return
-
-        activities_count = await get_user_activities_count(user["id"])
-        referrals_count = await get_referrals_count(user["id"])
-
-        await message.answer(
-            "🧠 Дані з Supabase\n"
-            f"nickname: {user.get('nickname')}\n"
-            f"telegram_user_id: {user.get('telegram_user_id')}\n"
-            f"activities: {activities_count}\n"
-            f"referrals: {referrals_count}"
-        )
-    except Exception as e:
-        logger.error(f"[SUPABASE] /sbme error: {e}", exc_info=True)
-        await message.answer("❌ Supabase read failed. Дивись логи.")
 
 
 @dp.message(Command("wipeuser"))
