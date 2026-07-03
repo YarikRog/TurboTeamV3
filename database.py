@@ -391,21 +391,14 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
         return {
             "training_count": 0,
             "multiplier": 1.0,
-            "next_milestone": 3,
+            "next_milestone": 7,
             "has_save_available": False
         }
 
     try:
-        # Отримуємо границі поточного місяця
+        # Межі поточного календарного місяця (Київ) у UTC
         now = get_kyiv_now()
-        month_start_kyiv = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if now.month == 12:
-            next_month_start = now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            next_month_start = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-
-        period_from = month_start_kyiv.astimezone(pytz.UTC).isoformat()
-        period_to = next_month_start.astimezone(pytz.UTC).isoformat()
+        period_from, period_to = get_kyiv_month_bounds_utc_strings(now.year, now.month)
 
         activities = await get_user_activities_in_period(str(user_uuid), period_from, period_to, limit=1000)
     except Exception as e:
@@ -413,7 +406,7 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
         return {
             "training_count": 0,
             "multiplier": 1.0,
-            "next_milestone": 3,
+            "next_milestone": 7,
             "has_save_available": False
         }
 
@@ -424,10 +417,7 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
     )
 
     # Визначаємо мультик за кількістю тренувань
-    if training_count < 3:
-        multiplier = 1.0
-        next_milestone = 3
-    elif training_count < 7:
+    if training_count < 7:
         multiplier = 1.0
         next_milestone = 7
     elif training_count < 14:

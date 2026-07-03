@@ -551,8 +551,8 @@
             <div class="streak-bar-fill" id="streakBarFill" style="width: 0%"></div>
           </div>
           <div class="streak-info">
-            <div class="streak-days" id="streakDays">0 днів підряд</div>
-            <div class="streak-next" id="streakNext">До 1.5x: 4 дні</div>
+            <div class="streak-days" id="streakDays">0 тренувань цього місяця</div>
+            <div class="streak-next" id="streakNext">До 1.5x: 7 тренувань</div>
           </div>
           <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display: none;">
             🆘 Страховка (1/мес)
@@ -766,7 +766,8 @@
   }
 
   function renderStreakMultiplier(data) {
-    const { training_count, multiplier, next_milestone } = data;
+    if (!data || typeof data.multiplier !== "number") return;
+    const { training_count, multiplier } = data;
 
     // Обновляем значение мультика
     document.getElementById("streakMultiplier").textContent = `${multiplier}x`;
@@ -774,37 +775,27 @@
     // Обновляем информацию о тренуваннях
     document.getElementById("streakDays").textContent = `${training_count} тренувань цього місяця`;
 
-    // Рассчитываем прогрес до следующего мільйона
+    // Прогрес до наступного множника
     let progressText = "🎉 Максимум 3x досягнуто!";
     let progress = 100;
 
-    if (training_count < 3) {
-      progressText = `До 1x: ${3 - training_count} тренувань`;
-      progress = (training_count / 3) * 100;
-    } else if (training_count < 7) {
+    if (training_count < 7) {
       progressText = `До 1.5x: ${7 - training_count} тренувань`;
-      progress = ((training_count - 3) / 4) * 100;
+      progress = (training_count / 7) * 100;
     } else if (training_count < 14) {
       progressText = `До 2x: ${14 - training_count} тренувань`;
       progress = ((training_count - 7) / 7) * 100;
     } else if (training_count < 30) {
       progressText = `До 3x: ${30 - training_count} тренувань`;
       progress = ((training_count - 14) / 16) * 100;
-    } else {
-      progressText = `🎉 Максимум 3x досягнуто!`;
-      progress = 100;
     }
 
     document.getElementById("streakNext").textContent = progressText;
     document.getElementById("streakBarFill").style.width = Math.min(progress, 100) + "%";
 
-    // Показываем кнопку Save только если нужна
+    // Streak Save поки вимкнено — кнопку не показуємо
     const saveBtn = document.getElementById("streakSaveBtn");
-    if (data.has_save_available) {
-      saveBtn.style.display = "block";
-    } else {
-      saveBtn.style.display = "none";
-    }
+    saveBtn.style.display = "none";
   }
 
   async function useStreakSave() {

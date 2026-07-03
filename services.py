@@ -1031,7 +1031,7 @@ class ActivityService:
             ]
         )
 
-        multiplier_text = f" 🔥 x{multiplier}" if multiplier > 1.0 else ""
+        multiplier_text = f" 🔥 x{multiplier:g}" if multiplier > 1.0 else ""
         await message.answer(
             f"✅ {action_type} зафіксовано. +{hp} HP{multiplier_text}",
             reply_markup=back_to_group_kb,
@@ -1098,9 +1098,13 @@ class ActivityService:
         report_nickname = f"@{safe_display_name}" if user.username else safe_display_name
         report_nickname_html = escape(str(report_nickname))
 
+        hp_line = f"+{hp} HP"
+        if multiplier > 1.0:
+            hp_line += f" з множником х{multiplier:g} 😎"
+
         report_text = (
             f"{get_phrase('report', nickname=report_nickname_html)}\n"
-            f"+{hp} HP"
+            f"{hp_line}"
         )
 
         if action_type in ["Gym", "Street"]:
