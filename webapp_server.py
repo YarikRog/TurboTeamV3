@@ -17,7 +17,7 @@ from alerts import notify_admins_about_error
 from cache import KeyManager, check_rate_limit, delete_data, get_data, set_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
-    get_all_time_rating,
+    get_monthly_rating,
     get_current_week_period,
     get_kyiv_now,
     get_user_calendar_month,
@@ -260,7 +260,7 @@ async def handle_rating(request: web.Request) -> web.Response:
     if limited:
         return limited
 
-    rows = await get_all_time_rating()
+    rows = await get_monthly_rating()
 
     top = [
         {

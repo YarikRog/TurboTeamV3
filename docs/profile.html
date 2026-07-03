@@ -616,7 +616,7 @@
     <div class="screen" id="screen-rating">
       <div class="rating-switch">
         <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
-        <button id="ratingTabAll" onclick="switchRatingPeriod('all')">За весь час</button>
+        <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
       </div>
       <div class="section-title" style="margin-top:0;" id="ratingTitle">Рейтинг тижня</div>
       <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
@@ -1088,7 +1088,7 @@
   function switchRatingPeriod(period) {
     document.getElementById("ratingTabWeek").classList.toggle("active", period === "week");
     document.getElementById("ratingTabAll").classList.toggle("active", period === "all");
-    document.getElementById("ratingTitle").textContent = period === "week" ? "Рейтинг тижня" : "Загальний рейтинг · за весь час";
+    document.getElementById("ratingTitle").textContent = period === "week" ? "Рейтинг тижня" : "Рейтинг місяця";
     loadRatingPeriod(period).then(animateRanks);
   }
 
