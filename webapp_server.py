@@ -471,29 +471,37 @@ async def handle_streak(request: web.Request) -> web.Response:
     """GET /api/user/{user_id}/streak - Get current streak multiplier"""
     from database import get_user_streak_multiplier
 
-    auth_result = await verify_request(request)
-    if isinstance(auth_result, web.Response):
-        return auth_result
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
 
-    telegram_user_id = auth_result
+    telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "streak", 30, 30)
+    if limited:
+        return limited
 
     try:
         streak_data = await get_user_streak_multiplier(telegram_user_id)
         return web.json_response(streak_data)
     except Exception as e:
         logger.error(f"[STREAK] Error getting streak: {e}", exc_info=True)
-        return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({"error": "internal error"}, status=500)
 
 
 async def handle_streak_save(request: web.Request) -> web.Response:
     """POST /api/user/me/streak/save - Use Streak Save"""
     from database import use_streak_save
 
-    auth_result = await verify_request(request)
-    if isinstance(auth_result, web.Response):
-        return auth_result
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
 
-    telegram_user_id = auth_result
+    telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "streak_save", 5, 60)
+    if limited:
+        return limited
 
     try:
         success = await use_streak_save(telegram_user_id)
@@ -509,7 +517,7 @@ async def handle_streak_save(request: web.Request) -> web.Response:
             }, status=400)
     except Exception as e:
         logger.error(f"[STREAK SAVE] Error: {e}", exc_info=True)
-        return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({"error": "internal error"}, status=500)
 
 
 def create_webapp_app(bot: Bot) -> web.Application:
