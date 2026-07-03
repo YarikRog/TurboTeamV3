@@ -457,7 +457,7 @@ async def handle_streak_save(request: web.Request) -> web.Response:
         else:
             return web.json_response({
                 "success": False,
-                "message": "❌ Вже використав救命項目 цього місяця"
+                "message": "❌ Страховку цього місяця вже використано"
             }, status=400)
     except Exception as e:
         logger.error(f"[STREAK SAVE] Error: {e}", exc_info=True)
