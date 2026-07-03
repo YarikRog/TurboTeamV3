@@ -976,6 +976,19 @@ async def get_all_time_rating() -> List[Dict[str, Any]]:
         return []
 
 
+async def get_monthly_rating() -> List[Dict[str, Any]]:
+    """All users ranked by HP earned in the current Kyiv calendar month.
+    Resets on the 1st of each month, giving everyone a fresh start."""
+    try:
+        now = get_kyiv_now()
+        period_start, period_end = get_kyiv_month_bounds_utc_strings(now.year, now.month)
+        ranking_rows = await get_weekly_rating(period_start, period_end)
+        return ranking_rows
+    except Exception as e:
+        logger.error(f"[DB] failed to build monthly rating: {e}", exc_info=True)
+        return []
+
+
 # ==============================================================================
 # ACTIVITY FEED ("Останнє в стрічці")
 # ==============================================================================
