@@ -371,6 +371,21 @@ async def log_webapp_event(
         logger.error(f"[SUPABASE] Failed to log webapp event {event_name}: {e}")
 
 
+async def get_top_webapp_opens(period_start: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def _query():
+        sb = get_supabase()
+        return sb.rpc(
+            "get_top_webapp_opens",
+            {
+                "p_period_start": period_start,
+                "p_limit": limit,
+            },
+        ).execute()
+
+    response = await _run_sync(_query)
+    return response.data or []
+
+
 async def get_referrals_count(referrer_user_id: str) -> int:
     def _query():
         sb = get_supabase()

@@ -18,6 +18,7 @@ from cache import KeyManager, check_rate_limit, delete_data, get_data, set_data
 from config import BOT_TOKEN, GROUP_LINK, WEBAPP_CORS_ORIGIN
 from database import (
     get_all_time_rating,
+    get_current_week_period,
     get_kyiv_now,
     get_user_calendar_month,
     get_user_feed,
@@ -31,12 +32,13 @@ from supabase_db import (
     get_user_achievements,
     get_user_activities,
     get_user_by_telegram_id,
+    get_weekly_rating,
     log_webapp_event,
 )
 
 logger = logging.getLogger(__name__)
 
-INIT_DATA_MAX_AGE_SECONDS = 86400
+INIT_DATA_MAX_AGE_SECONDS = 3600
 
 
 def verify_init_data(init_data: str, bot_token: str) -> Optional[Dict[str, Any]]:
@@ -268,7 +270,53 @@ async def handle_rating(request: web.Request) -> web.Response:
             "referrals_count": int(row.get("referrals_count", 0) or 0),
             "rank": int(row.get("rank", 0) or 0),
         }
-        for row in rows[:5]
+        for row in rows[:10]
+    ]
+
+    me = None
+    for row in rows:
+        if int(row.get("telegram_user_id") or 0) == int(telegram_user_id):
+            me = {
+                "telegram_user_id": row.get("telegram_user_id"),
+                "nick": row.get("nick") or f"ID:{telegram_user_id}",
+                "hp": int(row.get("hp", 0) or 0),
+                "referrals_count": int(row.get("referrals_count", 0) or 0),
+                "rank": int(row.get("rank", 0) or 0),
+            }
+            break
+
+    return web.json_response(
+        {
+            "top": top,
+            "me": me,
+            "total_users": len(rows),
+        }
+    )
+
+
+async def handle_weekly_rating(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    telegram_user_id = auth["telegram_user_id"]
+
+    limited = await _enforce_rate_limit(request, telegram_user_id, "rating_week", 30, 30)
+    if limited:
+        return limited
+
+    period_start, period_end = get_current_week_period()
+    rows = await get_weekly_rating(period_start, period_end)
+
+    top = [
+        {
+            "telegram_user_id": row.get("telegram_user_id"),
+            "nick": row.get("nick") or f"ID:{row.get('telegram_user_id', 'unknown')}",
+            "hp": int(row.get("hp", 0) or 0),
+            "referrals_count": int(row.get("referrals_count", 0) or 0),
+            "rank": int(row.get("rank", 0) or 0),
+        }
+        for row in rows[:10]
     ]
 
     me = None
@@ -469,6 +517,7 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app["bot"] = bot
     app.router.add_get("/api/profile", handle_profile)
     app.router.add_get("/api/rating", handle_rating)
+    app.router.add_get("/api/rating/week", handle_weekly_rating)
     app.router.add_get("/api/feed", handle_feed)
     app.router.add_get("/api/user/{user_id}/streak", handle_streak)
     app.router.add_post("/api/share-achievement", handle_share_achievement)
@@ -476,6 +525,7 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app.router.add_post("/api/user/me/streak/save", handle_streak_save)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/rating/week", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/user/{user_id}/streak", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/share-achievement", lambda request: web.Response())

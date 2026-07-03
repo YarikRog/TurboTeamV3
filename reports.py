@@ -8,7 +8,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from cache import KeyManager, acquire_lock, get_data, set_data, delete_data
-from config import REPORTS_GROUP_ID
+from config import REPORTS_GROUP_ID, PROFILE_WEB_APP_SHORT_NAME
 from database import get_kyiv_now, update_user_activity
 from supabase_db import get_user_by_telegram_id, get_user_activities
 
@@ -39,20 +39,31 @@ def build_report_keyboard(
     target_uid: int,
     action_type: str,
     reports_count: int = 0,
+    bot_username: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text=f"🚩 Поскаржитись ({reports_count}/{REPORT_THRESHOLD})",
+                callback_data=ReportCallback(
+                    target_uid=target_uid,
+                    action_type=action_type,
+                ).pack(),
+            )
+        ]
+    ]
+
+    if bot_username:
+        keyboard.append(
             [
                 InlineKeyboardButton(
-                    text=f"🚩 Поскаржитись ({reports_count}/{REPORT_THRESHOLD})",
-                    callback_data=ReportCallback(
-                        target_uid=target_uid,
-                        action_type=action_type,
-                    ).pack(),
-                )
+                    text="👤 Мій профіль",
+                    url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
+                ),
             ]
-        ]
-    )
+        )
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def _parse_activity_created_at(value: Any) -> Optional[datetime]:

@@ -244,6 +244,10 @@
   .rank-hp { font-size: 12.5px; font-weight: 800; color: var(--gold); white-space: nowrap; }
   .rank-divider { text-align: center; color: var(--muted); font-size: 16px; letter-spacing: 3px; margin: 2px 0 8px; }
 
+  .rating-switch { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 3px; margin-bottom: 14px; }
+  .rating-switch button { flex: 1; border: none; background: transparent; color: var(--muted); font-size: 12.5px; font-weight: 700; padding: 8px 0; border-radius: 9px; transition: background .15s ease, color .15s ease; }
+  .rating-switch button.active { background: linear-gradient(135deg, var(--accent), #ff8a3d); color: #1a0a02; }
+
   /* ---------- TAB BAR ---------- */
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
@@ -610,7 +614,11 @@
     </div>
 
     <div class="screen" id="screen-rating">
-      <div class="section-title" style="margin-top:0;">Загальний рейтинг · за весь час</div>
+      <div class="rating-switch">
+        <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
+        <button id="ratingTabAll" onclick="switchRatingPeriod('all')">За весь час</button>
+      </div>
+      <div class="section-title" style="margin-top:0;" id="ratingTitle">Рейтинг тижня</div>
       <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
@@ -1057,17 +1065,37 @@
     });
   }
 
-  async function loadRating() {
-    if (ratingLoaded) return;
+  const ratingCache = {};
+
+  async function loadRatingPeriod(period) {
+    if (ratingCache[period]) {
+      renderRating(ratingCache[period]);
+      return;
+    }
+    document.getElementById("rankList").innerHTML = `<div class="state-msg">⏳ Завантаження...</div>`;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rating`, { headers: authHeaders() });
+      const endpoint = period === "week" ? "/api/rating/week" : "/api/rating";
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers: authHeaders() });
       if (!response.ok) throw new Error("bad status");
       const data = await response.json();
-      ratingLoaded = true;
+      ratingCache[period] = data;
       renderRating(data);
     } catch (e) {
       document.getElementById("rankList").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити рейтинг.</div>`;
     }
+  }
+
+  function switchRatingPeriod(period) {
+    document.getElementById("ratingTabWeek").classList.toggle("active", period === "week");
+    document.getElementById("ratingTabAll").classList.toggle("active", period === "all");
+    document.getElementById("ratingTitle").textContent = period === "week" ? "Рейтинг тижня" : "Загальний рейтинг · за весь час";
+    loadRatingPeriod(period).then(animateRanks);
+  }
+
+  async function loadRating() {
+    if (ratingLoaded) return;
+    ratingLoaded = true;
+    await loadRatingPeriod("week");
   }
 
   // ==================== SHARE MODAL ====================
