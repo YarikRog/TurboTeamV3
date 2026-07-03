@@ -352,6 +352,98 @@ def get_last_finished_month_period() -> tuple[str, str]:
     return get_kyiv_month_bounds_utc_strings(prev_year, prev_month)
 
 
+async def use_streak_save(user_id: int) -> bool:
+    """
+    Дозволяє юзеру використати Streak Save (один раз на місяц).
+    Страховка цього місяця.
+    """
+    month_str = get_kyiv_now().strftime("%Y-%m")
+    save_key = KeyManager.get_streak_save_key(user_id, month_str)
+
+    # Перевіряємо, чи вже використав
+    already_used = await get_data(save_key)
+    if already_used is not None:
+        return False
+
+    # Позначаємо як використане на цей місяц
+    ttl_days = 30
+    await set_data(save_key, "1", ex=ttl_days * 24 * 60 * 60)
+
+    logger.info(f"[STREAK] User {user_id} used Streak Save for month {month_str}")
+    return True
+
+
+async def get_user_streak_multiplier(user_id: int) -> dict:
+    """
+    Розраховує поточний мультик HP юзера за кількістю тренувань цього місяця.
+    Множник скидається першого числа наступного місяця.
+
+    Returns:
+    {
+      "training_count": int,
+      "multiplier": float (1.0, 1.5, 2.0, 3.0),
+      "next_milestone": int,
+      "has_save_available": bool
+    }
+    """
+    user_uuid = await get_cached_supabase_user_id(user_id)
+    if not user_uuid:
+        return {
+            "training_count": 0,
+            "multiplier": 1.0,
+            "next_milestone": 7,
+            "has_save_available": False
+        }
+
+    try:
+        # Межі поточного календарного місяця (Київ) у UTC
+        now = get_kyiv_now()
+        period_from, period_to = get_kyiv_month_bounds_utc_strings(now.year, now.month)
+
+        activities = await get_user_activities_in_period(str(user_uuid), period_from, period_to, limit=1000)
+    except Exception as e:
+        logger.error(f"[STREAK] Failed to get activities: {e}")
+        return {
+            "training_count": 0,
+            "multiplier": 1.0,
+            "next_milestone": 7,
+            "has_save_available": False
+        }
+
+    # Рахуємо тренування Gym/Street цього місяця
+    training_count = sum(
+        1 for a in activities
+        if a.get("action_name") in ("Gym", "Street")
+    )
+
+    # Визначаємо мультик за кількістю тренувань
+    if training_count < 7:
+        multiplier = 1.0
+        next_milestone = 7
+    elif training_count < 14:
+        multiplier = 1.5
+        next_milestone = 14
+    elif training_count < 30:
+        multiplier = 2.0
+        next_milestone = 30
+    else:
+        multiplier = 3.0
+        next_milestone = 30
+
+    # Перевіряємо доступність Streak Save
+    today_str = get_kyiv_now().strftime("%Y-%m")
+    save_key = KeyManager.get_streak_save_key(user_id, today_str)
+    has_save = await get_data(save_key)
+    has_save_available = has_save is None
+
+    return {
+        "training_count": training_count,
+        "multiplier": multiplier,
+        "next_milestone": next_milestone,
+        "has_save_available": has_save_available
+    }
+
+
 async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[str, List[Dict[str, Any]]]:
     """All activities per Kyiv calendar day: {"YYYY-MM-DD": [{"action_name", "hp_change"}, ...]}."""
     period_from, period_to = get_kyiv_month_bounds_utc_strings(year, month)
