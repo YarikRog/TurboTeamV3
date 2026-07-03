@@ -467,6 +467,51 @@ async def handle_track(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def handle_streak(request: web.Request) -> web.Response:
+    """GET /api/user/{user_id}/streak - Get current streak multiplier"""
+    from database import get_user_streak_multiplier
+
+    auth_result = await verify_request(request)
+    if isinstance(auth_result, web.Response):
+        return auth_result
+
+    telegram_user_id = auth_result
+
+    try:
+        streak_data = await get_user_streak_multiplier(telegram_user_id)
+        return web.json_response(streak_data)
+    except Exception as e:
+        logger.error(f"[STREAK] Error getting streak: {e}", exc_info=True)
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_streak_save(request: web.Request) -> web.Response:
+    """POST /api/user/me/streak/save - Use Streak Save"""
+    from database import use_streak_save
+
+    auth_result = await verify_request(request)
+    if isinstance(auth_result, web.Response):
+        return auth_result
+
+    telegram_user_id = auth_result
+
+    try:
+        success = await use_streak_save(telegram_user_id)
+        if success:
+            return web.json_response({
+                "success": True,
+                "message": "🆘 Страховка використана! Стрік збережено на один день"
+            })
+        else:
+            return web.json_response({
+                "success": False,
+                "message": "❌ Страховку цього місяця вже використано"
+            }, status=400)
+    except Exception as e:
+        logger.error(f"[STREAK SAVE] Error: {e}", exc_info=True)
+        return web.json_response({"error": str(e)}, status=500)
+
+
 def create_webapp_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
     app["bot"] = bot
@@ -474,14 +519,18 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/rating/week", handle_weekly_rating)
     app.router.add_get("/api/feed", handle_feed)
+    app.router.add_get("/api/user/{user_id}/streak", handle_streak)
     app.router.add_post("/api/share-achievement", handle_share_achievement)
     app.router.add_post("/api/track", handle_track)
+    app.router.add_post("/api/user/me/streak/save", handle_streak_save)
     app.router.add_route("OPTIONS", "/api/profile", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/rating/week", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/feed", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/user/{user_id}/streak", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/share-achievement", lambda request: web.Response())
     app.router.add_route("OPTIONS", "/api/track", lambda request: web.Response())
+    app.router.add_route("OPTIONS", "/api/user/me/streak/save", lambda request: web.Response())
     return app
 
 

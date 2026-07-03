@@ -168,6 +168,12 @@ class KeyManager:
     def get_reaction_users_key(group_message_id: int) -> str:
         return f"{KeyManager.PREFIX}:reaction_users:{group_message_id}"
 
+    # --- Streak Multiplier ---
+    @staticmethod
+    def get_streak_save_key(uid: int, month_str: str) -> str:
+        """Key for tracking if user has used Streak Save this month (YYYY-MM format)"""
+        return f"{KeyManager.PREFIX}:streak_save:{uid}:{month_str}"
+
 
 # ==============================================================================
 # STANDARD OPERATIONS
