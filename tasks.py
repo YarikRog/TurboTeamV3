@@ -204,6 +204,25 @@ def _is_real_activity(activity: dict) -> bool:
     return action_name in REAL_ACTIVITY_ACTIONS
 
 
+# Дії, які "закривають" день юзера: Gym/Street — вже потренувався (другий раз за
+# день не можна), Rest/Skipped — день заблоковано. Слати нагадування "піди
+# потренуйся" після будь-якої з них — безглуздо.
+CLOSING_ACTIONS_TODAY = {"Gym", "Street", "Rest", "Skipped"}
+
+
+def _did_user_close_today(activities: list[dict]) -> bool:
+    """True, якщо юзер сьогодні (за Києвом) вже зробив дію, що закриває день."""
+    today = get_kyiv_now().date()
+    for activity in activities:
+        action_name = str(activity.get("action_name") or "").strip()
+        if action_name not in CLOSING_ACTIONS_TODAY:
+            continue
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if created_at and created_at.date() == today:
+            return True
+    return False
+
+
 def _get_last_real_activity_date(activities: list[dict]):
     last_activity_date = None
     had_real_activity_with_bad_date = False
@@ -758,6 +777,7 @@ async def send_weekly_streak_reminder(bot) -> None:
     reminded_count = 0
     skipped_not_in_group = 0
     skipped_already_reminded = 0
+    skipped_acted_today = 0
 
     for user in zero_streak_users:
         user_id = int(user["telegram_user_id"])
@@ -772,6 +792,20 @@ async def send_weekly_streak_reminder(bot) -> None:
         if already_reminded is not None:
             skipped_already_reminded += 1
             continue
+
+        # Якщо юзер уже закрив день (Rest/Skip/Gym/Street) — нагадування безглузде
+        user_uuid = user.get("user_uuid")
+        if user_uuid:
+            try:
+                activities = await get_user_activities(str(user_uuid), limit=500)
+                if _did_user_close_today(activities):
+                    skipped_acted_today += 1
+                    continue
+            except Exception as e:
+                logger.error(
+                    f"[TASKS] Failed to get activities for weekly streak reminder user_id={user_id}: {e}",
+                    exc_info=True,
+                )
 
         nickname = str(user.get("nickname") or user_id)
 
@@ -806,10 +840,11 @@ async def send_weekly_streak_reminder(bot) -> None:
             )
 
     logger.info(
-        "[TASKS] Weekly streak reminder finished. Reminded: %s, skipped_not_in_group=%s, skipped_already_reminded=%s",
+        "[TASKS] Weekly streak reminder finished. Reminded: %s, skipped_not_in_group=%s, skipped_already_reminded=%s, skipped_acted_today=%s",
         reminded_count,
         skipped_not_in_group,
         skipped_already_reminded,
+        skipped_acted_today,
     )
 
 
@@ -1266,6 +1301,7 @@ async def send_weekly_milestone_reminder(bot) -> None:
     skipped_not_in_group = 0
     skipped_already_reminded = 0
     skipped_not_at_threshold = 0
+    skipped_acted_today = 0
     skipped_errors = 0
 
     for user in users:
@@ -1297,6 +1333,11 @@ async def send_weekly_milestone_reminder(bot) -> None:
             skipped_errors += 1
             continue
 
+        # Якщо юзер уже закрив день (Gym/Street/Rest/Skip) — нагадування безглузде
+        if _did_user_close_today(activities):
+            skipped_acted_today += 1
+            continue
+
         from database import _calculate_training_streak
         weekly_count = _calculate_training_streak(activities)
 
@@ -1326,11 +1367,12 @@ async def send_weekly_milestone_reminder(bot) -> None:
 
     logger.info(
         "[TASKS] Weekly milestone reminder finished. Sent: %s, skipped_not_in_group=%s, "
-        "skipped_already_reminded=%s, skipped_not_at_threshold=%s, skipped_errors=%s",
+        "skipped_already_reminded=%s, skipped_not_at_threshold=%s, skipped_acted_today=%s, skipped_errors=%s",
         sent_count,
         skipped_not_in_group,
         skipped_already_reminded,
         skipped_not_at_threshold,
+        skipped_acted_today,
         skipped_errors,
     )
 
