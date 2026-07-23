@@ -433,6 +433,13 @@ async def send_peak_motivation(bot) -> None:
 
 @safe_job
 async def send_evening_motivation(bot) -> None:
+    # У неділю о 21:00 замість вечірньої мотивації йде kickoff нового тижня
+    # (send_new_week_kickoff). Тиждень обнуляється о 20:00, тому рейтинг тут
+    # був би порожнім, а фінал тижня вже відправлено годиною раніше.
+    if get_kyiv_now().weekday() == 6:  # Sunday
+        logger.info("[TASKS] Evening motivation skipped on Sunday (new-week kickoff runs instead)")
+        return
+
     top3 = await build_top3_text()
     text = build_motivation_text("evening", top3)
 
@@ -458,6 +465,31 @@ async def send_evening_motivation(bot) -> None:
         reply_markup=keyboard,
     )
     logger.info("[TASKS] Evening motivation sent")
+
+
+@safe_job
+async def send_new_week_kickoff(bot) -> None:
+    """Sunday 21:00 Kyiv: the Turbo-week has just reset (20:00), so instead of the
+    evening motivation we fire a fresh-start hype message to prime the new week."""
+    text = (
+        "🏁 <b>НОВИЙ ТИЖДЕНЬ. ЧИСТИЙ АРКУШ.</b>\n\n"
+        "Рейтинг обнулено. У всіх знову по нулях — і в чемпіона, і в новачка.\n"
+        "Те, ким ти був минулого тижня, більше не важить. Важить тільки те, що ти зробиш зараз.\n\n"
+        "Хтось уже здався. Хтось уже спить.\n"
+        "А ти можеш першим увірватись у таблицю і задати темп усій банді 🏎️💨\n\n"
+        "7 днів. Чистий старт. Нова гонка.\n"
+        "<b>Газуй 🔥</b>"
+    )
+
+    keyboard = await build_training_action_keyboard(bot)
+
+    await bot.send_message(
+        chat_id=REPORTS_GROUP_ID,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    logger.info("[TASKS] New-week kickoff sent")
 
 
 @safe_job
@@ -1518,6 +1550,7 @@ def setup_scheduler(bot) -> AsyncIOScheduler:
     scheduler.add_job(send_last_day_warning, "cron", hour=19, minute=0, args=[bot])
     scheduler.add_job(send_second_day_private_reminder, "cron", hour=19, minute=30, args=[bot])
     scheduler.add_job(send_evening_motivation, "cron", hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_new_week_kickoff, "cron", day_of_week="sun", hour=21, minute=0, args=[bot])
     scheduler.add_job(send_weekly_streak_reminder, "cron", day_of_week="sun", hour=17, minute=0, args=[bot])
     scheduler.add_job(run_sunday_final, "cron", day_of_week="sun", hour=20, minute=0, args=[bot])
     scheduler.add_job(send_weekly_milestone_reminder, "cron", hour=19, minute=0, args=[bot])
