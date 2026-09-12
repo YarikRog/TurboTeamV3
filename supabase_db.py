@@ -30,7 +30,11 @@ def get_supabase() -> Client:
 
 
 async def _run_sync(fn: Callable[[], T]) -> T:
-    return await asyncio.to_thread(fn)
+    try:
+        return await asyncio.to_thread(fn)
+    except httpx.RemoteProtocolError as e:
+        logger.warning(f"[SUPABASE] Stale connection ({e}), retrying once")
+        return await asyncio.to_thread(fn)
 
 
 # ==============================================================================
