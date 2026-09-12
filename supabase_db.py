@@ -3,6 +3,7 @@ import os
 import logging
 from typing import Optional, Dict, Any, List, Callable, TypeVar
 
+import httpx
 from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
