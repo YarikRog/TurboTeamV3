@@ -363,7 +363,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
     if current_state == UserFlowState.VIDEO_WAITING:
         t = time.perf_counter()
-        msg = await _reply_transport(source, "⏳ Спочатку надішли відео за попереднє тренування!")
+        msg = await _reply_transport(source, "⏳ У тебе вже активна сесія! Надішли кружечок у групу.", show_alert=isinstance(source, CallbackQuery))
         logger.info(
             "[TRAIN] blocked by VIDEO_WAITING user_id=%s action=%s took %sms total=%sms",
             event.user_id,
@@ -377,7 +377,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
 
     if current_state == UserFlowState.PROCESSING:
         t = time.perf_counter()
-        msg = await _reply_transport(source, "⏳ Зачекай, попереднє тренування ще обробляється.")
+        msg = await _reply_transport(source, "⏳ Зачекай, попереднє тренування ще обробляється.", show_alert=isinstance(source, CallbackQuery))
         logger.info(
             "[TRAIN] blocked by PROCESSING user_id=%s action=%s took %sms total=%sms",
             event.user_id,
@@ -525,7 +525,8 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
-    started = await state_machine.begin_training(event.user_id, action, ttl=300)
+    session_chat_id = source.message.chat.id if isinstance(source, CallbackQuery) else source.chat.id
+    started = await state_machine.begin_training(event.user_id, action, ttl=300, chat_id=session_chat_id)
     logger.info(
         "[TRAIN] begin_training user_id=%s action=%s took %sms",
         event.user_id,
@@ -534,7 +535,7 @@ async def on_training_selected(event: EventEnvelope) -> bool:
     )
 
     if not started:
-        await _reply_transport(source, "⚠️ Не вдалося активувати сесію. Спробуй ще раз.")
+        await _reply_transport(source, "⚠️ Не вдалося активувати сесію. Спробуй ще раз.", show_alert=isinstance(source, CallbackQuery))
         logger.info(
             "[TRAIN] begin_training failed user_id=%s action=%s total=%sms",
             event.user_id,
@@ -544,14 +545,12 @@ async def on_training_selected(event: EventEnvelope) -> bool:
         return False
 
     training_instruction = (
-        f"Ти обрав {action} 💪\n\n"
-        "Тепер запиши відео-кружечок і надішли його сюди в бот протягом 5 хвилин 🤳\n\n"
-        "Кружечок потрібен як підтвердження, що ти реально тренувався 🔥\n\n"
-        "Після цього тренування зарахується, і ти отримаєш HP ⚡️"
+        f"💪 {action}: сесію розпочато!\n"
+        "🎥 Надішли свіжий відеокружечок у цей чат протягом 5 хвилин."
     )
 
     t = time.perf_counter()
-    msg = await _reply_transport(source, training_instruction)
+    msg = await _reply_transport(source, training_instruction, show_alert=isinstance(source, CallbackQuery))
     logger.info(
         "[TRAIN] training_start reply user_id=%s action=%s took %sms",
         event.user_id,
@@ -851,6 +850,11 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
     if not session_data:
         await message.answer("⏰ Сесія вичерпана. Почни заново.", parse_mode=None)
         logger.info("[VIDEO] no session user_id=%s total=%sms", event.user_id, _ms(total_started))
+        return False
+
+    session_chat_id = session_data.get("chat_id")
+    if session_chat_id is not None and int(session_chat_id) != message.chat.id:
+        await message.answer("⚠️ Надішли кружечок у чат, де ти почав тренування.")
         return False
 
     t = time.perf_counter()

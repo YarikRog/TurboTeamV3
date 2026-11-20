@@ -315,8 +315,8 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🏋️ Gym", url=f"https://t.me/{me.username}?start=gym"),
-                InlineKeyboardButton(text="🦾 Street", url=f"https://t.me/{me.username}?start=street"),
+                InlineKeyboardButton(text="🏋️ Gym", callback_data="train_gym"),
+                InlineKeyboardButton(text="🦾 Street", callback_data="train_street"),
             ],
             [
                 InlineKeyboardButton(

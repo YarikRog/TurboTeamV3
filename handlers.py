@@ -9,11 +9,11 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED
+from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED, TRAINING_SELECTED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK, PROFILE_WEB_APP_SHORT_NAME
-from cache import get_data, set_flag, delete_data, KeyManager
+from cache import get_data, set_flag, delete_data, acquire_lock, KeyManager
 from database import check_user_exists, get_currently_banned_telegram_ids, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
@@ -1058,19 +1058,72 @@ async def handle_static_actions(callback: CallbackQuery):
         await callback.message.answer("⚠️ Сталася помилка. Спробуй ще раз.")
 
 
-@router.message(F.video_note)
-async def gateway_video_note(m: Message):
-    if m.chat.type != "private":
+@router.callback_query(F.data.in_(["train_gym", "train_street"]))
+async def handle_group_training(callback: CallbackQuery):
+    if not callback.message or callback.message.chat.id != REPORTS_GROUP_ID:
+        await callback.answer("⚠️ Тренування доступні тільки в групі TurboTeam.", show_alert=True)
         return
 
-    await flow_event_bus.publish(
-        EventEnvelope(
-            name=VIDEO_UPLOADED,
-            user_id=m.from_user.id,
-            payload={"message": m},
-            idempotency_key=f"video:{m.from_user.id}:{m.message_id}",
+    # Serialize rapid Gym/Street presses for the same user: first session wins.
+    lock_key = f"turbo:training_start:{callback.from_user.id}"
+    if not await acquire_lock(lock_key, ex=30):
+        await callback.answer("⏳ Твій вибір уже обробляється. Зачекай секунду.", show_alert=True)
+        return
+    try:
+        session = await get_data(KeyManager.get_session_key(callback.from_user.id))
+        if isinstance(session, dict):
+            active = str(session.get("action") or "тренування")
+            await callback.answer(
+                f"⏳ У тебе вже активна сесія {active}! Надішли кружечок у групу протягом 5 хвилин.",
+                show_alert=True,
+            )
+            return
+
+        action = "Gym" if callback.data == "train_gym" else "Street"
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=TRAINING_SELECTED,
+                user_id=callback.from_user.id,
+                payload={"source": callback, "user": callback.from_user, "action": action},
+                idempotency_key=f"training-select:{callback.from_user.id}:{callback.id}",
+            )
         )
-    )
+    except Exception:
+        logger.exception("[TRAIN] Failed to start group session for %s", callback.from_user.id)
+        try:
+            await callback.answer("⚠️ Не вдалося почати тренування. Спробуй ще раз.", show_alert=True)
+        except Exception:
+            pass
+    finally:
+        await delete_data(lock_key)
+
+
+@router.message(F.video_note)
+async def gateway_video_note(m: Message):
+    if m.chat.type != "private" and m.chat.id != REPORTS_GROUP_ID:
+        return
+    if not m.from_user or m.from_user.is_bot:
+        return
+    if m.chat.id == REPORTS_GROUP_ID:
+        session = await get_data(KeyManager.get_session_key(m.from_user.id))
+        if not isinstance(session, dict) or session.get("chat_id") != REPORTS_GROUP_ID:
+            return
+
+    # Prevent two simultaneous circles for one session from being processed twice.
+    video_lock = f"turbo:video_processing:{m.from_user.id}"
+    if not await acquire_lock(video_lock, ex=90):
+        return
+    try:
+        await flow_event_bus.publish(
+            EventEnvelope(
+                name=VIDEO_UPLOADED,
+                user_id=m.from_user.id,
+                payload={"message": m},
+                idempotency_key=f"video:{m.chat.id}:{m.from_user.id}:{m.message_id}",
+            )
+        )
+    finally:
+        await delete_data(video_lock)
 
 
 @router.message(Command("reject"))
