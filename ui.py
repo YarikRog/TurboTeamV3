@@ -12,12 +12,12 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
     if bot_username:
         gym_button = types.InlineKeyboardButton(
             text="🏋️‍♂️ Gym Train",
-            url=f"https://t.me/{bot_username}?start=gym",
+            callback_data="train_gym",
         )
 
         street_button = types.InlineKeyboardButton(
             text="🦾 Street Train",
-            url=f"https://t.me/{bot_username}?start=street",
+            callback_data="train_street",
         )
 
         challenge_button = types.InlineKeyboardButton(
