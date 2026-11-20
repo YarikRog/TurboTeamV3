@@ -51,8 +51,8 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
         ],
         [
             types.InlineKeyboardButton(
-                text="🚫 Забив болт",
-                callback_data="action_skip",
+                text="🧘‍♂️ Відпочинок",
+                callback_data="action_rest",
             ),
         ],
         [
