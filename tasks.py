@@ -321,11 +321,10 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="🔥 Челендж тижня",
-                    url=f"https://t.me/{me.username}?start=challenge",
+                    callback_data="weekly_challenge",
                 ),
             ],
             [
-                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
                 InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
             ],
             [
