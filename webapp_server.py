@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -137,8 +138,10 @@ async def handle_profile(request: web.Request) -> web.Response:
     if limited:
         return limited
 
-    user_row = await get_user_by_telegram_id(telegram_user_id)
-    stats = await get_user_stats(telegram_user_id)
+    user_row, stats = await asyncio.gather(
+        get_user_by_telegram_id(telegram_user_id),
+        get_user_stats(telegram_user_id),
+    )
 
     if not user_row or not stats:
         return web.json_response({"error": "profile not found"}, status=404)
@@ -157,12 +160,22 @@ async def handle_profile(request: web.Request) -> web.Response:
     if not (1 <= month <= 12):
         return web.json_response({"error": "invalid month"}, status=400)
 
-    activities = await get_user_activities(user_uuid, limit=1000)
-    referrals_count = await get_referrals_count(user_uuid)
-    unlocked_achievements = await get_user_achievements(user_uuid, limit=200)
-    last_achievement = await get_last_user_achievement(user_uuid)
-    calendar_days = await get_user_calendar_month(user_uuid, year, month)
-    bot_username = await get_data(KeyManager.get_bot_username_key())
+    # These reads are independent; fetch concurrently to reduce Mini App time-to-first-screen.
+    (
+        activities,
+        referrals_count,
+        unlocked_achievements,
+        last_achievement,
+        calendar_days,
+        bot_username,
+    ) = await asyncio.gather(
+        get_user_activities(user_uuid, limit=1000),
+        get_referrals_count(user_uuid),
+        get_user_achievements(user_uuid, limit=200),
+        get_last_user_achievement(user_uuid),
+        get_user_calendar_month(user_uuid, year, month),
+        get_data(KeyManager.get_bot_username_key()),
+    )
 
     gym_count = max(0, sum(1 for a in activities if a.get("action_name") == "Gym") - sum(1 for a in activities if a.get("action_name") == "Gym Rollback"))
     street_count = max(0, sum(1 for a in activities if a.get("action_name") == "Street") - sum(1 for a in activities if a.get("action_name") == "Street Rollback"))
