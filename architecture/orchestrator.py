@@ -596,6 +596,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         msg = await _reply_transport(
             source,
             "⏳ Спочатку надішли відео за попередню дію.",
+            show_alert=isinstance(source, CallbackQuery),
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
         if msg is not None:
@@ -606,6 +607,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         msg = await _reply_transport(
             source,
             "⏳ Зачекай, попередній звіт ще обробляється.",
+            show_alert=isinstance(source, CallbackQuery),
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
         if msg is not None:
@@ -631,6 +633,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
             source,
             text,
             parse_mode="HTML",
+            show_alert=isinstance(source, CallbackQuery),
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
         if msg is not None:
@@ -650,6 +653,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         msg = await _reply_transport(
             source,
             "⏳ Ти вже відкрив челендж-сесію. Скинь відео-кружечок або зачекай 5 хвилини.",
+            show_alert=isinstance(source, CallbackQuery),
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
 
@@ -667,7 +671,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         return False
 
     t = time.perf_counter()
-    started = await state_machine.begin_training(event.user_id, CHALLENGE_ACTION, ttl=CHALLENGE_SESSION_TTL)
+    started = await state_machine.begin_training(event.user_id, CHALLENGE_ACTION, ttl=CHALLENGE_SESSION_TTL, chat_id=(source.message.chat.id if isinstance(source, CallbackQuery) else source.chat.id))
     logger.info(
         "[CHALLENGE] begin session user_id=%s took %sms",
         event.user_id,
@@ -680,6 +684,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         await _reply_transport(
             source,
             "⚠️ Не вдалося активувати челендж-сесію. Спробуй ще раз.",
+            show_alert=isinstance(source, CallbackQuery),
             reply_markup=_get_back_to_group_inline_keyboard(),
         )
         logger.info("[CHALLENGE] begin failed user_id=%s total=%sms", event.user_id, _ms(total_started))
@@ -694,14 +699,16 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         f"{text}\n\n"
         f"━━━━━━━━━━━━━━\n\n"
         f"✅ <b>Сесія активована.</b>\n"
-        f"Тепер надішли свіже відео/кружечок у бот протягом <b>5 хвилин</b>."
+        f"Тепер надішли свіжий відеокружечок у цей чат протягом <b>5 хвилин</b>."
     )
 
     msg = await _reply_transport(
         source,
-        instruction,
+        instruction if not isinstance(source, CallbackQuery) else "🔥 Челендж активовано! Надішли свіжий кружечок у групу протягом 5 хвилин.",
+        show_alert=isinstance(source, CallbackQuery),
         parse_mode="HTML",
-        reply_markup=_get_back_to_group_inline_keyboard(),
+        show_alert=isinstance(source, CallbackQuery),
+            reply_markup=_get_back_to_group_inline_keyboard(),
     )
 
     if msg is not None:
@@ -890,10 +897,12 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
                 parse_mode=None,
             )
 
-            try:
-                await message.copy_to(REPORTS_GROUP_ID)
-            except Exception as e:
-                logger.warning("[CHALLENGE] Failed to copy video to group: %s", e)
+            group_video_msg = message if message.chat.id == REPORTS_GROUP_ID else None
+            if group_video_msg is None:
+                try:
+                    group_video_msg = await message.copy_to(REPORTS_GROUP_ID)
+                except Exception as e:
+                    logger.warning("[CHALLENGE] Failed to copy video to group: %s", e)
 
             report_nickname = (
                 f"@{message.from_user.username}"
@@ -909,6 +918,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
                     weekly_count=int(result.get("weekly_count", 0) or 0),
                 ),
                 parse_mode="HTML",
+                reply_to_message_id=group_video_msg.message_id if group_video_msg else None,
             )
 
             logger.info("[VIDEO] challenge completed user_id=%s total=%sms", event.user_id, _ms(total_started))
