@@ -444,10 +444,57 @@ async def get_user_streak_multiplier(user_id: int) -> dict:
     }
 
 
+def _visible_webapp_activities(activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Hide activities cancelled by /reject, without altering historical DB rows.
+
+    Rollback rows carry video_id rollback:<uid>:<date>:<action>:<original_video_id>.
+    Match the exact circle when possible; otherwise fall back to most recent
+    preceding action on the original date (legacy reports).
+    """
+    rollback_actions = {"Gym", "Street", "Rest", "Skipped", "Weekly Challenge"}
+    ordered = sorted(
+        activities,
+        key=lambda row: _parse_activity_created_at(row.get("created_at"))
+        or datetime.min.replace(tzinfo=pytz.UTC),
+    )
+    active: List[Dict[str, Any]] = []
+    for row in ordered:
+        action = str(row.get("action_name") or "").strip()
+        if not action.endswith(" Rollback"):
+            active.append(row)
+            continue
+        original_action = action[:-len(" Rollback")]
+        if original_action not in rollback_actions:
+            continue
+        rollback_id = str(row.get("video_id") or "")
+        parts = rollback_id.split(":", 4) if rollback_id.startswith("rollback:") else []
+        target_date = parts[2] if len(parts) == 5 else None
+        target_video = parts[4] if len(parts) == 5 else None
+        candidates = [
+            idx for idx, item in enumerate(active)
+            if str(item.get("action_name") or "").strip() == original_action
+        ]
+        if target_date:
+            candidates = [
+                idx for idx in candidates
+                if (dt := _parse_activity_created_at(active[idx].get("created_at")))
+                and dt.astimezone(KYIV_TZ).strftime("%Y-%m-%d") == target_date
+            ]
+        exact = [
+            idx for idx in candidates
+            if target_video and str(active[idx].get("video_id") or "") == target_video
+        ]
+        matches = exact or candidates
+        if matches:
+            active.pop(matches[-1])
+    return active
+
+
 async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[str, List[Dict[str, Any]]]:
     """All activities per Kyiv calendar day: {"YYYY-MM-DD": [{"action_name", "hp_change"}, ...]}."""
     period_from, period_to = get_kyiv_month_bounds_utc_strings(year, month)
     activities = await get_user_activities_in_period(user_id, period_from, period_to, limit=1000)
+    activities = _visible_webapp_activities(activities)
 
     days: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -1046,8 +1093,11 @@ async def get_user_feed(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     """
     from services import TRAINING_ACHIEVEMENT_ICONS  # deferred: services.py imports database.py
 
-    activities = await get_user_activities(user_id, limit=200)
-    achievements = await get_user_achievements(user_id, limit=50)
+    activities, achievements = await asyncio.gather(
+        get_user_activities(user_id, limit=400),
+        get_user_achievements(user_id, limit=50),
+    )
+    activities = _visible_webapp_activities(activities)
 
     entries: List[Dict[str, Any]] = []
 
