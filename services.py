@@ -1032,10 +1032,11 @@ class ActivityService:
         )
 
         multiplier_text = f" 🔥 x{multiplier:g}" if multiplier > 1.0 else ""
-        await message.answer(
-            f"✅ {action_type} зафіксовано. +{hp} HP{multiplier_text}",
-            reply_markup=back_to_group_kb,
-        )
+        if message.chat.type == "private":
+            await message.answer(
+                f"✅ {action_type} зафіксовано. +{hp} HP{multiplier_text}",
+                reply_markup=back_to_group_kb,
+            )
 
         if streak_bonus > 0:
             await message.answer(
@@ -1097,10 +1098,13 @@ class ActivityService:
         group_video_msg = None
         group_text_msg = None
 
-        try:
-            group_video_msg = await message.copy_to(REPORTS_GROUP_ID)
-        except Exception as e:
-            logger.warning("[SERVICE] Failed to copy video to group: %s", e)
+        if message.chat.id == REPORTS_GROUP_ID:
+            group_video_msg = message
+        else:
+            try:
+                group_video_msg = await message.copy_to(REPORTS_GROUP_ID)
+            except Exception as e:
+                logger.warning("[SERVICE] Failed to copy video to group: %s", e)
 
         safe_display_name = user.username or user.first_name or user.full_name or "Учасник"
         report_nickname = f"@{safe_display_name}" if user.username else safe_display_name
@@ -1127,6 +1131,7 @@ class ActivityService:
             report_text,
             reply_markup=report_kb,
             parse_mode="HTML",
+            reply_to_message_id=group_video_msg.message_id if group_video_msg else None,
         )
 
         if new_status_title:
