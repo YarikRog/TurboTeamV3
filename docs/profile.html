@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TurboTeam Arena — профіль</title>
+<title>Мій профіль — TurboTeam</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -376,96 +376,6 @@
   .onboarding-item .oi-title { font-size: 13px; font-weight: 800; }
   .onboarding-item .oi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .onboarding-btn { margin-top: 20px; width: 100%; }
-
-/* TurboTeam Arena: original UX and layout, static fantasy skin */
-:root{--bg:#0d0e10;--card:#1e1b19;--card-2:#29241f;--text:#f5e9d7;--muted:#afa18e;--accent:#f4a944;--accent-2:#9aafba;--gold:#f9d184;--border:rgba(220,170,99,.28)}
-body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e10 100%);background-attachment:fixed;color:var(--text)}
-.greet-name,.section-title,.cal-month-label,.hero-msg{font-family:Georgia,"Times New Roman",serif}
-.hero,.cal-card,.feed-card,.rank-row,.badge-card,.quick-pill,.streak-multiplier{background:linear-gradient(150deg,#2d2821 0%,#191919 78%);border:1px solid #795d39;box-shadow:inset 0 1px 0 #f2c57519,0 2px 10px #0005}
-.hero{border:2px ridge #9c763d;border-radius:14px}
-.greet-text,.section-title,.cal-month-label{color:#e8b96a}
-.avatar{background:radial-gradient(circle,#bb7d31,#3b281b);border:1px solid #d5a15e}
-.ring-fill{filter:none}.ring-streak{color:#ffdda1}
-.btn-primary,.rating-switch button.active{background:linear-gradient(180deg,#e4b96b,#a76a2e)!important;color:#23170c!important;border:1px solid #e7c17c!important;box-shadow:inset 0 1px 0 #ffe6ad}
-.btn-ghost,.cal-nav button{background:linear-gradient(#423425,#24201c);border:1px solid #856840;color:#f2d5a6}
-.tabbar{background:#181713;border-top:2px solid #96723f;backdrop-filter:none}
-.tab{color:#b2a38a}.tab.active{color:#ffcf7b;text-shadow:0 0 3px #a95f27}
-.tab.active .tab-icon{transform:none}
-.cal-day{background:#27221e;border-color:#5c4933;color:#dcc6a5}
-.cal-day.gym{background:#5f341d;border-color:#c2864a}.cal-day.street{background:#263941;border-color:#709aa8}.cal-day.rest{background:#283b2c;border-color:#82aa7a}.cal-day.challenge,.cal-day.multi{background:#55421e;border-color:#cfad63}
-.cal-day.today{border-color:#f3d18a;box-shadow:0 0 5px #d4964766}
-.badge-card.unlocked,.rank-row.me{background:linear-gradient(145deg,#44301e,#1d1a17);border-color:#c7964e}
-.progress-bar-fill{background:linear-gradient(90deg,#a96a2c,#f5cb74)}
-.skel{background:linear-gradient(90deg,#2c2925 20%,#504333 50%,#2c2925 80%);background-size:200% 100%}
-@keyframes fadeIn{from{opacity:1;transform:none}to{opacity:1;transform:none}}
-@keyframes screenInRight{from{opacity:1;transform:none}to{opacity:1;transform:none}}
-@keyframes screenInLeft{from{opacity:1;transform:none}to{opacity:1;transform:none}}
-/* Disable decorative continuous motion and flashing across devices. */
-.avatar,.ring-mascot,.badge-card.unlocked .badge-icon,.rank-row.me,.skel,.skel-loader-icon,.skel-loader-text{animation:none!important}
-.tab .tab-icon,.ring-fill{transition:none!important;filter:none!important}
-/* JS can also inject animations on calendar and trophy icons; override them. */
-.cal-day .icon,.badge-card,.badge-icon,.rank-row,.rank-avatar,.tab-icon,.ring-mascot{animation:none!important;animation-delay:0s!important}
-
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:none!important}}
-
-
-/* ==== TurboTeam ARENA: visual reference v1. No animated GIFs. ==== */
-:root{--bg:#08090b;--card:#171615;--card-2:#211d1b;--text:#f7f6f2;--muted:#a6a5a3;--accent:#ff8c23;--accent-2:#ffb03c;--gold:#ffd18a;--border:rgba(255,154,54,.36);--radius:14px}
-html,body{background:#08090b;overflow:hidden;height:100%}
-body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background-image:radial-gradient(ellipse at 40% 5%,#2d160b 0%,#08090b 58%)}
-#app{max-width:480px;margin:0 auto;height:100%;background:linear-gradient(165deg,#14110f 0%,#08090b 38%,#100c0b 100%);position:relative}
-.screen,.screen.active{height:calc(100dvh - 72px - env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;padding:9px 13px 16px;scrollbar-width:none}
-.screen::-webkit-scrollbar{display:none}
-.game-panel{background:linear-gradient(136deg,#292321,#111113 60%,#1b1511);border:1px solid rgba(255,138,32,.57);box-shadow:inset 0 1px 0 rgba(255,206,112,.13),0 4px 14px #0008;border-radius:13px}
-.arena-scene{height:clamp(132px,22dvh,190px);border-radius:12px 12px 0 0;background:linear-gradient(to bottom,rgba(0,0,0,.05),rgba(0,0,0,.02) 56%,#0e0e0f 98%),url("arena-hero.svg") center 43%/cover no-repeat,linear-gradient(135deg,#4b2311,#08090b);position:relative;overflow:hidden}
-.arena-scene::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 83% 46%,rgba(255,107,5,.2),transparent 55%);pointer-events:none}
-.arena-scene-brand{position:absolute;top:13px;right:10px;text-align:center;color:white;text-shadow:0 3px 5px #000,0 0 13px #f36f05;font-weight:1000;font-style:italic;line-height:1.03;letter-spacing:1.4px}
-.arena-scene-brand strong{display:block;font-size:clamp(19px,6vw,27px)}
-.arena-scene-brand em{display:block;font-size:clamp(20px,6.7vw,31px);letter-spacing:5px;color:#ffaf51;font-style:italic}
-.arena-identity{display:flex;align-items:center;gap:11px;margin:-25px 7px 9px;position:relative;padding:11px 13px;min-height:92px;z-index:1;background:linear-gradient(125deg,rgba(34,28,25,.97),rgba(11,11,13,.98));border-radius:18px}
-.arena-player-avatar{width:60px;height:60px;border-radius:50%;flex-shrink:0;border:2px solid #ff9d28;background:radial-gradient(circle at 52% 26%,#784621,#201919 62%,#0b0a0a);box-shadow:0 0 13px rgba(255,124,4,.4);display:grid;place-items:center;font-size:34px;color:#ffca77}
-.arena-player-info{min-width:0;flex:1}.arena-player-name{font-weight:900;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.arena-player-rank{display:inline-flex;align-items:center;gap:5px;color:#f5f2ec;font-size:11px;margin-top:6px;background:#29292b;padding:4px 7px;border-radius:7px;font-weight:700}
-.arena-rank-icon{color:#ffab45}.arena-player-count{display:block;font-size:10px;color:#b6ada3;margin-top:5px}
-.arena-player-hp{text-align:right;white-space:nowrap}.arena-player-hp small{display:block;color:#ff9a22;font-size:11px;font-weight:850;letter-spacing:.8px}.arena-player-hp strong{display:block;color:#fefbf6;font-weight:900;font-size:clamp(16px,4.8vw,22px);text-shadow:0 0 9px #e7722255}
-.arena-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:8px}
-.arena-stat{padding:9px 4px;text-align:center;border-color:#7d4930;border-radius:10px}
-.arena-stat-icon{display:block;font-size:20px;line-height:1.15;color:#ffac40}.arena-stat>small{display:block;margin-top:4px;font-size:10px;color:#bdb2a4}.arena-stat>strong{display:block;font-size:18px;font-weight:900;margin-top:3px;white-space:nowrap}.arena-stat>strong small{font-size:11px;color:#bdb2a4}
-.arena-rank-progress{padding:10px 12px;margin-bottom:8px;border-color:#985123;border-radius:10px}
-.arena-progress-line{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;font-weight:750}.arena-progress-line strong{font-size:11px;text-align:right;color:#f7ead4}
-.arena-progress-track{height:10px;overflow:hidden;border-radius:9px;background:linear-gradient(#4b4b4f,#232326);border:1px solid #63534a;margin-top:8px}
-.arena-progress-track span{display:block;height:100%;width:0%;background:linear-gradient(#ffd275,#ff941c 55%,#e36b0e);box-shadow:0 0 10px #ef870a;transition:none}
-.arena-mission{display:flex;align-items:center;gap:9px;padding:10px 11px;border-color:#a25b27;cursor:pointer}
-.arena-mission-icon{font-size:24px;color:#ff9d30}.arena-mission>div{flex:1;min-width:0}.arena-mission strong{display:block;font-size:12px}.arena-mission small{display:block;color:#b4a8a0;font-size:10px;margin-top:3px}.arena-mission>span:last-child{font-size:13px;color:#fff;font-weight:900}
-.arena-secondary{margin-top:8px}.arena-secondary .streak-multiplier{margin:0;padding:8px 11px;background:linear-gradient(90deg,#241916,#111114);border:1px solid #633b29;border-radius:10px}
-.arena-secondary .streak-header{margin-bottom:4px}.arena-secondary .streak-value{font-size:14px}.arena-secondary .streak-info{font-size:10px}.arena-secondary .streak-days,.arena-secondary .streak-next{font-size:10px}
-.arena-secondary .streak-bar-wrap{margin-bottom:5px;height:5px}
-.arena-hidden-compat{display:none!important}
-.arena-events-button{width:100%;margin-top:8px;padding:9px 11px;text-align:left;border:1px solid #5b4231;border-radius:9px;background:linear-gradient(90deg,#231a16,#131315);color:#f1cf9c;font-size:12px;font-weight:800;display:flex;justify-content:space-between}
-.arena-feed-panel[hidden]{display:none}.arena-feed-panel{max-height:180px;overflow-y:auto;margin-top:7px}
-.arena-screen-heading{text-align:center;margin:13px 0 18px}.arena-screen-heading h1{margin:0;color:#fff;font:italic 900 clamp(24px,8vw,34px) Arial,sans-serif;letter-spacing:1.1px;text-shadow:0 2px 0 #6f3c20,0 0 15px rgba(255,145,19,.36)}.arena-screen-heading p{color:#cfc5bb;margin:6px 0 0;font-size:13px}
-.arena-choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.arena-choice{padding:15px 5px;text-align:center;min-width:0;border-radius:12px;min-height:120px}.arena-choice>div{font-size:33px;filter:drop-shadow(0 2px 6px #ff80005c)}.arena-choice strong{display:block;font-size:14px;margin-top:9px}.arena-choice small{display:block;font-size:11px;color:#cfc8c0;margin-top:3px}
-.arena-challenge-panel{margin-top:15px;padding:13px 15px}.arena-challenge-title{display:flex;justify-content:space-between;font-size:13px;gap:5px;font-weight:850}.arena-challenge-title b{color:#ff9e1b;white-space:nowrap}.arena-challenge-sub{font-size:11px;color:#bcb2a8;margin-top:6px}.arena-challenge-total{font-size:12px;text-align:right;margin-top:6px;font-weight:800}
-.arena-arena-art{height:clamp(105px,23dvh,230px);margin-top:16px;border-radius:12px;background:linear-gradient(0deg,#0b0b0d,transparent 22%,transparent 70%,#120c0c),url("arena-hero.svg") center 55%/cover no-repeat;border:1px solid #5d341e}
-.arena-go-group{width:100%;margin-top:14px}.arena-instruction{text-align:center;font-size:11px;color:#b6aca5;margin-top:12px;line-height:1.45}
-.tabbar{left:0;right:0;max-width:480px;margin:auto;background:linear-gradient(#1b1c1e,#090a0b);border-top:1px solid #5e534e;backdrop-filter:none;padding:6px 3px calc(6px + env(safe-area-inset-bottom,0px));box-shadow:0 -5px 17px #000b}
-.tab{font-size:10px;flex:1;min-width:0;gap:3px;padding:7px 1px;border-radius:8px;color:#9d9fa2}.tab.active{color:#ffc27b;background:linear-gradient(#63290f,#261711);box-shadow:inset 0 0 0 1px #a65b1d,0 0 11px #c45f1135}.tab.active .tab-icon{transform:none}.tab .tab-icon{font-size:20px;transition:none}
-#screen-calendar .cal-card{padding:12px}.cal-day{border-radius:5px;background:#181819;border-color:#363334}.cal-day.gym{background:#432518;border-color:#ab4e16}.cal-day.street{background:#282e2f;border-color:#5f7777}.cal-day.rest{background:#213024;border-color:#4a7753}.cal-day.challenge,.cal-day.multi{background:#433016;border-color:#b67d29}
-.cal-day.today{border-color:#ff9f35;box-shadow:0 0 6px #ee891f}
-.cal-month-label{font-size:15px;color:#f5eee5}.cal-nav button{background:#211b1a;border-color:#774725;color:#f8c781}
-.legend{font-size:10px;gap:8px}.cal-grid{gap:4px}
-.badge-grid{gap:8px}.badge-card{background:linear-gradient(#292525,#121316);border:1px solid #5f4b41;border-radius:10px}.badge-card.unlocked{background:linear-gradient(#4c2919,#171314);border-color:#a85d24}.badge-card.locked{opacity:.67}
-.badge-icon{font-size:27px}.badge-title{font-size:10px}.ach-count{font-size:12px}.arena-h2{font-size:22px;font-weight:900;font-style:italic;color:#f7f3ed}
-.progress-bar-fill{background:linear-gradient(90deg,#c95312,#ffb229)}
-.rating-switch{background:#171719;border-color:#5e3a2c}.rating-switch button.active{background:linear-gradient(#ffae31,#c35a05)!important;color:#fff!important;box-shadow:0 0 8px #ff851e}
-.rank-row{background:linear-gradient(110deg,#231f1e,#111315);border-color:#52433d;border-radius:10px}.rank-row.me{background:linear-gradient(110deg,#713418,#211613);border-color:#ffa42e;animation:none!important}.rank-hp{color:#fff}
-.btn-primary{background:linear-gradient(#ffb042,#e66c09)!important;color:#fff!important;border:1px solid #ffae4b!important;text-shadow:0 1px 2px #58250c}
-.streak-multiplier,.feed-card,.cal-card,.quick-pill{background:linear-gradient(120deg,#262121,#131314);border-color:#67452d}
-.avatar,.ring-mascot,.badge-card.unlocked .badge-icon,.rank-row.me,.skel,.skel-loader-icon,.skel-loader-text,.cal-day .icon,.badge-icon,.rank-avatar,.tab-icon{animation:none!important;animation-delay:0s!important}
-.tab .tab-icon,.ring-fill,.badge-icon{filter:none!important;transition:none!important}
-@media(max-height:710px){.arena-scene{height:118px}.arena-identity{min-height:75px;padding:7px 10px}.arena-player-avatar{width:48px;height:48px}.arena-stats{margin-bottom:5px}.arena-stat{padding:6px 3px}.arena-stat-icon{font-size:17px}.arena-rank-progress{padding:7px 10px;margin-bottom:6px}.arena-mission{padding:7px 9px}.arena-secondary{margin-top:6px}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
-
 </style>
 </head>
 <body>
@@ -539,9 +449,9 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
     // Апка має власну фіксовану темну тему (бренд-кольори), тож синхронізуємо
     // не кольори інтерфейсу з темою юзера, а хром Telegram (хедер/фон) з темою апки —
     // щоб не було білого "шву" зверху при відкритті.
-    try { tg.setHeaderColor("#090909"); } catch (e) {}
-    try { tg.setBackgroundColor("#090909"); } catch (e) {}
-    try { tg.setBottomBarColor?.("#090909"); } catch (e) {}
+    try { tg.setHeaderColor("#0a0c10"); } catch (e) {}
+    try { tg.setBackgroundColor("#0a0c10"); } catch (e) {}
+    try { tg.setBottomBarColor?.("#0a0c10"); } catch (e) {}
   }
 
   const today = new Date();
@@ -606,65 +516,81 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
   // ==================== SKELETON ====================
   const SKELETON = `
     <div class="screen active" id="screen-today">
-      <div class="arena-scene arena-home-scene">
-        <div class="arena-scene-brand"><strong>TURBOTEAM</strong><em>ARENA</em></div>
-      </div>
-      <div class="arena-identity game-panel">
-        <div class="arena-player-avatar">♛</div>
-        <div class="arena-player-info"><div id="greetName" class="arena-player-name">Гравець</div>
-          <div class="arena-player-rank"><span class="arena-rank-icon">❖</span><span id="statusValue">—</span></div>
-          <small class="arena-player-count">Тренувань: <span id="trainingCountUI">0</span></small>
+      <div class="greet">
+        <div>
+          <div class="greet-text">Привіт 👋</div>
+          <div class="greet-name" id="greetName">Гравець</div>
         </div>
-        <div class="arena-player-hp"><small>⚡ HP</small><strong id="hpValue">0</strong></div>
+        <div class="avatar">🔥</div>
       </div>
-      <div class="arena-stats">
-        <div class="arena-stat game-panel"><span class="arena-stat-icon">🏋️</span><small>Тренувань</small><strong id="trainingStatUI">0</strong></div>
-        <div class="arena-stat game-panel"><span class="arena-stat-icon">🔥</span><small>Серія</small><strong id="ringStreak">0<small>/14</small></strong></div>
-        <div class="arena-stat game-panel"><span class="arena-stat-icon">🎯</span><small>Челендж</small><strong id="challengeStatUI">—</strong></div>
-      </div>
-      <div class="arena-rank-progress game-panel">
-        <div class="arena-progress-line"><span>⚔️ До наступного рангу</span><strong id="goalValue">—</strong></div>
-        <div class="arena-progress-track"><span id="rankGoalFill"></span></div>
-      </div>
-      <div class="arena-mission game-panel" onclick="goTab('arena')" role="button" tabindex="0">
-        <span class="arena-mission-icon">🎯</span>
-        <div><strong>Тижневий виклик</strong><small>Виконай 5 завдань за тиждень</small></div>
-        <span id="challengeMissionUI">—</span>
-      </div>
-      <div class="arena-secondary">
-        <div class="streak-multiplier">
-          <div class="streak-header"><span class="streak-label">🔥 Множник HP</span><span class="streak-value" id="streakMultiplier">1x</span></div>
-          <div class="streak-bar-wrap"><div class="streak-bar-bg"></div><div class="streak-bar-fill" id="streakBarFill"></div></div>
-          <div class="streak-info"><div class="streak-days" id="streakDays">—</div><div class="streak-next" id="streakNext">—</div></div>
-          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display:none">🆘 Страховка</button>
-        </div>
-        <div id="heroMsg" class="arena-hidden-compat"></div><div id="heroSub" class="arena-hidden-compat"></div>
-        <svg class="arena-hidden-compat" width="0" height="0"><circle id="ringFill" cx="0" cy="0" r="0"/></svg>
-      </div>
-      <button class="arena-events-button" onclick="toggleArenaFeed()">⚔️ Останні події <span>⌄</span></button>
-      <div id="arenaFeedPanel" class="arena-feed-panel" hidden><div id="feedList"><div class="state-msg">Завантаження...</div></div></div>
-    </div>
 
-    <div class="screen" id="screen-arena">
-      <div class="arena-screen-heading"><h1>АРЕНА</h1><p>Обери свій формат тренувань</p></div>
-      <div class="arena-choice-grid">
-        <div class="arena-choice game-panel"><div>🏋️</div><strong>Gym</strong><small>Зал</small></div>
-        <div class="arena-choice game-panel"><div>💪</div><strong>Street</strong><small>Вулиця</small></div>
-        <div class="arena-choice game-panel"><div>🎯</div><strong>Челендж</strong><small>Тижневий</small></div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 180 180">
+            <defs>
+              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ff5a1f"/>
+                <stop offset="100%" stop-color="#ffc828"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="90" cy="90" r="80"/>
+            <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-mascot">🔥</div>
+            <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
+            <div class="ring-streak-label">тренувань<br>цього тижня</div>
+          </div>
+        </div>
+        <div class="hero-msg" id="heroMsg">—</div>
+        <div class="hero-sub" id="heroSub">—</div>
+
+        <!-- STREAK MULTIPLIER BLOCK -->
+        <div class="streak-multiplier">
+          <div class="streak-header">
+            <span class="streak-label">🔥 Мультик HP</span>
+            <span class="streak-value" id="streakMultiplier">1x</span>
+          </div>
+          <div class="streak-bar-wrap">
+            <div class="streak-bar-bg"></div>
+            <div class="streak-bar-fill" id="streakBarFill" style="width: 0%"></div>
+          </div>
+          <div class="streak-info">
+            <div class="streak-days" id="streakDays">0 тренувань цього місяця</div>
+            <div class="streak-next" id="streakNext">До 1.5x: 7 тренувань</div>
+          </div>
+          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display: none;">
+            🆘 Страховка (1/мес)
+          </button>
+        </div>
+
+        <div class="quick-row">
+          <div class="quick-pill">
+            <div class="q-label">⚡ HP</div>
+            <div class="q-value" id="hpValue">0</div>
+          </div>
+          <div class="quick-pill">
+            <div class="q-label">🏆 Рівень</div>
+            <div class="q-value" id="statusValue">—</div>
+          </div>
+          <div class="quick-pill">
+            <div class="q-label">🎯 Ціль</div>
+            <div class="q-value q-value-sm" id="goalValue">—</div>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
+          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
+        </div>
       </div>
-      <div class="arena-challenge-panel game-panel">
-        <div class="arena-challenge-title"><span>🏆 Тижневий челендж</span><b>+50 HP</b></div>
-        <div class="arena-challenge-sub">5 виконань за тиждень • 1 на день</div>
-        <div class="arena-progress-track"><span id="arenaChallengeFill"></span></div>
-        <div class="arena-challenge-total" id="arenaChallengeProgress">— / 5</div>
-      </div>
-      <div class="arena-arena-art" aria-hidden="true"></div>
-      <button class="btn btn-primary arena-go-group" onclick="openArenaGroup()">⚔️ Перейти в групу тренувань</button>
-      <p class="arena-instruction">Вибери Gym, Street або челендж у Telegram-групі й надішли свіжий кружок.</p>
+
+      <div class="section-title">Останнє в стрічці</div>
+      <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
     <div class="screen" id="screen-calendar">
-      <div class="arena-screen-heading"><h1>КАЛЕНДАР</h1><p>Журнал твоєї активності</p></div>
+      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
       <div class="cal-card">
         <div class="cal-nav">
           <button id="prevMonth">←</button>
@@ -673,7 +599,7 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span>🏋️ Gym</span><span>💪 Street</span><span>🧘 Rest</span><span>🎯 Challenge</span>
+          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
         <div class="cal-stats" id="calStatsText"></div>
       </div>
@@ -681,7 +607,7 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
 
     <div class="screen" id="screen-achievements">
       <div class="ach-head" style="margin-top:0;">
-        <div class="section-title arena-h2" style="margin:0;">ТРОФЕЇ</div>
+        <div class="section-title" style="margin:0;">Досягнення</div>
         <div class="ach-count" id="achCount">0 / 0 відкрито</div>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
@@ -689,7 +615,6 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
     </div>
 
     <div class="screen" id="screen-rating">
-      <div class="arena-screen-heading"><h1>ЛІГА</h1><p>Рейтинг TurboTeam</p></div>
       <div class="rating-switch">
         <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
         <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
@@ -727,20 +652,15 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
     <div class="toast" id="toast"></div>
 
     <nav class="tabbar">
-      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">⌂</span>Профіль</button>
-      <button class="tab" data-tab="arena" onclick="goTab('arena')"><span class="tab-icon">⚔️</span>Арена</button>
-      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">▦</span>Календар</button>
-      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Трофеї</button>
-      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Ліга</button>
+      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🔥</span>Сьогодні</button>
+      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📅</span>Календар</button>
+      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Досягнення</button>
+      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Рейтинг</button>
     </nav>
   `;
 
   // ==================== TAB NAVIGATION ====================
-  const TAB_ORDER = ["today", "arena", "calendar", "achievements", "rating"];
-  let arenaFeedLoaded = false;
-  function toggleArenaFeed(){const el=document.getElementById("arenaFeedPanel");if(!el)return;el.hidden=!el.hidden;if(!el.hidden&&!arenaFeedLoaded){arenaFeedLoaded=true;loadFeed();}}
-  function openArenaGroup(){const link=profileData?.group_link;if(!link)return showToast("Посилання на групу недоступне");if(/^https:\/\/t\.me\//.test(link)&&tg?.openTelegramLink)tg.openTelegramLink(link);else if(/^https:\/\//.test(link))window.location.href=link;}
-  document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target?.classList?.contains("arena-mission")){e.preventDefault();goTab("arena");}});
+  const TAB_ORDER = ["today", "calendar", "achievements", "rating"];
   let currentTabName = "today";
 
   function goTab(name) {
@@ -919,17 +839,6 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
     hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
     pulseOnChange(hpEl, data.hp_total);
     document.getElementById("statusValue").textContent = data.status || "—";
-    const trainCount = Math.max(0, Number(data.training_count || 0));
-    document.getElementById("trainingCountUI").textContent = trainCount;
-    document.getElementById("trainingStatUI").textContent = trainCount;
-    const challengeCount = data.weekly_challenge_count;
-    const weeklyText = Number.isFinite(Number(challengeCount)) && challengeCount !== null && challengeCount !== undefined ? `${challengeCount}/5` : "—";
-    document.getElementById("challengeStatUI").textContent = weeklyText;
-    document.getElementById("challengeMissionUI").textContent = weeklyText;
-    document.getElementById("arenaChallengeProgress").textContent = weeklyText.replace("/"," / ");
-    document.getElementById("arenaChallengeFill").style.width = challengeCount == null ? "0%" : `${Math.min(100,Math.max(0,Number(challengeCount)*20))}%`;
-    const next = Number(data.next_goal_threshold || 0);
-    document.getElementById("rankGoalFill").style.width = next > 0 ? `${Math.min(100,trainCount / next * 100)}%` : "100%";
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
 
     // Загружаем данные о Streak Multiplier
@@ -1444,7 +1353,7 @@ body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont
         document.getElementById("app").innerHTML = SKELETON;
         document.getElementById("prevMonth").onclick = () => changeMonth(-1);
         document.getElementById("nextMonth").onclick = () => changeMonth(1);
-        // Feed is loaded only when the user opens «Останні події».
+        loadFeed();
       }
 
       renderProfile(data);
