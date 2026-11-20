@@ -9,7 +9,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED, TRAINING_SELECTED
+from architecture.events import CHALLENGE_SELECTED, REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED, TRAINING_SELECTED
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK, PROFILE_WEB_APP_SHORT_NAME
@@ -1058,7 +1058,7 @@ async def handle_static_actions(callback: CallbackQuery):
         await callback.message.answer("⚠️ Сталася помилка. Спробуй ще раз.")
 
 
-@router.callback_query(F.data.in_(["train_gym", "train_street"]))
+@router.callback_query(F.data.in_(["train_gym", "train_street", "weekly_challenge"]))
 async def handle_group_training(callback: CallbackQuery):
     if not callback.message or callback.message.chat.id != REPORTS_GROUP_ID:
         await callback.answer("⚠️ Тренування доступні тільки в групі TurboTeam.", show_alert=True)
@@ -1079,10 +1079,11 @@ async def handle_group_training(callback: CallbackQuery):
             )
             return
 
-        action = "Gym" if callback.data == "train_gym" else "Street"
+        action = {"train_gym": "Gym", "train_street": "Street", "weekly_challenge": "Weekly Challenge"}[callback.data]
+        event_name = CHALLENGE_SELECTED if callback.data == "weekly_challenge" else TRAINING_SELECTED
         await flow_event_bus.publish(
             EventEnvelope(
-                name=TRAINING_SELECTED,
+                name=event_name,
                 user_id=callback.from_user.id,
                 payload={"source": callback, "user": callback.from_user, "action": action},
                 idempotency_key=f"training-select:{callback.from_user.id}:{callback.id}",
