@@ -325,7 +325,7 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
                 ),
             ],
             [
-                InlineKeyboardButton(text="🚫 Skip", callback_data="action_skip"),
+                InlineKeyboardButton(text="🧘 Rest", callback_data="action_rest"),
             ],
             [
                 InlineKeyboardButton(
