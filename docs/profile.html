@@ -4,20 +4,20 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TurboTeam Arena · Герой</title>
+<title>Мій профіль — TurboTeam</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
-    --bg: #090b0b;
-    --card: #191914;
-    --card-2: #24221c;
+    --bg: #0a0c10;
+    --card: #161a22;
+    --card-2: #1d2330;
     --text: #ffffff;
-    --muted: #b8a88f;
-    --accent: #df9d3d;
-    --accent-2: #759cac;
-    --gold: #f4d58c;
+    --muted: #8b93a3;
+    --accent: #ff5a1f;
+    --accent-2: #4cc9f0;
+    --gold: #ffc828;
     --green: #3ddc84;
-    --border: rgba(217, 159, 73, .32);
+    --border: rgba(255, 255, 255, 0.07);
     --radius: 20px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -377,74 +377,33 @@
   .onboarding-item .oi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .onboarding-btn { margin-top: 20px; width: 100%; }
 
-/* TURBOTEAM ARENA / dark fantasy UI: CSS-only art for near-zero asset download */
-:root{--bg:#090b0b;--card:#191914;--card-2:#24221c;--text:#f6e8c9;--muted:#b7a689;--accent:#df9d3d;--gold:#f7d98d;--border:rgba(221,161,70,.34);--radius:12px}
-html,body{height:100%;overflow:hidden}
-body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellipse 90% 35% at 50% 3%,rgba(187,90,24,.23),transparent 75%),repeating-linear-gradient(115deg,transparent 0 38px,rgba(255,199,103,.012) 39px 40px),linear-gradient(160deg,#141511,#090a0b 65%);font-family:Georgia, "Segoe UI",serif}
-#app{height:100%;max-width:500px;margin:auto}
-.screen,.screen.active{height:calc(100dvh - 71px - env(safe-area-inset-bottom,0px));max-width:500px;overflow-y:auto;overscroll-behavior:contain;padding:11px 12px 14px;scrollbar-width:none}
-.screen::-webkit-scrollbar{display:none}
-#screen-today{display:none}
-#screen-today.active{display:flex;flex-direction:column;gap:0}
-.tt-war-banner{text-align:center;flex-shrink:0;padding:7px 5px 9px;background:linear-gradient(90deg,transparent,rgba(228,154,51,.10),transparent);border-bottom:1px solid rgba(236,173,82,.33)}
-.tt-war-sigil{font-size:21px;color:#ffca69;line-height:1;filter:drop-shadow(0 0 6px #ff7d1d)}
-.tt-war-name{font-family:Georgia,serif;font-size:clamp(19px,5.4vw,27px);font-weight:900;letter-spacing:1.1px;text-shadow:0 2px 1px #000,0 0 13px rgba(255,147,40,.46);line-height:1.14}
-.tt-war-name em{font-style:normal;color:#efb458;letter-spacing:3px}
-.tt-war-motto{font-family:"Segoe UI",sans-serif;font-size:9px;color:#d4b98a;letter-spacing:1.8px;text-transform:uppercase}
-.greet{flex-shrink:0;margin:8px 2px 7px;min-height:40px}
-.greet-text{font-family:"Segoe UI",sans-serif;font-size:10px;letter-spacing:1.5px;color:#d5aa6c;font-weight:800}
-.greet-name{font-size:16px;text-shadow:1px 1px 1px black}
-.avatar{height:34px;width:34px;font-size:19px;background:radial-gradient(circle,#604a2a,#1b1915);border:1px solid #c99345;box-shadow:0 0 12px #a85e203b}
-.hero{flex-shrink:0;background:linear-gradient(145deg,rgba(54,46,30,.72),rgba(16,18,18,.90) 55%),radial-gradient(circle at 50% 0%,rgba(196,96,14,.28),transparent 65%);border:2px ridge #98703c;outline:1px solid #2b1d12;outline-offset:-6px;border-radius:10px;padding:9px 12px 12px;box-shadow:0 8px 19px #0008,inset 0 0 22px #d5a65c11}
-.tt-crest-row{display:flex;justify-content:center;gap:13px;align-items:center;color:#e7bd78;font:800 10px "Segoe UI",sans-serif;letter-spacing:2.4px}
-.tt-crest-mark{font-size:15px;color:#ffdd92}
-.ring-wrap{width:clamp(95px,17dvh,142px);height:clamp(95px,17dvh,142px);margin:2px auto 0}
-.ring-bg{stroke:#3a3429}.ring-fill{stroke-width:12;filter:drop-shadow(0 0 5px #ffb64d)}
-.ring-mascot{font-size:clamp(18px,3dvh,26px);margin:0}.ring-streak{font-size:clamp(22px,4dvh,33px);color:#ffe2a6;text-shadow:0 0 12px #d68e2980}.ring-streak small{font-size:13px}.ring-streak-label{font:700 9px "Segoe UI",sans-serif}
-.hero-msg{font-size:13px;margin:3px 0}.hero-sub{font:11px "Segoe UI",sans-serif;margin:0}
-.streak-multiplier{margin-top:9px;padding:9px 11px;background:linear-gradient(90deg,#2d2518,#181a18);border:1px solid #86663b;border-radius:7px}
-.streak-header{margin-bottom:5px}.streak-value{font-size:16px}.streak-label{font-size:10px}
-.streak-bar-wrap{height:6px;margin-bottom:5px}.streak-info{font-size:10px}.streak-days,.streak-next{font-size:10px}
-.quick-row{margin-top:8px;gap:7px}
-.quick-pill{border:1px solid #8b6736;border-radius:7px;padding:7px 6px;background:linear-gradient(145deg,#302718,#171a19)}
-.quick-pill .q-label{font:700 10px "Segoe UI",sans-serif;color:#d2ad76}.quick-pill .q-value{font-size:15px;margin-top:3px}.quick-pill .q-value.q-value-sm{font:700 11px "Segoe UI",sans-serif}
-.cta-row{margin-top:8px;gap:8px}.btn{border-radius:7px;padding:9px 7px;font-family:"Segoe UI",sans-serif;font-size:12px}
-.btn-primary,.rating-switch button.active{background:linear-gradient(#f4cb74,#a56425 50%,#683516)!important;color:#fff5d9!important;border:1px solid #e4b76c!important;text-shadow:0 1px 2px #371705;box-shadow:inset 0 1px 0 #ffebb5,0 2px 9px #0008}
-.btn-ghost{background:linear-gradient(#3c3529,#191a17);border-color:#ad8549;color:#f6e5c2}
-.section-title{font-family:Georgia,serif;font-size:12px;color:#edbc69;letter-spacing:1.1px;margin:10px 4px 7px}
-#screen-today>.section-title{margin:10px 4px 5px;flex-shrink:0}
-#feedList{min-height:0;overflow:auto;flex:1}
-.feed-card,.cal-card,.badge-card,.rank-row{background:linear-gradient(140deg,#2d2b22,#141617 75%);border:1px solid #866a42;border-radius:8px;box-shadow:inset 0 1px 0 #efc78319,0 3px 9px #0006}
-.feed-card{padding:8px 10px;margin-bottom:5px}.feed-title{font-size:11px}.feed-sub{font-size:10px}
-.tabbar{max-width:500px;margin:auto;background:linear-gradient(180deg,#29261e,#0e1110 78%);border-top:2px solid #ad7940;box-shadow:0 -5px 22px #0009;padding:6px 5px calc(6px + env(safe-area-inset-bottom,0px))}
-.tab{font-family:"Segoe UI",sans-serif;color:#c0a785;font-size:11px;gap:2px;padding:5px 0;min-width:0}
-.tab .tab-icon{font-size:21px}
-.tab.active{color:#ffe3a0;background:linear-gradient(#4b3922,#28231b);box-shadow:inset 0 0 0 1px #a77b3c;text-shadow:0 0 7px #fba335;border-radius:5px}
-.tt-page-heading{text-align:center;font-size:20px;margin:7px 0 14px!important;text-shadow:0 0 14px #db861e70}
-#screen-calendar .cal-card{padding:11px}
-.cal-month-label{color:#ffe0a0;font-family:Georgia,serif;font-size:16px}
-.cal-nav{margin-bottom:7px}
-.cal-nav button{border-color:#ad8549;background:linear-gradient(#4d402b,#1d1b17);color:#ffe4ab}
-.cal-grid{gap:4px}
-.cal-weekday{color:#ddb979}
-.cal-day{border-radius:4px;background:#201f1b;aspect-ratio:auto;height:clamp(35px,6.7dvh,49px);color:#ddc8a5}
-.cal-day.today{border-color:#ffc877;box-shadow:0 0 9px #ed9c4b70}
-.cal-day.gym{background:#57331a;border-color:#db8f40}.cal-day.street{background:#263b40;border-color:#659bae}.cal-day.rest{background:#29392c;border-color:#7baf75}.cal-day.challenge,.cal-day.multi{background:#55441c;border-color:#d1b358}
-.legend{margin-top:9px;font-size:10px}.cal-stats{margin-top:8px;padding-top:8px}
-.stats-summary-tile,.sb-cell{border-radius:5px;background:#25251e;border-color:#705b3b;padding:6px 3px}
-.ss-value{font-size:15px}.stats-breakdown-grid{margin-top:5px}
-.badge-grid{gap:7px;grid-template-columns:repeat(3,minmax(0,1fr))}
-.badge-card{padding:10px 5px}.badge-card.unlocked{background:linear-gradient(#55402b,#211e18);border-color:#c79848}
-.badge-icon{font-size:26px;filter:drop-shadow(0 1px 3px #000)}
-.badge-title{color:#ffe2ad}.badge-card.locked{opacity:.6}
-.progress-bar-wrap{background:#26241d;border:1px solid #8f6b3b}
-.rank-row{padding:10px;margin-bottom:6px}.rank-row.me{background:linear-gradient(110deg,#4c3520,#24201a);border-color:#dba85b}
-.rank-hp{color:#ffe0a6}
-.rating-switch{border-color:#9b794a;background:#211e19}
-.modal-sheet,.celebrate-sheet{background:linear-gradient(#332719,#121514);border:2px solid #bc8843}
-.skel{background:linear-gradient(90deg,#26241e 20%,#6d5433 50%,#26241e 80%);background-size:200% 100%}
-@media(max-height:730px){.tt-war-banner{padding:3px 5px 5px}.tt-war-sigil{font-size:15px}.tt-war-motto{display:none}.greet{margin:4px 2px}.hero{padding:6px 9px}.ring-wrap{height:clamp(80px,14dvh,105px);width:clamp(80px,14dvh,105px)}.hero-msg{margin:1px}.streak-multiplier{padding:6px 9px;margin-top:5px}.quick-row{margin-top:5px}.cta-row{margin-top:5px}.section-title{margin:6px 4px 4px}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+/* TurboTeam Arena: original UX and layout, static fantasy skin */
+:root{--bg:#0d0e10;--card:#1e1b19;--card-2:#29241f;--text:#f5e9d7;--muted:#afa18e;--accent:#f4a944;--accent-2:#9aafba;--gold:#f9d184;--border:rgba(220,170,99,.28)}
+body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e10 100%);background-attachment:fixed;color:var(--text)}
+.greet-name,.section-title,.cal-month-label,.hero-msg{font-family:Georgia,"Times New Roman",serif}
+.hero,.cal-card,.feed-card,.rank-row,.badge-card,.quick-pill,.streak-multiplier{background:linear-gradient(150deg,#2d2821 0%,#191919 78%);border:1px solid #795d39;box-shadow:inset 0 1px 0 #f2c57519,0 2px 10px #0005}
+.hero{border:2px ridge #9c763d;border-radius:14px}
+.greet-text,.section-title,.cal-month-label{color:#e8b96a}
+.avatar{background:radial-gradient(circle,#bb7d31,#3b281b);border:1px solid #d5a15e}
+.ring-fill{filter:none}.ring-streak{color:#ffdda1}
+.btn-primary,.rating-switch button.active{background:linear-gradient(180deg,#e4b96b,#a76a2e)!important;color:#23170c!important;border:1px solid #e7c17c!important;box-shadow:inset 0 1px 0 #ffe6ad}
+.btn-ghost,.cal-nav button{background:linear-gradient(#423425,#24201c);border:1px solid #856840;color:#f2d5a6}
+.tabbar{background:#181713;border-top:2px solid #96723f;backdrop-filter:none}
+.tab{color:#b2a38a}.tab.active{color:#ffcf7b;text-shadow:0 0 3px #a95f27}
+.tab.active .tab-icon{transform:none}
+.cal-day{background:#27221e;border-color:#5c4933;color:#dcc6a5}
+.cal-day.gym{background:#5f341d;border-color:#c2864a}.cal-day.street{background:#263941;border-color:#709aa8}.cal-day.rest{background:#283b2c;border-color:#82aa7a}.cal-day.challenge,.cal-day.multi{background:#55421e;border-color:#cfad63}
+.cal-day.today{border-color:#f3d18a;box-shadow:0 0 5px #d4964766}
+.badge-card.unlocked,.rank-row.me{background:linear-gradient(145deg,#44301e,#1d1a17);border-color:#c7964e}
+.progress-bar-fill{background:linear-gradient(90deg,#a96a2c,#f5cb74)}
+.skel{background:linear-gradient(90deg,#2c2925 20%,#504333 50%,#2c2925 80%);background-size:200% 100%}
+@keyframes fadeIn{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+@keyframes screenInRight{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+@keyframes screenInLeft{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+/* Disable decorative continuous motion and flashing across devices. */
+.avatar,.ring-mascot,.badge-card.unlocked .badge-icon,.rank-row.me,.skel,.skel-loader-icon,.skel-loader-text{animation:none!important}
+.tab .tab-icon,.ring-fill{transition:none!important;filter:none!important}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:none!important}}
 
 </style>
 </head>
@@ -586,17 +545,15 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
   // ==================== SKELETON ====================
   const SKELETON = `
     <div class="screen active" id="screen-today">
-      <div class="tt-war-banner"><div class="tt-war-sigil">⚔</div><div class="tt-war-name">TURBOTEAM <em>ARENA</em></div><div class="tt-war-motto">Твоя сила. Твоя легенда.</div></div>
       <div class="greet">
         <div>
-          <div class="greet-text">ПРОФІЛЬ ГЕРОЯ</div>
+          <div class="greet-text">Привіт 👋</div>
           <div class="greet-name" id="greetName">Гравець</div>
         </div>
-        <div class="avatar">🛡️</div>
+        <div class="avatar">🔥</div>
       </div>
 
       <div class="hero">
-        <div class="tt-crest-row"><span class="tt-crest-mark">✦</span><span>ШЛЯХ ВОЇНА</span><span class="tt-crest-mark">✦</span></div>
         <div class="ring-wrap">
           <svg viewBox="0 0 180 180">
             <defs>
@@ -609,7 +566,7 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
             <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
           </svg>
           <div class="ring-center">
-            <div class="ring-mascot">⚔️</div>
+            <div class="ring-mascot">🔥</div>
             <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
             <div class="ring-streak-label">тренувань<br>цього тижня</div>
           </div>
@@ -642,27 +599,27 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
             <div class="q-value" id="hpValue">0</div>
           </div>
           <div class="quick-pill">
-            <div class="q-label">🛡️ Ранг</div>
+            <div class="q-label">🏆 Рівень</div>
             <div class="q-value" id="statusValue">—</div>
           </div>
           <div class="quick-pill">
-            <div class="q-label">🎯 Наступна ціль</div>
+            <div class="q-label">🎯 Ціль</div>
             <div class="q-value q-value-sm" id="goalValue">—</div>
           </div>
         </div>
 
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар</button>
-          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Ліга</button>
+          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
+          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
         </div>
       </div>
 
-      <div class="section-title">⚔️ ОСТАННІ ПОДІЇ</div>
+      <div class="section-title">Останнє в стрічці</div>
       <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
     <div class="screen" id="screen-calendar">
-      <div class="section-title tt-page-heading" style="margin-top:0;">📜 КАЛЕНДАР БИТВ</div>
+      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
       <div class="cal-card">
         <div class="cal-nav">
           <button id="prevMonth">←</button>
@@ -671,7 +628,7 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🏆 Challenge</span>
+          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
         <div class="cal-stats" id="calStatsText"></div>
       </div>
@@ -679,7 +636,7 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
 
     <div class="screen" id="screen-achievements">
       <div class="ach-head" style="margin-top:0;">
-        <div class="section-title tt-page-heading" style="margin:0;">🏅 ТРОФЕЇ ГЕРОЯ</div>
+        <div class="section-title" style="margin:0;">Досягнення</div>
         <div class="ach-count" id="achCount">0 / 0 відкрито</div>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
@@ -691,7 +648,7 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
         <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
         <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
       </div>
-      <div class="section-title tt-page-heading" style="margin-top:0;" id="ratingTitle">Ліга тижня</div>
+      <div class="section-title" style="margin-top:0;" id="ratingTitle">Рейтинг тижня</div>
       <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
@@ -724,10 +681,10 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
     <div class="toast" id="toast"></div>
 
     <nav class="tabbar">
-      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🛡️</span>Профіль</button>
-      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📜</span>Календар</button>
-      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Трофеї</button>
-      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Ліга</button>
+      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🔥</span>Сьогодні</button>
+      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📅</span>Календар</button>
+      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Досягнення</button>
+      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Рейтинг</button>
     </nav>
   `;
 
@@ -1425,7 +1382,7 @@ body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellips
         document.getElementById("app").innerHTML = SKELETON;
         document.getElementById("prevMonth").onclick = () => changeMonth(-1);
         document.getElementById("nextMonth").onclick = () => changeMonth(1);
-        requestAnimationFrame(() => loadFeed());
+        loadFeed();
       }
 
       renderProfile(data);
