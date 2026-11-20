@@ -13,7 +13,7 @@ from architecture.events import REST_SELECTED, SKIP_SELECTED, VIDEO_UPLOADED, TR
 from architecture.events import EventEnvelope
 from architecture.orchestrator import flow_event_bus
 from config import ADMIN_IDS, REPORTS_GROUP_ID, GROUP_LINK, PROFILE_WEB_APP_SHORT_NAME
-from cache import get_data, set_flag, delete_data, KeyManager
+from cache import get_data, set_flag, delete_data, acquire_lock, KeyManager
 from database import check_user_exists, get_currently_banned_telegram_ids, update_user_activity
 from referral import send_invite_prompt
 from ratings import show_rating_for_user
@@ -1115,12 +1115,12 @@ async def gateway_video_note(m: Message):
         return
     try:
         await flow_event_bus.publish(
-        EventEnvelope(
-            name=VIDEO_UPLOADED,
-            user_id=m.from_user.id,
-            payload={"message": m},
-            idempotency_key=f"video:{m.chat.id}:{m.from_user.id}:{m.message_id}",
-        )
+            EventEnvelope(
+                name=VIDEO_UPLOADED,
+                user_id=m.from_user.id,
+                payload={"message": m},
+                idempotency_key=f"video:{m.chat.id}:{m.from_user.id}:{m.message_id}",
+            )
         )
     finally:
         await delete_data(video_lock)
