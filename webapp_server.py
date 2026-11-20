@@ -164,10 +164,10 @@ async def handle_profile(request: web.Request) -> web.Response:
     calendar_days = await get_user_calendar_month(user_uuid, year, month)
     bot_username = await get_data(KeyManager.get_bot_username_key())
 
-    gym_count = sum(1 for a in activities if a.get("action_name") == "Gym")
-    street_count = sum(1 for a in activities if a.get("action_name") == "Street")
-    rest_count = sum(1 for a in activities if a.get("action_name") == "Rest")
-    skip_count = sum(1 for a in activities if a.get("action_name") == "Skipped")
+    gym_count = max(0, sum(1 for a in activities if a.get("action_name") == "Gym") - sum(1 for a in activities if a.get("action_name") == "Gym Rollback"))
+    street_count = max(0, sum(1 for a in activities if a.get("action_name") == "Street") - sum(1 for a in activities if a.get("action_name") == "Street Rollback"))
+    rest_count = max(0, sum(1 for a in activities if a.get("action_name") == "Rest") - sum(1 for a in activities if a.get("action_name") == "Rest Rollback"))
+    skip_count = max(0, sum(1 for a in activities if a.get("action_name") == "Skipped") - sum(1 for a in activities if a.get("action_name") == "Skipped Rollback"))
     training_count = gym_count + street_count
     activities_count = gym_count + street_count + rest_count + skip_count
 
