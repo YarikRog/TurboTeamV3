@@ -4,20 +4,20 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TurboTeam ARENA</title>
+<title>TurboTeam Arena · Герой</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
-    --bg: #0a0c10;
-    --card: #161a22;
-    --card-2: #1d2330;
+    --bg: #090b0b;
+    --card: #191914;
+    --card-2: #24221c;
     --text: #ffffff;
-    --muted: #8b93a3;
-    --accent: #ff5a1f;
-    --accent-2: #4cc9f0;
-    --gold: #ffc828;
+    --muted: #b8a88f;
+    --accent: #df9d3d;
+    --accent-2: #759cac;
+    --gold: #f4d58c;
     --green: #3ddc84;
-    --border: rgba(255, 255, 255, 0.07);
+    --border: rgba(217, 159, 73, .32);
     --radius: 20px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -377,58 +377,74 @@
   .onboarding-item .oi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .onboarding-btn { margin-top: 20px; width: 100%; }
 
-
-/* ===== TurboTeam ARENA · clean game UI ===== */
-:root{--bg:#08090b;--card:#171513;--card-2:#24201d;--accent:#ff8019;--accent-2:#ffb12e;--gold:#ffc34c;--muted:#a69b90;--border:rgba(255,156,58,.22)}
-html,body{background:#08090b;color:#f8f4ed}
-body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),transparent 47%),radial-gradient(ellipse at 100% 75%,rgba(171,59,4,.12),transparent 40%);background-attachment:fixed}
-.screen{padding:20px 16px 100px}
-.arena-brand{text-align:center;padding:22px 0 23px;position:relative;font-style:italic;text-shadow:0 3px 18px rgba(255,100,0,.25)}
-.arena-brand-top{display:block;font-size:29px;font-weight:1000;letter-spacing:1px;line-height:1.05}
-.arena-brand strong{display:block;color:#ff912c;font-size:25px;letter-spacing:7px;line-height:1.4}
-.arena-brand small{display:block;color:#b4a79b;font-size:11px;font-weight:600;letter-spacing:2px;font-style:normal;text-transform:uppercase}
-.greet{padding:10px 14px;margin-bottom:10px;background:linear-gradient(130deg,#231a15,#100f10);border:1px solid var(--border);border-radius:17px}
-.greet-text{font-size:10px;font-weight:800;letter-spacing:2px;color:#ffb265}
-.greet-name{font-size:20px;overflow-wrap:anywhere}
-.avatar{width:38px;height:38px;background:linear-gradient(135deg,#ff9c21,#7e3509);border:1px solid #ffa953;box-shadow:0 0 19px rgba(255,110,0,.26)}
-.hero{padding:0;background:none}
-.fighter-card{position:relative;display:flex;gap:13px;align-items:center;text-align:left;padding:17px 14px;border-radius:19px;background:linear-gradient(115deg,rgba(255,119,20,.19),rgba(26,19,17,.98) 52%,#121113);border:1px solid rgba(255,145,40,.5);box-shadow:inset 0 1px 0 rgba(255,205,120,.11),0 7px 25px rgba(0,0,0,.2)}
-.fighter-emblem{font-size:40px;color:#ff9a24;line-height:1;text-shadow:0 0 20px #b6531e}
-.fighter-caption{font-size:10px;font-weight:800;letter-spacing:1.6px;color:#d3ae8a}
-#fighterRank{font-size:18px;font-weight:900}
-.fighter-hp{margin-left:auto;text-align:right}
-.fighter-hp span{display:block;font-size:11px;color:#ffb05b;font-weight:800}
-.fighter-hp b{font-size:20px;white-space:nowrap}
-.ring-wrap{width:148px;height:148px;margin:12px auto 0}
-.ring-streak{font-size:31px}
-.ring-mascot{font-size:24px}
-.hero-msg{margin-top:3px}
-.hero-sub{margin-bottom:10px}
-.streak-multiplier{text-align:left;background:#191513;border:1px solid var(--border);margin-top:15px}
-.arena-section-title{text-align:left;color:#ffb66f;font-weight:900;letter-spacing:1.1px;font-size:12px;margin:18px 3px 10px}
-.quick-row{gap:8px}
-.quick-pill{min-width:0;flex:1;background:linear-gradient(145deg,#211915,#121112);border:1px solid var(--border);border-radius:15px;padding:13px 5px}
-.q-label{font-size:10px}.q-value{font-size:19px}#goalValue{font-size:12px;overflow-wrap:anywhere}
-.cta-row .btn,.btn-primary{background:linear-gradient(90deg,#ff7a13,#ffab29)!important;border:1px solid #ffba4a!important;color:#1b0e06!important;font-weight:900!important;box-shadow:0 5px 18px rgba(255,108,3,.2)}
-.section-title{color:#f8e7d6}
-.tabbar{max-width:480px;margin:auto;left:0;right:0;bottom:0;padding:8px 5px max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--border);background:rgba(12,11,11,.98);backdrop-filter:blur(20px);display:flex;justify-content:space-around}
-.tab{font-size:10px!important;flex:1;min-width:0;padding:8px 1px!important;border-radius:13px}
-.tab.active{background:linear-gradient(145deg,#77320a,#29160d);color:#ffb765!important;box-shadow:inset 0 0 0 1px rgba(255,130,20,.55),0 0 13px rgba(255,100,0,.14)}
-.tab .tab-icon{font-size:19px}
-.arena-page-title{font-size:28px;font-weight:1000;font-style:italic;letter-spacing:1px;text-align:center;margin:18px 0 4px}
-.arena-page-sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:25px}
-.arena-choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:15px}
-.arena-choice{padding:17px 6px 16px;border-radius:17px;text-align:center;background:linear-gradient(150deg,#2b1d17,#111112);border:1px solid var(--border)}
-.arena-choice-icon{font-size:30px;margin-bottom:12px}.arena-choice b{display:block;font-size:15px}.arena-choice small{display:block;color:#af9e91;margin-top:5px;font-size:11px}
-.arena-panel{margin-top:17px;padding:23px 17px;text-align:center;border:1px solid rgba(255,135,27,.42);border-radius:19px;background:radial-gradient(ellipse at top,rgba(255,111,5,.14),transparent 75%),#161312}
-.arena-panel-icon{font-size:36px;margin-bottom:9px}.arena-panel strong{display:block;font-size:18px}.arena-panel p{margin:8px 0;color:#ffb061;font-weight:700}.arena-panel small{color:#bba99a;font-size:12px}
-.arena-main-action{width:100%;margin-top:18px;padding:15px;border-radius:13px}
-.arena-instruction{font-size:12px;text-align:center;color:var(--muted);line-height:1.6;margin:17px 8px}
-.arena-menu-item{display:flex;align-items:center;width:100%;text-align:left;gap:14px;margin:10px 0;padding:16px 15px;background:linear-gradient(125deg,#241a15,#111112);border:1px solid var(--border);border-radius:14px;color:inherit}
-.arena-menu-item>span{font-size:24px}.arena-menu-item>div{flex:1}.arena-menu-item b{display:block}.arena-menu-item small{display:block;color:var(--muted);margin-top:4px}.arena-menu-item i{font-size:25px;font-style:normal;color:#e8a265}
-#screen-rating .rating-switch{margin-top:18px}
-#screen-achievements .badge-grid{margin-top:17px}
-@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+/* TURBOTEAM ARENA / dark fantasy UI: CSS-only art for near-zero asset download */
+:root{--bg:#090b0b;--card:#191914;--card-2:#24221c;--text:#f6e8c9;--muted:#b7a689;--accent:#df9d3d;--gold:#f7d98d;--border:rgba(221,161,70,.34);--radius:12px}
+html,body{height:100%;overflow:hidden}
+body{padding-bottom:0;background:#090b0b;background-image:radial-gradient(ellipse 90% 35% at 50% 3%,rgba(187,90,24,.23),transparent 75%),repeating-linear-gradient(115deg,transparent 0 38px,rgba(255,199,103,.012) 39px 40px),linear-gradient(160deg,#141511,#090a0b 65%);font-family:Georgia, "Segoe UI",serif}
+#app{height:100%;max-width:500px;margin:auto}
+.screen,.screen.active{height:calc(100dvh - 71px - env(safe-area-inset-bottom,0px));max-width:500px;overflow-y:auto;overscroll-behavior:contain;padding:11px 12px 14px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+#screen-today{display:none}
+#screen-today.active{display:flex;flex-direction:column;gap:0}
+.tt-war-banner{text-align:center;flex-shrink:0;padding:7px 5px 9px;background:linear-gradient(90deg,transparent,rgba(228,154,51,.10),transparent);border-bottom:1px solid rgba(236,173,82,.33)}
+.tt-war-sigil{font-size:21px;color:#ffca69;line-height:1;filter:drop-shadow(0 0 6px #ff7d1d)}
+.tt-war-name{font-family:Georgia,serif;font-size:clamp(19px,5.4vw,27px);font-weight:900;letter-spacing:1.1px;text-shadow:0 2px 1px #000,0 0 13px rgba(255,147,40,.46);line-height:1.14}
+.tt-war-name em{font-style:normal;color:#efb458;letter-spacing:3px}
+.tt-war-motto{font-family:"Segoe UI",sans-serif;font-size:9px;color:#d4b98a;letter-spacing:1.8px;text-transform:uppercase}
+.greet{flex-shrink:0;margin:8px 2px 7px;min-height:40px}
+.greet-text{font-family:"Segoe UI",sans-serif;font-size:10px;letter-spacing:1.5px;color:#d5aa6c;font-weight:800}
+.greet-name{font-size:16px;text-shadow:1px 1px 1px black}
+.avatar{height:34px;width:34px;font-size:19px;background:radial-gradient(circle,#604a2a,#1b1915);border:1px solid #c99345;box-shadow:0 0 12px #a85e203b}
+.hero{flex-shrink:0;background:linear-gradient(145deg,rgba(54,46,30,.72),rgba(16,18,18,.90) 55%),radial-gradient(circle at 50% 0%,rgba(196,96,14,.28),transparent 65%);border:2px ridge #98703c;outline:1px solid #2b1d12;outline-offset:-6px;border-radius:10px;padding:9px 12px 12px;box-shadow:0 8px 19px #0008,inset 0 0 22px #d5a65c11}
+.tt-crest-row{display:flex;justify-content:center;gap:13px;align-items:center;color:#e7bd78;font:800 10px "Segoe UI",sans-serif;letter-spacing:2.4px}
+.tt-crest-mark{font-size:15px;color:#ffdd92}
+.ring-wrap{width:clamp(95px,17dvh,142px);height:clamp(95px,17dvh,142px);margin:2px auto 0}
+.ring-bg{stroke:#3a3429}.ring-fill{stroke-width:12;filter:drop-shadow(0 0 5px #ffb64d)}
+.ring-mascot{font-size:clamp(18px,3dvh,26px);margin:0}.ring-streak{font-size:clamp(22px,4dvh,33px);color:#ffe2a6;text-shadow:0 0 12px #d68e2980}.ring-streak small{font-size:13px}.ring-streak-label{font:700 9px "Segoe UI",sans-serif}
+.hero-msg{font-size:13px;margin:3px 0}.hero-sub{font:11px "Segoe UI",sans-serif;margin:0}
+.streak-multiplier{margin-top:9px;padding:9px 11px;background:linear-gradient(90deg,#2d2518,#181a18);border:1px solid #86663b;border-radius:7px}
+.streak-header{margin-bottom:5px}.streak-value{font-size:16px}.streak-label{font-size:10px}
+.streak-bar-wrap{height:6px;margin-bottom:5px}.streak-info{font-size:10px}.streak-days,.streak-next{font-size:10px}
+.quick-row{margin-top:8px;gap:7px}
+.quick-pill{border:1px solid #8b6736;border-radius:7px;padding:7px 6px;background:linear-gradient(145deg,#302718,#171a19)}
+.quick-pill .q-label{font:700 10px "Segoe UI",sans-serif;color:#d2ad76}.quick-pill .q-value{font-size:15px;margin-top:3px}.quick-pill .q-value.q-value-sm{font:700 11px "Segoe UI",sans-serif}
+.cta-row{margin-top:8px;gap:8px}.btn{border-radius:7px;padding:9px 7px;font-family:"Segoe UI",sans-serif;font-size:12px}
+.btn-primary,.rating-switch button.active{background:linear-gradient(#f4cb74,#a56425 50%,#683516)!important;color:#fff5d9!important;border:1px solid #e4b76c!important;text-shadow:0 1px 2px #371705;box-shadow:inset 0 1px 0 #ffebb5,0 2px 9px #0008}
+.btn-ghost{background:linear-gradient(#3c3529,#191a17);border-color:#ad8549;color:#f6e5c2}
+.section-title{font-family:Georgia,serif;font-size:12px;color:#edbc69;letter-spacing:1.1px;margin:10px 4px 7px}
+#screen-today>.section-title{margin:10px 4px 5px;flex-shrink:0}
+#feedList{min-height:0;overflow:auto;flex:1}
+.feed-card,.cal-card,.badge-card,.rank-row{background:linear-gradient(140deg,#2d2b22,#141617 75%);border:1px solid #866a42;border-radius:8px;box-shadow:inset 0 1px 0 #efc78319,0 3px 9px #0006}
+.feed-card{padding:8px 10px;margin-bottom:5px}.feed-title{font-size:11px}.feed-sub{font-size:10px}
+.tabbar{max-width:500px;margin:auto;background:linear-gradient(180deg,#29261e,#0e1110 78%);border-top:2px solid #ad7940;box-shadow:0 -5px 22px #0009;padding:6px 5px calc(6px + env(safe-area-inset-bottom,0px))}
+.tab{font-family:"Segoe UI",sans-serif;color:#c0a785;font-size:11px;gap:2px;padding:5px 0;min-width:0}
+.tab .tab-icon{font-size:21px}
+.tab.active{color:#ffe3a0;background:linear-gradient(#4b3922,#28231b);box-shadow:inset 0 0 0 1px #a77b3c;text-shadow:0 0 7px #fba335;border-radius:5px}
+.tt-page-heading{text-align:center;font-size:20px;margin:7px 0 14px!important;text-shadow:0 0 14px #db861e70}
+#screen-calendar .cal-card{padding:11px}
+.cal-month-label{color:#ffe0a0;font-family:Georgia,serif;font-size:16px}
+.cal-nav{margin-bottom:7px}
+.cal-nav button{border-color:#ad8549;background:linear-gradient(#4d402b,#1d1b17);color:#ffe4ab}
+.cal-grid{gap:4px}
+.cal-weekday{color:#ddb979}
+.cal-day{border-radius:4px;background:#201f1b;aspect-ratio:auto;height:clamp(35px,6.7dvh,49px);color:#ddc8a5}
+.cal-day.today{border-color:#ffc877;box-shadow:0 0 9px #ed9c4b70}
+.cal-day.gym{background:#57331a;border-color:#db8f40}.cal-day.street{background:#263b40;border-color:#659bae}.cal-day.rest{background:#29392c;border-color:#7baf75}.cal-day.challenge,.cal-day.multi{background:#55441c;border-color:#d1b358}
+.legend{margin-top:9px;font-size:10px}.cal-stats{margin-top:8px;padding-top:8px}
+.stats-summary-tile,.sb-cell{border-radius:5px;background:#25251e;border-color:#705b3b;padding:6px 3px}
+.ss-value{font-size:15px}.stats-breakdown-grid{margin-top:5px}
+.badge-grid{gap:7px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.badge-card{padding:10px 5px}.badge-card.unlocked{background:linear-gradient(#55402b,#211e18);border-color:#c79848}
+.badge-icon{font-size:26px;filter:drop-shadow(0 1px 3px #000)}
+.badge-title{color:#ffe2ad}.badge-card.locked{opacity:.6}
+.progress-bar-wrap{background:#26241d;border:1px solid #8f6b3b}
+.rank-row{padding:10px;margin-bottom:6px}.rank-row.me{background:linear-gradient(110deg,#4c3520,#24201a);border-color:#dba85b}
+.rank-hp{color:#ffe0a6}
+.rating-switch{border-color:#9b794a;background:#211e19}
+.modal-sheet,.celebrate-sheet{background:linear-gradient(#332719,#121514);border:2px solid #bc8843}
+.skel{background:linear-gradient(90deg,#26241e 20%,#6d5433 50%,#26241e 80%);background-size:200% 100%}
+@media(max-height:730px){.tt-war-banner{padding:3px 5px 5px}.tt-war-sigil{font-size:15px}.tt-war-motto{display:none}.greet{margin:4px 2px}.hero{padding:6px 9px}.ring-wrap{height:clamp(80px,14dvh,105px);width:clamp(80px,14dvh,105px)}.hero-msg{margin:1px}.streak-multiplier{padding:6px 9px;margin-top:5px}.quick-row{margin-top:5px}.cta-row{margin-top:5px}.section-title{margin:6px 4px 4px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 </style>
 </head>
@@ -570,17 +586,17 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
   // ==================== SKELETON ====================
   const SKELETON = `
     <div class="screen active" id="screen-today">
-      <div class="arena-brand"><span class="arena-brand-top">TURBOTEAM</span><strong>ARENA</strong><small>Твій шлях до вершини</small></div>
+      <div class="tt-war-banner"><div class="tt-war-sigil">⚔</div><div class="tt-war-name">TURBOTEAM <em>ARENA</em></div><div class="tt-war-motto">Твоя сила. Твоя легенда.</div></div>
       <div class="greet">
         <div>
-          <div class="greet-text">ПРОФІЛЬ БІЙЦЯ</div>
+          <div class="greet-text">ПРОФІЛЬ ГЕРОЯ</div>
           <div class="greet-name" id="greetName">Гравець</div>
         </div>
-        <div class="avatar">👑</div>
+        <div class="avatar">🛡️</div>
       </div>
 
       <div class="hero">
-        <div class="fighter-card"><span class="fighter-emblem">♛</span><div><div class="fighter-caption">ТВІЙ РАНГ</div><div id="fighterRank">—</div></div><div class="fighter-hp"><span>⚡ HP</span><b id="fighterHp">0</b></div></div>
+        <div class="tt-crest-row"><span class="tt-crest-mark">✦</span><span>ШЛЯХ ВОЇНА</span><span class="tt-crest-mark">✦</span></div>
         <div class="ring-wrap">
           <svg viewBox="0 0 180 180">
             <defs>
@@ -593,7 +609,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
             <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
           </svg>
           <div class="ring-center">
-            <div class="ring-mascot">🔥</div>
+            <div class="ring-mascot">⚔️</div>
             <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
             <div class="ring-streak-label">тренувань<br>цього тижня</div>
           </div>
@@ -620,16 +636,14 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
           </button>
         </div>
 
-        <div class="arena-section-title">ТВОЯ СТАТИСТИКА</div>
         <div class="quick-row">
           <div class="quick-pill">
             <div class="q-label">⚡ HP</div>
             <div class="q-value" id="hpValue">0</div>
           </div>
           <div class="quick-pill">
-            <div class="q-label">🏋️ Тренувань</div>
-            <div class="q-value" id="trainingValue">0</div>
-            <div class="q-value" style="display:none" id="statusValue">—</div>
+            <div class="q-label">🛡️ Ранг</div>
+            <div class="q-value" id="statusValue">—</div>
           </div>
           <div class="quick-pill">
             <div class="q-label">🎯 Наступна ціль</div>
@@ -638,36 +652,17 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
         </div>
 
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
-          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
+          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар</button>
+          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Ліга</button>
         </div>
       </div>
 
-      <div class="section-title">Останні події</div>
+      <div class="section-title">⚔️ ОСТАННІ ПОДІЇ</div>
       <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
-    <div class="screen" id="screen-arena">
-      <div class="arena-page-title">⚔️ АРЕНА</div><div class="arena-page-sub">Твої тренування та виклики</div>
-      <div class="arena-choice-grid">
-        <div class="arena-choice"><div class="arena-choice-icon">🏋️</div><b>Gym</b><small>Зал</small></div>
-        <div class="arena-choice"><div class="arena-choice-icon">💪</div><b>Street</b><small>Вулиця</small></div>
-        <div class="arena-choice"><div class="arena-choice-icon">🎯</div><b>Челендж</b><small>Тижневий</small></div>
-      </div>
-      <div class="arena-panel"><div class="arena-panel-icon">🏆</div><strong>Тижневий челендж</strong><p>До 5 виконань за тиждень · +50 HP за виконання</p><small>Прогрес зараховується після кружка в групі</small></div>
-      <button class="btn btn-primary arena-main-action" onclick="openReportsGroup()">🔥 Перейти до тренувань</button>
-      <div class="arena-instruction">Обери Gym, Street або Челендж у групі та надішли кружок протягом 5 хвилин.</div>
-    </div>
-
-    <div class="screen" id="screen-more">
-      <div class="arena-page-title">☰ ЩЕ</div><div class="arena-page-sub">Історія та додаткові можливості</div>
-      <button class="arena-menu-item" onclick="goTab('calendar')"><span>📅</span><div><b>Календар активності</b><small>Твої тренування по днях</small></div><i>›</i></button>
-      <button class="arena-menu-item" onclick="goTab('today')"><span>👤</span><div><b>Мій профіль</b><small>HP, ранг і прогрес</small></div><i>›</i></button>
-      <button class="arena-menu-item" onclick="openReportsGroup()"><span>👥</span><div><b>Наша група</b><small>Тренування та спілкування</small></div><i>›</i></button>
-    </div>
-
     <div class="screen" id="screen-calendar">
-      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
+      <div class="section-title tt-page-heading" style="margin-top:0;">📜 КАЛЕНДАР БИТВ</div>
       <div class="cal-card">
         <div class="cal-nav">
           <button id="prevMonth">←</button>
@@ -676,7 +671,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🔥 Challenge</span>
+          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🏆 Challenge</span>
         </div>
         <div class="cal-stats" id="calStatsText"></div>
       </div>
@@ -684,7 +679,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
 
     <div class="screen" id="screen-achievements">
       <div class="ach-head" style="margin-top:0;">
-        <div class="section-title" style="margin:0;">🏅 ТРОФЕЇ</div>
+        <div class="section-title tt-page-heading" style="margin:0;">🏅 ТРОФЕЇ ГЕРОЯ</div>
         <div class="ach-count" id="achCount">0 / 0 відкрито</div>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
@@ -696,7 +691,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
         <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
         <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
       </div>
-      <div class="arena-page-title">🏆 ЛІГА</div><div class="section-title" style="margin-top:0;" id="ratingTitle">Рейтинг тижня</div>
+      <div class="section-title tt-page-heading" style="margin-top:0;" id="ratingTitle">Ліга тижня</div>
       <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
     </div>
 
@@ -729,22 +724,15 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
     <div class="toast" id="toast"></div>
 
     <nav class="tabbar">
-      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">⌂</span>Профіль</button>
-      <button class="tab" data-tab="arena" onclick="goTab('arena')"><span class="tab-icon">🏋️</span>Арена</button>
-      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Ліга</button>
+      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🛡️</span>Профіль</button>
+      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📜</span>Календар</button>
       <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Трофеї</button>
-      <button class="tab" data-tab="more" onclick="goTab('more')"><span class="tab-icon">☰</span>Ще</button>
+      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Ліга</button>
     </nav>
   `;
 
   // ==================== TAB NAVIGATION ====================
-  const TAB_ORDER = ["today", "arena", "rating", "achievements", "more"];
-  function openReportsGroup() {
-    const link = profileData?.group_link;
-    if (!link) return showToast("Посилання на групу недоступне");
-    if (tg?.openTelegramLink && /^https:\/\/t\.me\//.test(link)) tg.openTelegramLink(link);
-    else window.location.href = link;
-  }
+  const TAB_ORDER = ["today", "calendar", "achievements", "rating"];
   let currentTabName = "today";
 
   function goTab(name) {
@@ -759,7 +747,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
     screen.style.animation = "none";
     void screen.offsetWidth;
     screen.style.animation = `screenIn${dir} .26s cubic-bezier(.34,1.1,.64,1) both`;
-    document.querySelector(`.tab[data-tab="${name === "calendar" ? "more" : name}"]`)?.classList.add("active");
+    document.querySelector(`.tab[data-tab="${name}"]`).classList.add("active");
 
     if (name === "today") animateRing();
     if (name === "calendar") animateCalendar();
@@ -923,9 +911,6 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
     hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
     pulseOnChange(hpEl, data.hp_total);
     document.getElementById("statusValue").textContent = data.status || "—";
-    document.getElementById("fighterRank").textContent = data.status || "Без статусу";
-    document.getElementById("fighterHp").textContent = Number(data.hp_total || 0).toLocaleString("uk");
-    document.getElementById("trainingValue").textContent = Number(data.training_count || 0).toLocaleString("uk");
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
 
     // Загружаем данные о Streak Multiplier
@@ -1440,7 +1425,7 @@ body{background-image:radial-gradient(ellipse at 50% -10%,rgba(255,100,9,.22),tr
         document.getElementById("app").innerHTML = SKELETON;
         document.getElementById("prevMonth").onclick = () => changeMonth(-1);
         document.getElementById("nextMonth").onclick = () => changeMonth(1);
-        loadFeed();
+        requestAnimationFrame(() => loadFeed());
       }
 
       renderProfile(data);
