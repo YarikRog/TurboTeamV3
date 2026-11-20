@@ -1011,14 +1011,24 @@ class ActivityService:
         if not granted:
             return False
 
+        # Independent post-write reads run concurrently to reduce report latency.
         if action_type in ["Gym", "Street"]:
             await ActivityService.invalidate_training_count_cache(user.id)
-            streak_days = await ActivityService.refresh_streak_after_training(
-                user_id=user.id,
-                fallback_streak=streak_days,
-                attempts=3,
-                delay_seconds=0.4,
+            streak_days, achievement_title, training_count, bot_info = await asyncio.gather(
+                ActivityService.refresh_streak_after_training(
+                    user_id=user.id, fallback_streak=streak_days, attempts=3, delay_seconds=0.4,
+                ),
+                ActivityService.maybe_grant_training_achievement(user.id),
+                ActivityService.get_training_count(user.id),
+                message.bot.get_me(),
             )
+        else:
+            achievement_title, training_count, bot_info = await asyncio.gather(
+                ActivityService.maybe_grant_training_achievement(user.id),
+                asyncio.sleep(0, result=0),
+                message.bot.get_me(),
+            )
+        bot_username = bot_info.username
 
         back_to_group_kb = types.InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1063,7 +1073,6 @@ class ActivityService:
                 parse_mode="HTML",
             )
 
-        achievement_title = await ActivityService.maybe_grant_training_achievement(user.id)
         if achievement_title:
             achievement_title_html = escape(str(achievement_title))
             await message.answer(
@@ -1078,16 +1087,8 @@ class ActivityService:
         new_status_title = None
 
         if action_type in ["Gym", "Street"]:
-            training_count = await ActivityService.get_training_count(user.id)
             current_status_title = ActivityService.get_current_training_status(training_count)
             new_status_title = ActivityService.get_new_training_status_by_exact_count(training_count)
-
-        try:
-            me = await message.bot.get_me()
-            bot_username = me.username
-        except Exception as e:
-            logger.warning("[SERVICE] Failed to get bot username for report keyboard: %s", e)
-            bot_username = None
 
         report_kb = build_report_keyboard(
             target_uid=user.id,
@@ -1148,13 +1149,6 @@ class ActivityService:
                 f"Тренувань виконано: <b>{training_count}</b>\n\n"
                 f"<b>Та дивись свій рівень у вебапп 👇</b>"
             )
-
-            try:
-                me = await message.bot.get_me()
-                bot_username = me.username
-            except Exception as e:
-                logger.warning("[SERVICE] Failed to get bot username for level-up keyboard: %s", e)
-                bot_username = None
 
             level_up_kb = InlineKeyboardMarkup(
                 inline_keyboard=[
