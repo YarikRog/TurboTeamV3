@@ -890,12 +890,6 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
         if result.get("ok"):
             await state_machine.complete(event.user_id)
 
-            await message.answer(
-                f"✅ Челендж зараховано. +{int(result.get('hp', 0) or 0)} HP",
-                reply_markup=_get_back_to_group_inline_keyboard(),
-                parse_mode=None,
-            )
-
             group_video_msg = message if message.chat.id == REPORTS_GROUP_ID else None
             if group_video_msg is None:
                 try:
@@ -909,7 +903,7 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
                 else (message.from_user.full_name or message.from_user.first_name or "Учасник")
             )
 
-            await message.bot.send_message(
+            group_text_msg = await message.bot.send_message(
                 REPORTS_GROUP_ID,
                 build_challenge_group_report_text(
                     nickname=report_nickname,
@@ -919,6 +913,31 @@ async def on_video_uploaded(event: EventEnvelope) -> bool:
                 parse_mode="HTML",
                 reply_to_message_id=group_video_msg.message_id if group_video_msg else None,
             )
+
+            # Store report metadata for admin /reject on either the circle or report.
+            today = get_kyiv_now().strftime("%Y-%m-%d")
+            rollback_key = KeyManager.get_training_rollback_key(
+                event.user_id, today, CHALLENGE_ACTION, video_id or "no_video_id",
+            )
+            report_meta = {
+                "target_uid": event.user_id,
+                "nickname": message.from_user.full_name,
+                "action_type": CHALLENGE_ACTION,
+                "hp": int(result.get("hp", 0) or 0),
+                "video_id": video_id,
+                "date_str": today,
+                "group_chat_id": REPORTS_GROUP_ID,
+                "rollback_key": rollback_key,
+                "video_group_message_id": group_video_msg.message_id if group_video_msg else None,
+                "text_group_message_id": group_text_msg.message_id,
+            }
+            for report_id in (
+                group_video_msg.message_id if group_video_msg else None,
+                group_text_msg.message_id,
+            ):
+                if report_id is not None:
+                    await set_data(KeyManager.get_report_meta_key(report_id), report_meta, ex=86400 * 7)
+            await set_data(rollback_key, report_meta, ex=86400 * 7)
 
             logger.info("[VIDEO] challenge completed user_id=%s total=%sms", event.user_id, _ms(total_started))
             return True
