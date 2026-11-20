@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Мій профіль — TurboTeam</title>
+<title>TurboTeam Arena — профіль</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -481,9 +481,9 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
     // Апка має власну фіксовану темну тему (бренд-кольори), тож синхронізуємо
     // не кольори інтерфейсу з темою юзера, а хром Telegram (хедер/фон) з темою апки —
     // щоб не було білого "шву" зверху при відкритті.
-    try { tg.setHeaderColor("#0a0c10"); } catch (e) {}
-    try { tg.setBackgroundColor("#0a0c10"); } catch (e) {}
-    try { tg.setBottomBarColor?.("#0a0c10"); } catch (e) {}
+    try { tg.setHeaderColor("#090909"); } catch (e) {}
+    try { tg.setBackgroundColor("#090909"); } catch (e) {}
+    try { tg.setBottomBarColor?.("#090909"); } catch (e) {}
   }
 
   const today = new Date();
@@ -548,81 +548,65 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
   // ==================== SKELETON ====================
   const SKELETON = `
     <div class="screen active" id="screen-today">
-      <div class="greet">
-        <div>
-          <div class="greet-text">Привіт 👋</div>
-          <div class="greet-name" id="greetName">Гравець</div>
-        </div>
-        <div class="avatar">🔥</div>
+      <div class="arena-scene arena-home-scene">
+        <div class="arena-scene-brand"><strong>TURBOTEAM</strong><em>ARENA</em></div>
       </div>
-
-      <div class="hero">
-        <div class="ring-wrap">
-          <svg viewBox="0 0 180 180">
-            <defs>
-              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#ff5a1f"/>
-                <stop offset="100%" stop-color="#ffc828"/>
-              </linearGradient>
-            </defs>
-            <circle class="ring-bg" cx="90" cy="90" r="80"/>
-            <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
-          </svg>
-          <div class="ring-center">
-            <div class="ring-mascot">🔥</div>
-            <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
-            <div class="ring-streak-label">тренувань<br>цього тижня</div>
-          </div>
+      <div class="arena-identity game-panel">
+        <div class="arena-player-avatar">♛</div>
+        <div class="arena-player-info"><div id="greetName" class="arena-player-name">Гравець</div>
+          <div class="arena-player-rank"><span class="arena-rank-icon">❖</span><span id="statusValue">—</span></div>
+          <small class="arena-player-count">Тренувань: <span id="trainingCountUI">0</span></small>
         </div>
-        <div class="hero-msg" id="heroMsg">—</div>
-        <div class="hero-sub" id="heroSub">—</div>
-
-        <!-- STREAK MULTIPLIER BLOCK -->
+        <div class="arena-player-hp"><small>⚡ HP</small><strong id="hpValue">0</strong></div>
+      </div>
+      <div class="arena-stats">
+        <div class="arena-stat game-panel"><span class="arena-stat-icon">🏋️</span><small>Тренувань</small><strong id="trainingStatUI">0</strong></div>
+        <div class="arena-stat game-panel"><span class="arena-stat-icon">🔥</span><small>Серія</small><strong id="ringStreak">0<small>/14</small></strong></div>
+        <div class="arena-stat game-panel"><span class="arena-stat-icon">🎯</span><small>Челендж</small><strong id="challengeStatUI">—</strong></div>
+      </div>
+      <div class="arena-rank-progress game-panel">
+        <div class="arena-progress-line"><span>⚔️ До наступного рангу</span><strong id="goalValue">—</strong></div>
+        <div class="arena-progress-track"><span id="rankGoalFill"></span></div>
+      </div>
+      <div class="arena-mission game-panel" onclick="goTab('arena')" role="button" tabindex="0">
+        <span class="arena-mission-icon">🎯</span>
+        <div><strong>Тижневий виклик</strong><small>Виконай 5 завдань за тиждень</small></div>
+        <span id="challengeMissionUI">—</span>
+      </div>
+      <div class="arena-secondary">
         <div class="streak-multiplier">
-          <div class="streak-header">
-            <span class="streak-label">🔥 Мультик HP</span>
-            <span class="streak-value" id="streakMultiplier">1x</span>
-          </div>
-          <div class="streak-bar-wrap">
-            <div class="streak-bar-bg"></div>
-            <div class="streak-bar-fill" id="streakBarFill" style="width: 0%"></div>
-          </div>
-          <div class="streak-info">
-            <div class="streak-days" id="streakDays">0 тренувань цього місяця</div>
-            <div class="streak-next" id="streakNext">До 1.5x: 7 тренувань</div>
-          </div>
-          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display: none;">
-            🆘 Страховка (1/мес)
-          </button>
+          <div class="streak-header"><span class="streak-label">🔥 Множник HP</span><span class="streak-value" id="streakMultiplier">1x</span></div>
+          <div class="streak-bar-wrap"><div class="streak-bar-bg"></div><div class="streak-bar-fill" id="streakBarFill"></div></div>
+          <div class="streak-info"><div class="streak-days" id="streakDays">—</div><div class="streak-next" id="streakNext">—</div></div>
+          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display:none">🆘 Страховка</button>
         </div>
-
-        <div class="quick-row">
-          <div class="quick-pill">
-            <div class="q-label">⚡ HP</div>
-            <div class="q-value" id="hpValue">0</div>
-          </div>
-          <div class="quick-pill">
-            <div class="q-label">🏆 Рівень</div>
-            <div class="q-value" id="statusValue">—</div>
-          </div>
-          <div class="quick-pill">
-            <div class="q-label">🎯 Ціль</div>
-            <div class="q-value q-value-sm" id="goalValue">—</div>
-          </div>
-        </div>
-
-        <div class="cta-row">
-          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
-          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
-        </div>
+        <div id="heroMsg" class="arena-hidden-compat"></div><div id="heroSub" class="arena-hidden-compat"></div>
+        <svg class="arena-hidden-compat" width="0" height="0"><circle id="ringFill" cx="0" cy="0" r="0"/></svg>
       </div>
+      <button class="arena-events-button" onclick="toggleArenaFeed()">⚔️ Останні події <span>⌄</span></button>
+      <div id="arenaFeedPanel" class="arena-feed-panel" hidden><div id="feedList"><div class="state-msg">Завантаження...</div></div></div>
+    </div>
 
-      <div class="section-title">Останнє в стрічці</div>
-      <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
+    <div class="screen" id="screen-arena">
+      <div class="arena-screen-heading"><h1>АРЕНА</h1><p>Обери свій формат тренувань</p></div>
+      <div class="arena-choice-grid">
+        <div class="arena-choice game-panel"><div>🏋️</div><strong>Gym</strong><small>Зал</small></div>
+        <div class="arena-choice game-panel"><div>💪</div><strong>Street</strong><small>Вулиця</small></div>
+        <div class="arena-choice game-panel"><div>🎯</div><strong>Челендж</strong><small>Тижневий</small></div>
+      </div>
+      <div class="arena-challenge-panel game-panel">
+        <div class="arena-challenge-title"><span>🏆 Тижневий челендж</span><b>+50 HP</b></div>
+        <div class="arena-challenge-sub">5 виконань за тиждень • 1 на день</div>
+        <div class="arena-progress-track"><span id="arenaChallengeFill"></span></div>
+        <div class="arena-challenge-total" id="arenaChallengeProgress">— / 5</div>
+      </div>
+      <div class="arena-arena-art" aria-hidden="true"></div>
+      <button class="btn btn-primary arena-go-group" onclick="openArenaGroup()">⚔️ Перейти в групу тренувань</button>
+      <p class="arena-instruction">Вибери Gym, Street або челендж у Telegram-групі й надішли свіжий кружок.</p>
     </div>
 
     <div class="screen" id="screen-calendar">
-      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
+      <div class="arena-screen-heading"><h1>КАЛЕНДАР</h1><p>Журнал твоєї активності</p></div>
       <div class="cal-card">
         <div class="cal-nav">
           <button id="prevMonth">←</button>
@@ -631,7 +615,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
         </div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="legend">
-          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
+          <span>🏋️ Gym</span><span>💪 Street</span><span>🧘 Rest</span><span>🎯 Challenge</span>
         </div>
         <div class="cal-stats" id="calStatsText"></div>
       </div>
@@ -639,7 +623,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
 
     <div class="screen" id="screen-achievements">
       <div class="ach-head" style="margin-top:0;">
-        <div class="section-title" style="margin:0;">Досягнення</div>
+        <div class="section-title arena-h2" style="margin:0;">ТРОФЕЇ</div>
         <div class="ach-count" id="achCount">0 / 0 відкрито</div>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
@@ -647,6 +631,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
     </div>
 
     <div class="screen" id="screen-rating">
+      <div class="arena-screen-heading"><h1>ЛІГА</h1><p>Рейтинг TurboTeam</p></div>
       <div class="rating-switch">
         <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
         <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
@@ -684,15 +669,20 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
     <div class="toast" id="toast"></div>
 
     <nav class="tabbar">
-      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🔥</span>Сьогодні</button>
-      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📅</span>Календар</button>
-      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Досягнення</button>
-      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Рейтинг</button>
+      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">⌂</span>Профіль</button>
+      <button class="tab" data-tab="arena" onclick="goTab('arena')"><span class="tab-icon">⚔️</span>Арена</button>
+      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">▦</span>Календар</button>
+      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Трофеї</button>
+      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Ліга</button>
     </nav>
   `;
 
   // ==================== TAB NAVIGATION ====================
-  const TAB_ORDER = ["today", "calendar", "achievements", "rating"];
+  const TAB_ORDER = ["today", "arena", "calendar", "achievements", "rating"];
+  let arenaFeedLoaded = false;
+  function toggleArenaFeed(){const el=document.getElementById("arenaFeedPanel");if(!el)return;el.hidden=!el.hidden;if(!el.hidden&&!arenaFeedLoaded){arenaFeedLoaded=true;loadFeed();}}
+  function openArenaGroup(){const link=profileData?.group_link;if(!link)return showToast("Посилання на групу недоступне");if(/^https:\/\/t\.me\//.test(link)&&tg?.openTelegramLink)tg.openTelegramLink(link);else if(/^https:\/\//.test(link))window.location.href=link;}
+  document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target?.classList?.contains("arena-mission")){e.preventDefault();goTab("arena");}});
   let currentTabName = "today";
 
   function goTab(name) {
@@ -871,6 +861,17 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
     hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
     pulseOnChange(hpEl, data.hp_total);
     document.getElementById("statusValue").textContent = data.status || "—";
+    const trainCount = Math.max(0, Number(data.training_count || 0));
+    document.getElementById("trainingCountUI").textContent = trainCount;
+    document.getElementById("trainingStatUI").textContent = trainCount;
+    const challengeCount = data.weekly_challenge_count;
+    const weeklyText = Number.isFinite(Number(challengeCount)) && challengeCount !== null && challengeCount !== undefined ? `${challengeCount}/5` : "—";
+    document.getElementById("challengeStatUI").textContent = weeklyText;
+    document.getElementById("challengeMissionUI").textContent = weeklyText;
+    document.getElementById("arenaChallengeProgress").textContent = weeklyText.replace("/"," / ");
+    document.getElementById("arenaChallengeFill").style.width = challengeCount == null ? "0%" : `${Math.min(100,Math.max(0,Number(challengeCount)*20))}%`;
+    const next = Number(data.next_goal_threshold || 0);
+    document.getElementById("rankGoalFill").style.width = next > 0 ? `${Math.min(100,trainCount / next * 100)}%` : "100%";
     document.getElementById("goalValue").textContent = data.next_goal_text || "—";
 
     // Загружаем данные о Streak Multiplier
@@ -1385,7 +1386,7 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
         document.getElementById("app").innerHTML = SKELETON;
         document.getElementById("prevMonth").onclick = () => changeMonth(-1);
         document.getElementById("nextMonth").onclick = () => changeMonth(1);
-        loadFeed();
+        // Feed is loaded only when the user opens «Останні події».
       }
 
       renderProfile(data);
