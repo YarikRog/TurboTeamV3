@@ -408,6 +408,64 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
 
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:none!important}}
 
+
+/* ==== TurboTeam ARENA: visual reference v1. No animated GIFs. ==== */
+:root{--bg:#08090b;--card:#171615;--card-2:#211d1b;--text:#f7f6f2;--muted:#a6a5a3;--accent:#ff8c23;--accent-2:#ffb03c;--gold:#ffd18a;--border:rgba(255,154,54,.36);--radius:14px}
+html,body{background:#08090b;overflow:hidden;height:100%}
+body{padding-bottom:0;color:#f8f7f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background-image:radial-gradient(ellipse at 40% 5%,#2d160b 0%,#08090b 58%)}
+#app{max-width:480px;margin:0 auto;height:100%;background:linear-gradient(165deg,#14110f 0%,#08090b 38%,#100c0b 100%);position:relative}
+.screen,.screen.active{height:calc(100dvh - 72px - env(safe-area-inset-bottom,0px));overflow-y:auto;overscroll-behavior:contain;padding:9px 13px 16px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.game-panel{background:linear-gradient(136deg,#292321,#111113 60%,#1b1511);border:1px solid rgba(255,138,32,.57);box-shadow:inset 0 1px 0 rgba(255,206,112,.13),0 4px 14px #0008;border-radius:13px}
+.arena-scene{height:clamp(132px,22dvh,190px);border-radius:12px 12px 0 0;background:linear-gradient(to bottom,rgba(0,0,0,.05),rgba(0,0,0,.02) 56%,#0e0e0f 98%),url("arena-hero.svg") center 43%/cover no-repeat,linear-gradient(135deg,#4b2311,#08090b);position:relative;overflow:hidden}
+.arena-scene::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 83% 46%,rgba(255,107,5,.2),transparent 55%);pointer-events:none}
+.arena-scene-brand{position:absolute;top:13px;right:10px;text-align:center;color:white;text-shadow:0 3px 5px #000,0 0 13px #f36f05;font-weight:1000;font-style:italic;line-height:1.03;letter-spacing:1.4px}
+.arena-scene-brand strong{display:block;font-size:clamp(19px,6vw,27px)}
+.arena-scene-brand em{display:block;font-size:clamp(20px,6.7vw,31px);letter-spacing:5px;color:#ffaf51;font-style:italic}
+.arena-identity{display:flex;align-items:center;gap:11px;margin:-25px 7px 9px;position:relative;padding:11px 13px;min-height:92px;z-index:1;background:linear-gradient(125deg,rgba(34,28,25,.97),rgba(11,11,13,.98));border-radius:18px}
+.arena-player-avatar{width:60px;height:60px;border-radius:50%;flex-shrink:0;border:2px solid #ff9d28;background:radial-gradient(circle at 52% 26%,#784621,#201919 62%,#0b0a0a);box-shadow:0 0 13px rgba(255,124,4,.4);display:grid;place-items:center;font-size:34px;color:#ffca77}
+.arena-player-info{min-width:0;flex:1}.arena-player-name{font-weight:900;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.arena-player-rank{display:inline-flex;align-items:center;gap:5px;color:#f5f2ec;font-size:11px;margin-top:6px;background:#29292b;padding:4px 7px;border-radius:7px;font-weight:700}
+.arena-rank-icon{color:#ffab45}.arena-player-count{display:block;font-size:10px;color:#b6ada3;margin-top:5px}
+.arena-player-hp{text-align:right;white-space:nowrap}.arena-player-hp small{display:block;color:#ff9a22;font-size:11px;font-weight:850;letter-spacing:.8px}.arena-player-hp strong{display:block;color:#fefbf6;font-weight:900;font-size:clamp(16px,4.8vw,22px);text-shadow:0 0 9px #e7722255}
+.arena-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:8px}
+.arena-stat{padding:9px 4px;text-align:center;border-color:#7d4930;border-radius:10px}
+.arena-stat-icon{display:block;font-size:20px;line-height:1.15;color:#ffac40}.arena-stat>small{display:block;margin-top:4px;font-size:10px;color:#bdb2a4}.arena-stat>strong{display:block;font-size:18px;font-weight:900;margin-top:3px;white-space:nowrap}.arena-stat>strong small{font-size:11px;color:#bdb2a4}
+.arena-rank-progress{padding:10px 12px;margin-bottom:8px;border-color:#985123;border-radius:10px}
+.arena-progress-line{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;font-weight:750}.arena-progress-line strong{font-size:11px;text-align:right;color:#f7ead4}
+.arena-progress-track{height:10px;overflow:hidden;border-radius:9px;background:linear-gradient(#4b4b4f,#232326);border:1px solid #63534a;margin-top:8px}
+.arena-progress-track span{display:block;height:100%;width:0%;background:linear-gradient(#ffd275,#ff941c 55%,#e36b0e);box-shadow:0 0 10px #ef870a;transition:none}
+.arena-mission{display:flex;align-items:center;gap:9px;padding:10px 11px;border-color:#a25b27;cursor:pointer}
+.arena-mission-icon{font-size:24px;color:#ff9d30}.arena-mission>div{flex:1;min-width:0}.arena-mission strong{display:block;font-size:12px}.arena-mission small{display:block;color:#b4a8a0;font-size:10px;margin-top:3px}.arena-mission>span:last-child{font-size:13px;color:#fff;font-weight:900}
+.arena-secondary{margin-top:8px}.arena-secondary .streak-multiplier{margin:0;padding:8px 11px;background:linear-gradient(90deg,#241916,#111114);border:1px solid #633b29;border-radius:10px}
+.arena-secondary .streak-header{margin-bottom:4px}.arena-secondary .streak-value{font-size:14px}.arena-secondary .streak-info{font-size:10px}.arena-secondary .streak-days,.arena-secondary .streak-next{font-size:10px}
+.arena-secondary .streak-bar-wrap{margin-bottom:5px;height:5px}
+.arena-hidden-compat{display:none!important}
+.arena-events-button{width:100%;margin-top:8px;padding:9px 11px;text-align:left;border:1px solid #5b4231;border-radius:9px;background:linear-gradient(90deg,#231a16,#131315);color:#f1cf9c;font-size:12px;font-weight:800;display:flex;justify-content:space-between}
+.arena-feed-panel[hidden]{display:none}.arena-feed-panel{max-height:180px;overflow-y:auto;margin-top:7px}
+.arena-screen-heading{text-align:center;margin:13px 0 18px}.arena-screen-heading h1{margin:0;color:#fff;font:italic 900 clamp(24px,8vw,34px) Arial,sans-serif;letter-spacing:1.1px;text-shadow:0 2px 0 #6f3c20,0 0 15px rgba(255,145,19,.36)}.arena-screen-heading p{color:#cfc5bb;margin:6px 0 0;font-size:13px}
+.arena-choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.arena-choice{padding:15px 5px;text-align:center;min-width:0;border-radius:12px;min-height:120px}.arena-choice>div{font-size:33px;filter:drop-shadow(0 2px 6px #ff80005c)}.arena-choice strong{display:block;font-size:14px;margin-top:9px}.arena-choice small{display:block;font-size:11px;color:#cfc8c0;margin-top:3px}
+.arena-challenge-panel{margin-top:15px;padding:13px 15px}.arena-challenge-title{display:flex;justify-content:space-between;font-size:13px;gap:5px;font-weight:850}.arena-challenge-title b{color:#ff9e1b;white-space:nowrap}.arena-challenge-sub{font-size:11px;color:#bcb2a8;margin-top:6px}.arena-challenge-total{font-size:12px;text-align:right;margin-top:6px;font-weight:800}
+.arena-arena-art{height:clamp(105px,23dvh,230px);margin-top:16px;border-radius:12px;background:linear-gradient(0deg,#0b0b0d,transparent 22%,transparent 70%,#120c0c),url("arena-hero.svg") center 55%/cover no-repeat;border:1px solid #5d341e}
+.arena-go-group{width:100%;margin-top:14px}.arena-instruction{text-align:center;font-size:11px;color:#b6aca5;margin-top:12px;line-height:1.45}
+.tabbar{left:0;right:0;max-width:480px;margin:auto;background:linear-gradient(#1b1c1e,#090a0b);border-top:1px solid #5e534e;backdrop-filter:none;padding:6px 3px calc(6px + env(safe-area-inset-bottom,0px));box-shadow:0 -5px 17px #000b}
+.tab{font-size:10px;flex:1;min-width:0;gap:3px;padding:7px 1px;border-radius:8px;color:#9d9fa2}.tab.active{color:#ffc27b;background:linear-gradient(#63290f,#261711);box-shadow:inset 0 0 0 1px #a65b1d,0 0 11px #c45f1135}.tab.active .tab-icon{transform:none}.tab .tab-icon{font-size:20px;transition:none}
+#screen-calendar .cal-card{padding:12px}.cal-day{border-radius:5px;background:#181819;border-color:#363334}.cal-day.gym{background:#432518;border-color:#ab4e16}.cal-day.street{background:#282e2f;border-color:#5f7777}.cal-day.rest{background:#213024;border-color:#4a7753}.cal-day.challenge,.cal-day.multi{background:#433016;border-color:#b67d29}
+.cal-day.today{border-color:#ff9f35;box-shadow:0 0 6px #ee891f}
+.cal-month-label{font-size:15px;color:#f5eee5}.cal-nav button{background:#211b1a;border-color:#774725;color:#f8c781}
+.legend{font-size:10px;gap:8px}.cal-grid{gap:4px}
+.badge-grid{gap:8px}.badge-card{background:linear-gradient(#292525,#121316);border:1px solid #5f4b41;border-radius:10px}.badge-card.unlocked{background:linear-gradient(#4c2919,#171314);border-color:#a85d24}.badge-card.locked{opacity:.67}
+.badge-icon{font-size:27px}.badge-title{font-size:10px}.ach-count{font-size:12px}.arena-h2{font-size:22px;font-weight:900;font-style:italic;color:#f7f3ed}
+.progress-bar-fill{background:linear-gradient(90deg,#c95312,#ffb229)}
+.rating-switch{background:#171719;border-color:#5e3a2c}.rating-switch button.active{background:linear-gradient(#ffae31,#c35a05)!important;color:#fff!important;box-shadow:0 0 8px #ff851e}
+.rank-row{background:linear-gradient(110deg,#231f1e,#111315);border-color:#52433d;border-radius:10px}.rank-row.me{background:linear-gradient(110deg,#713418,#211613);border-color:#ffa42e;animation:none!important}.rank-hp{color:#fff}
+.btn-primary{background:linear-gradient(#ffb042,#e66c09)!important;color:#fff!important;border:1px solid #ffae4b!important;text-shadow:0 1px 2px #58250c}
+.streak-multiplier,.feed-card,.cal-card,.quick-pill{background:linear-gradient(120deg,#262121,#131314);border-color:#67452d}
+.avatar,.ring-mascot,.badge-card.unlocked .badge-icon,.rank-row.me,.skel,.skel-loader-icon,.skel-loader-text,.cal-day .icon,.badge-icon,.rank-avatar,.tab-icon{animation:none!important;animation-delay:0s!important}
+.tab .tab-icon,.ring-fill,.badge-icon{filter:none!important;transition:none!important}
+@media(max-height:710px){.arena-scene{height:118px}.arena-identity{min-height:75px;padding:7px 10px}.arena-player-avatar{width:48px;height:48px}.arena-stats{margin-bottom:5px}.arena-stat{padding:6px 3px}.arena-stat-icon{font-size:17px}.arena-rank-progress{padding:7px 10px;margin-bottom:6px}.arena-mission{padding:7px 9px}.arena-secondary{margin-top:6px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
 </style>
 </head>
 <body>
