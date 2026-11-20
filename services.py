@@ -1082,7 +1082,6 @@ class ActivityService:
                 parse_mode="HTML",
             )
 
-        training_count = 0
         current_status_title = "Без статусу"
         new_status_title = None
 
