@@ -54,10 +54,10 @@ class StateMachineService:
     async def register_user(self, user_id: int) -> bool:
         return await self.transition(user_id, UserFlowState.REGISTERED)
 
-    async def begin_training(self, user_id: int, action: str, ttl: int = 600) -> bool:
+    async def begin_training(self, user_id: int, action: str, ttl: int = 600, chat_id: int | None = None) -> bool:
         if not await self.transition(user_id, UserFlowState.TRAINING_STARTED, ttl=ttl):
             return False
-        await set_data(KeyManager.get_session_key(user_id), {"action": action}, ex=ttl)
+        await set_data(KeyManager.get_session_key(user_id), {"action": action, "chat_id": chat_id}, ex=ttl)
         return await self.transition(user_id, UserFlowState.VIDEO_WAITING, ttl=ttl)
 
     async def mark_processing(self, user_id: int, ttl: int = 30) -> bool:
