@@ -241,23 +241,30 @@ async def get_challenge_stats(user_id: int) -> dict[str, Any]:
     today = get_kyiv_now().date()
     week_start, week_end = get_current_turbo_week_period()
 
-    weekly_count = 0
-    done_today = False
-
-    for activity in activities:
+    # Rejected submissions have a matching negative "Weekly Challenge Rollback"
+    # activity. Pair them by chronological order so they no longer count toward
+    # the daily limit or weekly progress after /reject.
+    ordered = sorted(
+        activities,
+        key=lambda item: parse_activity_created_at(item.get("created_at")) or get_kyiv_now(),
+    )
+    active_submissions = []
+    for activity in ordered:
         action_name = str(activity.get("action_name") or "").strip()
-        if action_name != CHALLENGE_ACTION:
-            continue
-
         created_at = parse_activity_created_at(activity.get("created_at"))
         if not created_at:
             continue
+        if action_name == CHALLENGE_ACTION:
+            active_submissions.append(created_at)
+        elif action_name == f"{CHALLENGE_ACTION} Rollback":
+            # Rollbacks are recorded for the same Kyiv day as the submission.
+            for index in range(len(active_submissions) - 1, -1, -1):
+                if active_submissions[index].date() == created_at.date():
+                    active_submissions.pop(index)
+                    break
 
-        if week_start <= created_at < week_end:
-            weekly_count += 1
-
-        if created_at.date() == today:
-            done_today = True
+    weekly_count = sum(week_start <= date < week_end for date in active_submissions)
+    done_today = any(date.date() == today for date in active_submissions)
 
     weekly_count = min(weekly_count, CHALLENGE_WEEKLY_TARGET)
 
