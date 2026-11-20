@@ -403,6 +403,9 @@ body{background:radial-gradient(ellipse at 50% -15%,#48301e 0%,#181716 43%,#0c0e
 /* Disable decorative continuous motion and flashing across devices. */
 .avatar,.ring-mascot,.badge-card.unlocked .badge-icon,.rank-row.me,.skel,.skel-loader-icon,.skel-loader-text{animation:none!important}
 .tab .tab-icon,.ring-fill{transition:none!important;filter:none!important}
+/* JS can also inject animations on calendar and trophy icons; override them. */
+.cal-day .icon,.badge-card,.badge-icon,.rank-row,.rank-avatar,.tab-icon,.ring-mascot{animation:none!important;animation-delay:0s!important}
+
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:none!important}}
 
 </style>
