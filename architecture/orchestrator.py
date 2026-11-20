@@ -707,8 +707,7 @@ async def on_challenge_selected(event: EventEnvelope) -> bool:
         instruction if not isinstance(source, CallbackQuery) else "🔥 Челендж активовано! Надішли свіжий кружечок у групу протягом 5 хвилин.",
         show_alert=isinstance(source, CallbackQuery),
         parse_mode="HTML",
-        show_alert=isinstance(source, CallbackQuery),
-            reply_markup=_get_back_to_group_inline_keyboard(),
+        reply_markup=_get_back_to_group_inline_keyboard(),
     )
 
     if msg is not None:
