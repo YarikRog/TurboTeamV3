@@ -22,7 +22,7 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
 
         challenge_button = types.InlineKeyboardButton(
             text="🔥 ЧЕЛЕНДЖ ТИЖНЯ",
-            url=f"https://t.me/{bot_username}?start=challenge",
+            callback_data="weekly_challenge",
         )
 
     else:
@@ -50,10 +50,6 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
             challenge_button,
         ],
         [
-            types.InlineKeyboardButton(
-                text="🧘‍♂️ Відпочинок",
-                callback_data="action_rest",
-            ),
             types.InlineKeyboardButton(
                 text="🚫 Забив болт",
                 callback_data="action_skip",
