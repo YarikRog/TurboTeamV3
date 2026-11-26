@@ -514,6 +514,22 @@ async def get_user_calendar_month(user_id: str, year: int, month: int) -> Dict[s
     return days
 
 
+async def get_user_training_calendar(user_id: str) -> list[tuple[str, str]]:
+    """Distinct training days and types over the last 90 Kyiv calendar days."""
+    now = get_kyiv_now()
+    first_day = now.date() - timedelta(days=89)
+    start = KYIV_TZ.localize(datetime.combine(first_day, datetime.min.time()))
+    activities = await get_user_activities_in_period(user_id, start.isoformat(), now.isoformat())
+    trainings = set()
+    for activity in _visible_webapp_activities(activities):
+        action = activity.get("action_name")
+        created_at = _parse_activity_created_at(activity.get("created_at"))
+        if action in {"Gym", "Street"} and created_at:
+            day = created_at.astimezone(KYIV_TZ).strftime("%Y%m%d")
+            trainings.add((day, action))
+    return sorted(trainings)
+
+
 def _calculate_training_streak(activities: List[Dict[str, Any]]) -> int:
     """
     Weekly TurboTeam streak.

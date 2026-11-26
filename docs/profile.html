@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<!-- build: monthly-rating v2 -->
 <html lang="uk">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Мій профіль — TurboTeam</title>
+<title>КАЛЕНДАР ТРЕНУВАНЬ — TurboTeam</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -14,11 +13,7 @@
     --text: #ffffff;
     --muted: #8b93a3;
     --accent: #ff5a1f;
-    --accent-2: #4cc9f0;
-    --gold: #ffc828;
-    --green: #3ddc84;
     --border: rgba(255, 255, 255, 0.07);
-    --radius: 20px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -28,143 +23,10 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  body { padding-bottom: 84px; }
-
-  .screen { display: none; padding: 16px 16px 8px; max-width: 480px; margin: 0 auto; }
-  .screen.active { display: block; animation: fadeIn .2s ease both; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-  /* ---------- ANIMATIONS ---------- */
-  @keyframes flyIn { from { opacity:0; transform: translateY(-16px) scale(.3); } to { opacity:1; transform: none; } }
-  @keyframes popIn { from { opacity:0; transform: scale(.55) translateY(10px); } to { opacity:1; transform: none; } }
-  @keyframes slideIn { from { opacity:0; transform: translateX(-18px); } to { opacity:1; transform: none; } }
-  @keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-  @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,90,31,0); } 50% { box-shadow: 0 0 18px 2px rgba(255,90,31,0.35); } }
-  @keyframes screenInRight { from { opacity:0; transform: translateX(26px); } to { opacity:1; transform: none; } }
-  @keyframes screenInLeft { from { opacity:0; transform: translateX(-26px); } to { opacity:1; transform: none; } }
-  @keyframes celebratePop { 0% { opacity:0; transform: scale(.4) rotate(-8deg); } 60% { opacity:1; transform: scale(1.12) rotate(4deg); } 100% { opacity:1; transform: scale(1) rotate(0); } }
-  @keyframes confettiFall { from { transform: translateY(-10px) rotate(0deg); opacity:1; } to { transform: translateY(420px) rotate(360deg); opacity:0; } }
-  @keyframes countPulse { 0% { transform: scale(1); } 40% { transform: scale(1.18); color: var(--accent); } 100% { transform: scale(1); } }
-  @keyframes confettiFallFull { from { transform: translateY(-20px) rotate(0deg); opacity:1; } to { transform: translateY(110vh) rotate(540deg); opacity:0; } }
-  @keyframes championPop { 0% { opacity:0; transform: scale(.5) translateY(20px); } 60% { opacity:1; transform: scale(1.08) translateY(-4px); } 100% { opacity:1; transform: scale(1) translateY(0); } }
-
-  /* ---------- TODAY ---------- */
-  .greet { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-  .greet-text { font-size: 15px; color: var(--muted); }
-  .greet-name { font-size: 18px; font-weight: 800; }
-  .avatar {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--gold));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 19px; animation: floatY 3.2s ease-in-out infinite;
-  }
-
-  .hero {
-    background: radial-gradient(circle at 50% 0%, rgba(255,90,31,0.20), transparent 70%);
-    border-radius: 26px;
-    padding: 18px 16px 18px;
-    text-align: center;
-  }
-  .ring-wrap { position: relative; width: 192px; height: 192px; margin: 4px auto 2px; }
-  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .ring-bg { fill: none; stroke: var(--card-2); stroke-width: 13; }
-  .ring-fill {
-    fill: none; stroke: url(#ringGrad); stroke-width: 13; stroke-linecap: round;
-    stroke-dasharray: 503; stroke-dashoffset: 503;
-    transition: stroke-dashoffset 1.2s cubic-bezier(.34,1.2,.4,1);
-    filter: drop-shadow(0 0 6px rgba(255,120,40,0.5));
-  }
-  .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .ring-mascot { font-size: 32px; margin-bottom: 2px; animation: floatY 2.6s ease-in-out infinite; }
-  .ring-streak { font-size: 40px; font-weight: 900; line-height: 1; letter-spacing: -1px; }
-  .ring-streak small { font-size: 18px; font-weight: 800; color: var(--muted); }
-  .ring-streak-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
-
-  .hero-msg { font-size: 15px; font-weight: 800; margin-top: 12px; }
-  .hero-sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
-
-  /* ---------- STREAK MULTIPLIER ---------- */
-  .streak-multiplier {
-    background: linear-gradient(135deg, rgba(255,90,31,0.12), rgba(255,200,40,0.08));
-    border: 1px solid rgba(255,90,31,0.25);
-    border-radius: 16px;
-    padding: 12px 14px;
-    margin-top: 14px;
-  }
-  .streak-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-  .streak-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: .05em;
-  }
-  .streak-value {
-    font-size: 20px;
-    font-weight: 900;
-    color: var(--gold);
-  }
-  .streak-bar-wrap {
-    position: relative;
-    height: 8px;
-    background: var(--card-2);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-bottom: 10px;
-  }
-  .streak-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--gold));
-    border-radius: 999px;
-    transition: width 0.8s cubic-bezier(.34,1.2,.4,1);
-    box-shadow: 0 0 8px rgba(255,90,31,0.4);
-  }
-  .streak-info {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    margin-bottom: 10px;
-  }
-  .streak-days {
-    font-weight: 700;
-    color: var(--text);
-  }
-  .streak-next {
-    color: var(--muted);
-  }
-  .streak-save-btn {
-    width: 100%;
-    background: rgba(255,90,31,0.15);
-    border: 1px solid rgba(255,90,31,0.4);
-    color: var(--text);
-    border-radius: 12px;
-    padding: 9px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all .12s ease;
-  }
-  .streak-save-btn:active {
-    transform: scale(0.96);
-    background: rgba(255,90,31,0.25);
-  }
-
-  .quick-row { display: flex; gap: 8px; margin-top: 16px; }
-  .quick-pill {
-    flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 10px 9px; text-align: left;
-  }
-  .quick-pill .q-label { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
-  .quick-pill .q-value { font-size: 17px; font-weight: 800; margin-top: 3px; }
-  .quick-pill .q-value.q-value-sm { font-size: 13px; line-height: 1.25; }
-  .quick-pill .q-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
-
-  .cta-row { display: flex; gap: 10px; margin-top: 16px; }
+  main { max-width: 480px; margin: 0 auto; padding: 16px 16px 24px; }
+  h1 { margin: 0 0 12px; font-size: 18px; }
+  .calendar-status { margin: 12px 0; color: var(--muted); font-size: 14px; }
+  .calendar-status:empty, #calendarSubscriptionStatus:empty { display: none; }
   .btn {
     flex: 1; border: none; border-radius: 14px; padding: 13px 10px;
     font-size: 13.5px; font-weight: 800; cursor: pointer;
@@ -174,19 +36,6 @@
   .btn-primary { background: linear-gradient(135deg, var(--accent), #ff8a3d); color: #1a0a02; }
   .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 
-  .section-title {
-    font-size: 12.5px; font-weight: 800; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .06em; margin: 22px 0 10px;
-  }
-  .feed-card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-    padding: 12px 14px; display: flex; align-items: center; gap: 11px; margin-bottom: 8px;
-  }
-  .feed-icon { font-size: 18px; width: 24px; text-align: center; }
-  .feed-title { font-size: 13px; font-weight: 700; }
-  .feed-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
-  /* ---------- CALENDAR ---------- */
   .cal-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 14px; }
   .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .cal-nav button { background: var(--card-2); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 5px 11px; font-size: 14px; cursor: pointer; }
@@ -206,6 +55,11 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
+  .cal-subscription { margin-top: 12px; }
+  .cal-subscription .btn { width: 100%; }
+  .cal-subscription [hidden] { display: none; }
+  .cal-subscription p { font-size: 13px; margin: 8px 0; }
+  .cal-subscription input { box-sizing: border-box; width: 100%; padding: 8px; margin-bottom: 8px; }
   .cal-stats { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
   .stats-summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .stats-summary-tile { border-radius: 14px; padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
@@ -219,227 +73,40 @@
   .sb-icon { font-size: 13px; }
   .sb-value { font-size: 12px; font-weight: 700; margin-top: 2px; color: var(--muted); }
 
-  /* ---------- ACHIEVEMENTS ---------- */
-  .ach-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-  .ach-count { font-size: 12px; color: var(--muted); }
-  .progress-bar-wrap { background: var(--card-2); border-radius: 999px; height: 9px; overflow: hidden; margin: 8px 0 18px; }
-  .progress-bar-fill { background: linear-gradient(90deg, var(--accent), var(--gold)); height: 100%; width: 0%; border-radius: 999px; transition: width 1s cubic-bezier(.4,0,.2,1); }
-  .badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-  .badge-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; cursor: pointer; transition: transform .12s ease; }
-  .badge-card:active { transform: scale(0.92); }
-  .badge-card.unlocked { border-color: rgba(255,90,31,.45); background: rgba(255,90,31,.10); }
-  .badge-card.unlocked .badge-icon { animation: floatY 3s ease-in-out infinite; }
-  .badge-card.locked { opacity: .5; }
-  .badge-icon { font-size: 23px; }
-  .badge-title { font-size: 10.5px; font-weight: 700; line-height: 1.1; }
-  .badge-sub { font-size: 9px; color: var(--muted); }
-  .badge-card.unlocked .badge-sub { color: var(--accent); font-weight: 700; }
-
-  /* ---------- RATING ---------- */
-  .rank-row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 11px 12px; margin-bottom: 8px; }
-  .rank-row.me { border-color: rgba(255,90,31,.55); background: rgba(255,90,31,.12); animation: pulseGlow 2.4s ease-in-out infinite; }
-  .rank-num { font-size: 13px; font-weight: 800; width: 26px; color: var(--muted); }
-  .rank-row.me .rank-num { color: var(--accent); }
-  .rank-avatar { font-size: 18px; width: 22px; text-align: center; }
-  .rank-name { flex: 1; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rank-hp { font-size: 12.5px; font-weight: 800; color: var(--gold); white-space: nowrap; }
-  .rank-divider { text-align: center; color: var(--muted); font-size: 16px; letter-spacing: 3px; margin: 2px 0 8px; }
-
-  .rating-switch { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 3px; margin-bottom: 14px; }
-  .rating-switch button { flex: 1; border: none; background: transparent; color: var(--muted); font-size: 12.5px; font-weight: 700; padding: 8px 0; border-radius: 9px; transition: background .15s ease, color .15s ease; }
-  .rating-switch button.active { background: linear-gradient(135deg, var(--accent), #ff8a3d); color: #1a0a02; }
-
-  /* ---------- TAB BAR ---------- */
-  .tabbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
-    display: flex; border-top: 1px solid var(--border);
-    background: rgba(10,12,16,0.92); backdrop-filter: blur(10px);
-    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
-  }
-  .tab {
-    flex: 1; background: none; border: none; color: var(--muted);
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    font-size: 10.5px; font-weight: 700; padding: 6px 0; cursor: pointer;
-    transition: color .15s ease, transform .12s ease;
-  }
-  .tab .tab-icon { font-size: 19px; transition: transform .2s ease; }
-  .tab:active { transform: scale(0.9); }
-  .tab.active { color: var(--text); }
-  .tab.active .tab-icon { transform: translateY(-2px) scale(1.12); }
-  .tab:active { transform: scale(0.9); }
-
-  /* ---------- SHARE MODAL ---------- */
-  .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    display: flex; align-items: flex-end; justify-content: center;
-    opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 200;
-  }
-  .modal-backdrop.show { opacity: 1; pointer-events: auto; }
-  .modal-sheet {
-    position: relative;
-    width: 100%; max-width: 480px; background: var(--bg); border-radius: 22px 22px 0 0;
-    padding: 18px 18px 26px; transform: translateY(100%);
-    transition: transform .28s cubic-bezier(.34,1.2,.4,1); border-top: 1px solid var(--border);
-  }
-  .modal-backdrop.show .modal-sheet { transform: translateY(0); }
-  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 99px; margin: 0 auto 16px; }
-  .modal-close-x {
-    position: absolute; top: 14px; right: 14px; width: 30px; height: 30px;
-    border-radius: 50%; border: none; background: var(--card-2); color: var(--text);
-    font-size: 14px; font-weight: 800; cursor: pointer; z-index: 1;
-  }
-  .share-card-img {
-    width: 100%; border-radius: 18px; display: block;
-    border: 1px solid rgba(255,200,40,0.4); margin-bottom: 10px;
-  }
-  .modal-hint-save { text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-
-  .celebrate-sheet {
-    position: relative; width: 100%; max-width: 480px; background: var(--bg);
-    border-radius: 22px 22px 0 0; padding: 30px 18px 30px; transform: translateY(100%);
-    transition: transform .3s cubic-bezier(.34,1.2,.4,1); border-top: 1px solid var(--border);
-    text-align: center; overflow: hidden;
-  }
-  .modal-backdrop.show .celebrate-sheet { transform: translateY(0); }
-  .confetti-container { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-  .confetti-piece { position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; animation: confettiFall 1.7s ease-in forwards; }
-  .celebrate-label { font-size: 12px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
-  .celebrate-icon { font-size: 64px; margin: 10px 0 6px; display: inline-block; animation: celebratePop .6s cubic-bezier(.34,1.56,.64,1) both; }
-  .celebrate-title { font-size: 19px; font-weight: 800; margin: 4px 0 20px; position: relative; }
-
-  .toast {
-    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
-    background: var(--card-2); border: 1px solid var(--border); border-radius: 12px;
-    padding: 10px 16px; font-size: 12.5px; font-weight: 600; max-width: 86%; text-align: center;
-    opacity: 0; transition: opacity .2s ease, transform .2s ease;
-    pointer-events: none; z-index: 220;
-    box-shadow: 0 8px 24px rgba(0,0,0,.5);
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  .state-msg { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 14px; }
-
-  /* ---------- SKELETON LOADER ---------- */
-  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-  @keyframes loaderBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-  @keyframes loaderTextFade { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
-  .skel { background: linear-gradient(90deg, var(--card) 20%, rgba(255,255,255,0.09) 50%, var(--card) 80%); background-size: 200% 100%; animation: shimmer 1.1s ease-in-out infinite; border-radius: 14px; }
-  .skel-screen { padding: 16px; max-width: 480px; margin: 0 auto; }
-  .skel-loader { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px 0 26px; }
-  .skel-loader-icon { font-size: 36px; animation: loaderBounce 1s ease-in-out infinite; }
-  .skel-loader-text { font-size: 13px; font-weight: 700; color: var(--muted); animation: loaderTextFade 1.4s ease-in-out infinite; }
-  .skel-greet { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-  .skel-avatar { width: 40px; height: 40px; border-radius: 50%; }
-  .skel-hero { height: 270px; border-radius: 26px; margin-bottom: 16px; }
-  .skel-row { display: flex; gap: 10px; margin-bottom: 16px; }
-  .skel-row .skel { flex: 1; height: 48px; border-radius: 14px; }
-  .skel-feed { height: 54px; border-radius: 16px; margin-bottom: 8px; }
-
-  /* ---------- WEEKLY CHAMPION CELEBRATION ---------- */
-  .champion-overlay {
-    position: fixed; inset: 0; z-index: 500;
-    background: radial-gradient(circle at 50% 18%, rgba(255,200,40,0.16), rgba(2,2,4,0.985) 55%);
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; pointer-events: none; transition: opacity .25s ease;
-  }
-  .champion-overlay.show { opacity: 1; pointer-events: auto; }
-  .champion-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-  .champion-confetti-piece { position: absolute; top: -16px; border-radius: 2px; animation: confettiFallFull 2.4s ease-in forwards; }
-  .champion-content { position: relative; text-align: center; padding: 24px; max-width: 360px; animation: championPop .55s cubic-bezier(.34,1.56,.64,1) both; }
-  .champion-trophy { font-size: 88px; animation: floatY 2.4s ease-in-out infinite; filter: drop-shadow(0 0 24px rgba(255,200,40,.55)); }
-  .champion-eyebrow { font-size: 13px; font-weight: 800; letter-spacing: .12em; color: var(--gold); text-transform: uppercase; margin-top: 6px; }
-  .champion-name { font-size: 26px; font-weight: 900; margin-top: 8px; }
-  .champion-hp { font-size: 17px; font-weight: 800; color: var(--gold); margin-top: 4px; }
-  .champion-sub { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
-  .champion-btn { margin-top: 22px; width: 100%; }
-
-  /* ---------- ONBOARDING ---------- */
-  .onboarding-overlay {
-    position: fixed; inset: 0; z-index: 500;
-    background: rgba(2,2,4,0.92);
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; pointer-events: none; transition: opacity .25s ease;
-  }
-  .onboarding-overlay.show { opacity: 1; pointer-events: auto; }
-  .onboarding-content {
-    position: relative; text-align: center; padding: 26px 22px; max-width: 360px;
-    animation: championPop .5s cubic-bezier(.34,1.56,.64,1) both;
-  }
-  .onboarding-title { font-size: 21px; font-weight: 900; }
-  .onboarding-sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  .onboarding-list { display: flex; flex-direction: column; gap: 10px; margin: 22px 0 6px; text-align: left; }
-  .onboarding-item {
-    display: flex; align-items: center; gap: 12px; background: var(--card);
-    border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px;
-  }
-  .onboarding-item .oi-icon { font-size: 20px; width: 26px; text-align: center; }
-  .onboarding-item .oi-title { font-size: 13px; font-weight: 800; }
-  .onboarding-item .oi-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
-  .onboarding-btn { margin-top: 20px; width: 100%; }
+  @keyframes flyIn { from { opacity:0; transform: translateY(-16px) scale(.3); } to { opacity:1; transform: none; } }
+  .cal-nav button { min-width: 44px; min-height: 44px; }
+  .cal-subscription input { font-size: 16px; }
 </style>
 </head>
 <body>
-
-<div id="app">
-  <div class="skel-screen">
-    <div class="skel-loader">
-      <div class="skel-loader-icon">🔥</div>
-      <div class="skel-loader-text">Завантажуємо твій профіль...</div>
+<main>
+  <h1>КАЛЕНДАР ТРЕНУВАНЬ</h1>
+  <div class="cal-card">
+    <div class="cal-nav">
+      <button type="button" id="prevMonth" aria-label="Попередній місяць">←</button>
+      <div class="cal-month-label" id="calMonthLabel">—</div>
+      <button type="button" id="nextMonth" aria-label="Наступний місяць">→</button>
     </div>
-    <div class="skel-greet">
-      <div class="skel" style="height:30px;width:150px;border-radius:8px;"></div>
-      <div class="skel skel-avatar"></div>
+    <p id="calendarStatus" class="calendar-status" role="status"></p>
+    <button type="button" id="calendarRetry" class="btn btn-ghost" hidden>Спробувати ще раз</button>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="legend">
+      <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
     </div>
-    <div class="skel skel-hero"></div>
-    <div class="skel-row">
-      <div class="skel"></div>
-      <div class="skel"></div>
-      <div class="skel"></div>
+    <div class="cal-stats" id="calStatsText" hidden></div>
+    <div class="cal-subscription">
+      <button type="button" class="btn btn-ghost" id="calendarSubscribe" onclick="loadCalendarSubscription()">
+        Підписатися на календар iPhone
+      </button>
+      <div id="calendarSubscriptionDetails" hidden>
+        <p>Відкрийте «Календар» → «Календарі» → «Додати календар» → «Додати підписний календар» і вставте посилання. Воно особисте.</p>
+        <input id="calendarSubscriptionUrl" type="url" aria-label="Посилання на календар" readonly>
+        <button type="button" class="btn btn-ghost" onclick="copyCalendarSubscription()">Скопіювати посилання</button>
+      </div>
+      <p id="calendarSubscriptionStatus" role="status"></p>
     </div>
-    <div class="skel skel-feed"></div>
-    <div class="skel skel-feed"></div>
-    <div class="skel skel-feed"></div>
   </div>
-</div>
-
-<div class="onboarding-overlay" id="onboardingOverlay">
-  <div class="onboarding-content">
-    <div class="onboarding-title">Привіт у TurboTeam 🔥</div>
-    <div class="onboarding-sub">Тут все, що треба, щоб бачити свій прогрес</div>
-    <div class="onboarding-list">
-      <div class="onboarding-item">
-        <div class="oi-icon">🔥</div>
-        <div><div class="oi-title">Сьогодні</div><div class="oi-sub">Твій стрік тижня та останні дії</div></div>
-      </div>
-      <div class="onboarding-item">
-        <div class="oi-icon">📅</div>
-        <div><div class="oi-title">Календар</div><div class="oi-sub">Всі тренування по днях</div></div>
-      </div>
-      <div class="onboarding-item">
-        <div class="oi-icon">🏅</div>
-        <div><div class="oi-title">Досягнення</div><div class="oi-sub">Бейджі за прогрес, можна поділитись</div></div>
-      </div>
-      <div class="onboarding-item">
-        <div class="oi-icon">🏆</div>
-        <div><div class="oi-title">Рейтинг</div><div class="oi-sub">Місце серед усієї команди</div></div>
-      </div>
-    </div>
-    <button class="btn btn-primary onboarding-btn" onclick="closeOnboarding()">Зрозуміло, погнали 🔥</button>
-  </div>
-</div>
-
-<div class="champion-overlay" id="championOverlay">
-  <div class="champion-confetti" id="championConfetti"></div>
-  <div class="champion-content">
-    <div class="champion-trophy">🏆</div>
-    <div class="champion-eyebrow">Чемпіон тижня</div>
-    <div class="champion-name" id="championName">—</div>
-    <div class="champion-hp" id="championHp">—</div>
-    <div class="champion-sub">Топ-1 тижня — твій. Респект 🔥</div>
-    <button class="btn btn-primary champion-btn" onclick="closeChampionCelebrate()">Дякую, погнали далі 🔥</button>
-  </div>
-</div>
-
+</main>
 <script>
   const API_BASE_URL = "https://worker-production-b767.up.railway.app";
   const tg = window.Telegram?.WebApp;
@@ -454,15 +121,10 @@
     try { tg.setBottomBarColor?.("#0a0c10"); } catch (e) {}
   }
 
-  const today = new Date();
-  let viewYear = today.getFullYear();
-  let viewMonth = today.getMonth() + 1;
-
-  let profileData = null;
-  let achievements = [];
-  let achPercent = 0;
-  let ratingLoaded = false;
-  let activeBadge = null;
+  const [currentYear, currentMonth] = getKyivTodayKey().split("-").map(Number);
+  let viewYear = currentYear;
+  let viewMonth = currentMonth;
+  let calendarRequest;
 
   const MONTH_NAMES = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
   const WEEKDAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
@@ -474,29 +136,8 @@
     "Weekly Challenge": { cls: "challenge", icon: "🔥" },
   };
 
-  function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.innerText = value ?? "";
-    return div.innerHTML;
-  }
-
   function authHeaders() {
     return { Authorization: `tma ${tg.initData}` };
-  }
-
-  function showToast(msg) {
-    const t = document.getElementById("toast");
-    t.textContent = msg;
-    t.classList.add("show");
-    clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
-  }
-
-  function haptic(type) {
-    try {
-      if (type === "selection") tg?.HapticFeedback?.selectionChanged?.();
-      else tg?.HapticFeedback?.impactOccurred?.(type || "light");
-    } catch (e) {}
   }
 
   function track(eventName, meta) {
@@ -508,233 +149,6 @@
     }).catch(() => {});
   }
 
-  document.addEventListener("click", (e) => {
-    if (e.target.closest(".tab")) haptic("selection");
-    else if (e.target.closest(".btn, .badge-card, .cal-nav button")) haptic("light");
-  });
-
-  // ==================== SKELETON ====================
-  const SKELETON = `
-    <div class="screen active" id="screen-today">
-      <div class="greet">
-        <div>
-          <div class="greet-text">Привіт 👋</div>
-          <div class="greet-name" id="greetName">Гравець</div>
-        </div>
-        <div class="avatar">🔥</div>
-      </div>
-
-      <div class="hero">
-        <div class="ring-wrap">
-          <svg viewBox="0 0 180 180">
-            <defs>
-              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#ff5a1f"/>
-                <stop offset="100%" stop-color="#ffc828"/>
-              </linearGradient>
-            </defs>
-            <circle class="ring-bg" cx="90" cy="90" r="80"/>
-            <circle class="ring-fill" id="ringFill" cx="90" cy="90" r="80"/>
-          </svg>
-          <div class="ring-center">
-            <div class="ring-mascot">🔥</div>
-            <div class="ring-streak" id="ringStreak">0<small>/14</small></div>
-            <div class="ring-streak-label">тренувань<br>цього тижня</div>
-          </div>
-        </div>
-        <div class="hero-msg" id="heroMsg">—</div>
-        <div class="hero-sub" id="heroSub">—</div>
-
-        <!-- STREAK MULTIPLIER BLOCK -->
-        <div class="streak-multiplier">
-          <div class="streak-header">
-            <span class="streak-label">🔥 Мультик HP</span>
-            <span class="streak-value" id="streakMultiplier">1x</span>
-          </div>
-          <div class="streak-bar-wrap">
-            <div class="streak-bar-bg"></div>
-            <div class="streak-bar-fill" id="streakBarFill" style="width: 0%"></div>
-          </div>
-          <div class="streak-info">
-            <div class="streak-days" id="streakDays">0 тренувань цього місяця</div>
-            <div class="streak-next" id="streakNext">До 1.5x: 7 тренувань</div>
-          </div>
-          <button class="streak-save-btn" id="streakSaveBtn" onclick="useStreakSave()" style="display: none;">
-            🆘 Страховка (1/мес)
-          </button>
-        </div>
-
-        <div class="quick-row">
-          <div class="quick-pill">
-            <div class="q-label">⚡ HP</div>
-            <div class="q-value" id="hpValue">0</div>
-          </div>
-          <div class="quick-pill">
-            <div class="q-label">🏆 Рівень</div>
-            <div class="q-value" id="statusValue">—</div>
-          </div>
-          <div class="quick-pill">
-            <div class="q-label">🎯 Ціль</div>
-            <div class="q-value q-value-sm" id="goalValue">—</div>
-          </div>
-        </div>
-
-        <div class="cta-row">
-          <button class="btn btn-primary" onclick="goTab('calendar')">📅 Календар тренувань</button>
-          <button class="btn btn-primary" onclick="goTab('rating')">🏆 Рейтинг</button>
-        </div>
-      </div>
-
-      <div class="section-title">Останнє в стрічці</div>
-      <div id="feedList"><div class="state-msg">⏳ Завантаження...</div></div>
-    </div>
-
-    <div class="screen" id="screen-calendar">
-      <div class="section-title" style="margin-top:0;">Календар тренувань</div>
-      <div class="cal-card">
-        <div class="cal-nav">
-          <button id="prevMonth">←</button>
-          <div class="cal-month-label" id="calMonthLabel">—</div>
-          <button id="nextMonth">→</button>
-        </div>
-        <div class="cal-grid" id="calGrid"></div>
-        <div class="legend">
-          <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
-        </div>
-        <div class="cal-stats" id="calStatsText"></div>
-      </div>
-    </div>
-
-    <div class="screen" id="screen-achievements">
-      <div class="ach-head" style="margin-top:0;">
-        <div class="section-title" style="margin:0;">Досягнення</div>
-        <div class="ach-count" id="achCount">0 / 0 відкрито</div>
-      </div>
-      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="achBar"></div></div>
-      <div class="badge-grid" id="badgeGrid"></div>
-    </div>
-
-    <div class="screen" id="screen-rating">
-      <div class="rating-switch">
-        <button id="ratingTabWeek" class="active" onclick="switchRatingPeriod('week')">Тиждень</button>
-        <button id="ratingTabAll" onclick="switchRatingPeriod('all')">Місяць</button>
-      </div>
-      <div class="section-title" style="margin-top:0;" id="ratingTitle">Рейтинг тижня</div>
-      <div id="rankList"><div class="state-msg">⏳ Завантаження...</div></div>
-    </div>
-
-    <div class="modal-backdrop" id="shareModal" onclick="if (event.target === this) closeModal()">
-      <div class="modal-sheet">
-        <button class="modal-close-x" onclick="closeModal()" aria-label="Закрити">✕</button>
-        <div class="modal-handle"></div>
-        <img class="share-card-img" id="shareCanvasImg" alt="Досягнення" />
-        <div class="modal-hint-save">Бот надішле цю картинку з посиланням тобі в чат 📤</div>
-        <div class="cta-row">
-          <button class="btn btn-primary" onclick="shareImage()">📤 Поділитися</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-backdrop" id="celebrateModal" onclick="if (event.target === this) closeCelebrate()">
-      <div class="celebrate-sheet">
-        <div class="confetti-container" id="confettiContainer"></div>
-        <button class="modal-close-x" onclick="closeCelebrate()" aria-label="Закрити">✕</button>
-        <div class="celebrate-label">Нове досягнення!</div>
-        <div class="celebrate-icon" id="celebrateIcon">🏅</div>
-        <div class="celebrate-title" id="celebrateTitle"></div>
-        <div class="cta-row">
-          <button class="btn btn-ghost" onclick="closeCelebrate()">Круто!</button>
-          <button class="btn btn-primary" onclick="celebrateShare()">📤 Поділитися</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="toast" id="toast"></div>
-
-    <nav class="tabbar">
-      <button class="tab active" data-tab="today" onclick="goTab('today')"><span class="tab-icon">🔥</span>Сьогодні</button>
-      <button class="tab" data-tab="calendar" onclick="goTab('calendar')"><span class="tab-icon">📅</span>Календар</button>
-      <button class="tab" data-tab="achievements" onclick="goTab('achievements')"><span class="tab-icon">🏅</span>Досягнення</button>
-      <button class="tab" data-tab="rating" onclick="goTab('rating')"><span class="tab-icon">🏆</span>Рейтинг</button>
-    </nav>
-  `;
-
-  // ==================== TAB NAVIGATION ====================
-  const TAB_ORDER = ["today", "calendar", "achievements", "rating"];
-  let currentTabName = "today";
-
-  function goTab(name) {
-    const dir = TAB_ORDER.indexOf(name) >= TAB_ORDER.indexOf(currentTabName) ? "Right" : "Left";
-    if (name !== currentTabName) track("tab_switch", { tab: name });
-    currentTabName = name;
-
-    document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    const screen = document.getElementById("screen-" + name);
-    screen.classList.add("active");
-    screen.style.animation = "none";
-    void screen.offsetWidth;
-    screen.style.animation = `screenIn${dir} .26s cubic-bezier(.34,1.1,.64,1) both`;
-    document.querySelector(`.tab[data-tab="${name}"]`).classList.add("active");
-
-    if (name === "today") animateRing();
-    if (name === "calendar") animateCalendar();
-    if (name === "achievements") animateAchievements();
-    if (name === "rating") {
-      if (ratingLoaded) animateRanks();
-      else loadRating().then(animateRanks);
-    }
-  }
-
-  // ==================== SWIPE BETWEEN TABS ====================
-  (function setupSwipeNav() {
-    let startX = 0, startY = 0, tracking = false;
-    document.addEventListener("touchstart", (e) => {
-      if (e.touches.length !== 1) return;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      tracking = true;
-    }, { passive: true });
-
-    document.addEventListener("touchend", (e) => {
-      if (!tracking) return;
-      tracking = false;
-      if (document.querySelector(".modal-backdrop.show") || document.getElementById("championOverlay")?.classList.contains("show")) return;
-      const touch = e.changedTouches[0];
-      const dx = touch.clientX - startX;
-      const dy = touch.clientY - startY;
-      if (Math.abs(dx) < 60 || Math.abs(dy) > 50) return;
-      const idx = TAB_ORDER.indexOf(currentTabName);
-      if (dx < 0 && idx < TAB_ORDER.length - 1) goTab(TAB_ORDER[idx + 1]);
-      else if (dx > 0 && idx > 0) goTab(TAB_ORDER[idx - 1]);
-    }, { passive: true });
-  })();
-
-  // ==================== TODAY ====================
-  const RING_CIRC = 2 * Math.PI * 80;
-
-  function animateRing() {
-    if (!profileData) return;
-    const max = profileData.streak_max || 14;
-    const pct = max > 0 ? Math.min(1, profileData.streak / max) : 0;
-
-    const fill = document.getElementById("ringFill");
-    fill.style.transition = "none";
-    fill.style.strokeDashoffset = RING_CIRC;
-    void fill.offsetWidth;
-    fill.style.transition = "stroke-dashoffset 1.2s cubic-bezier(.34,1.2,.4,1)";
-    requestAnimationFrame(() => {
-      fill.style.strokeDashoffset = RING_CIRC - RING_CIRC * pct;
-    });
-  }
-
-  function wordTrainings(n) {
-    const mod10 = n % 10, mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return "тренування";
-    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return "тренування";
-    return "тренувань";
-  }
-
   function wordDays(n) {
     const mod10 = n % 10, mod100 = n % 100;
     if (mod10 === 1 && mod100 !== 11) return "день";
@@ -742,143 +156,15 @@
     return "днів";
   }
 
-  function heroMessages(streak, max) {
-    if (streak <= 0) {
-      return ["Стрік тижня ще не розпочато", "Зроби перше тренування — і він піде вгору 🔥"];
-    }
-    if (streak >= max) {
-      return ["Максимальний стрік тижня! 🔥", `Ти зробив усі ${max} тренувань цього тижня — респект`];
-    }
-    const left = max - streak;
-    return ["Стрік росте 🔥", `Ще ${left} ${wordTrainings(left)} — і заб'єш максимум (${max})`];
-  }
-
-  function pulseOnChange(el, newValue) {
-    const prev = el.dataset.rawValue;
-    el.dataset.rawValue = String(newValue);
-    if (prev === undefined || Number(prev) === Number(newValue)) return;
-    el.style.animation = "none";
-    void el.offsetWidth;
-    el.style.animation = "countPulse .5s ease";
-  }
-
-  async function loadStreakMultiplier(userId) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/${userId}/streak`, {
-        headers: authHeaders()
-      });
-      const streakData = await response.json();
-      renderStreakMultiplier(streakData);
-    } catch (e) {
-      console.error("[STREAK] Failed to load:", e);
-    }
-  }
-
-  function renderStreakMultiplier(data) {
-    if (!data || typeof data.multiplier !== "number") return;
-    const { training_count, multiplier } = data;
-
-    // Обновляем значение мультика
-    document.getElementById("streakMultiplier").textContent = `${multiplier}x`;
-
-    // Обновляем информацию о тренуваннях
-    document.getElementById("streakDays").textContent = `${training_count} тренувань цього місяця`;
-
-    // Прогрес до наступного множника
-    let progressText = "🎉 Максимум 3x досягнуто!";
-    let progress = 100;
-
-    if (training_count < 7) {
-      progressText = `До 1.5x: ${7 - training_count} тренувань`;
-      progress = (training_count / 7) * 100;
-    } else if (training_count < 14) {
-      progressText = `До 2x: ${14 - training_count} тренувань`;
-      progress = ((training_count - 7) / 7) * 100;
-    } else if (training_count < 30) {
-      progressText = `До 3x: ${30 - training_count} тренувань`;
-      progress = ((training_count - 14) / 16) * 100;
-    }
-
-    document.getElementById("streakNext").textContent = progressText;
-    document.getElementById("streakBarFill").style.width = Math.min(progress, 100) + "%";
-
-    // Streak Save поки вимкнено — кнопку не показуємо
-    const saveBtn = document.getElementById("streakSaveBtn");
-    saveBtn.style.display = "none";
-  }
-
-  async function useStreakSave() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/me/streak/save`, {
-        method: "POST",
-        headers: authHeaders()
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        alert("🆘 Страховка використана! Стрік збережено на один день");
-        loadStreakMultiplier(tg.initDataUnsafe.user.id);
-      } else {
-        alert(result.message || "❌ Не вдалося використати страховку");
-      }
-    } catch (e) {
-      console.error("[STREAK SAVE] Error:", e);
-      alert("⚠️ Помилка при використанні страховки");
-    }
-  }
-
-  function renderToday(data) {
-    document.getElementById("greetName").textContent = data.nickname || "Гравець";
-    document.getElementById("ringStreak").innerHTML = `${data.streak}<small>/${data.streak_max}</small>`;
-
-    const [msg, sub] = heroMessages(data.streak, data.streak_max || 14);
-    document.getElementById("heroMsg").textContent = msg;
-    document.getElementById("heroSub").textContent = sub;
-
-    const hpEl = document.getElementById("hpValue");
-    hpEl.textContent = Number(data.hp_total).toLocaleString("uk");
-    pulseOnChange(hpEl, data.hp_total);
-    document.getElementById("statusValue").textContent = data.status || "—";
-    document.getElementById("goalValue").textContent = data.next_goal_text || "—";
-
-    // Загружаем данные о Streak Multiplier
-    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-      loadStreakMultiplier(tg.initDataUnsafe.user.id);
-    }
-  }
-
-  function renderFeed(items) {
-    const el = document.getElementById("feedList");
-    if (!items || !items.length) {
-      el.innerHTML = `<div class="state-msg">Ще немає активності. Зроби перше тренування — і воно з'явиться тут 🔥</div>`;
-      return;
-    }
-    el.innerHTML = items.map((it) => `
-      <div class="feed-card">
-        <div class="feed-icon">${it.icon}</div>
-        <div><div class="feed-title">${escapeHtml(it.title)}</div><div class="feed-sub">${escapeHtml(it.subtitle)}</div></div>
-      </div>`).join("");
-  }
-
-  async function loadFeed() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/feed`, { headers: authHeaders() });
-      if (!response.ok) throw new Error("bad status");
-      const data = await response.json();
-      renderFeed(data.items);
-    } catch (e) {
-      document.getElementById("feedList").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити стрічку.</div>`;
-    }
-  }
-
-  // ==================== CALENDAR ====================
   function getKyivTodayKey() {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date());
+    const date = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return `${date.year}-${date.month}-${date.day}`;
   }
 
   function renderCalendar(year, month, days) {
-    document.getElementById("calMonthLabel").textContent = `${MONTH_NAMES[month - 1]} ${year}`;
-
     const grid = document.getElementById("calGrid");
     grid.innerHTML = WEEKDAY_NAMES.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
 
@@ -980,169 +266,56 @@
     });
   }
 
+  async function loadCalendarSubscription() {
+    const button = document.getElementById("calendarSubscribe");
+    const status = document.getElementById("calendarSubscriptionStatus");
+    if (!tg?.initData) {
+      status.textContent = "Відкрийте TurboTeam у Telegram, щоб отримати посилання.";
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = "Отримуємо посилання…";
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/training-calendar/subscription`, {
+        method: "POST",
+        headers: authHeaders()
+      });
+      if (response.status === 401) {
+        status.textContent = "Відкрийте TurboTeam у Telegram ще раз.";
+        return;
+      }
+      if (!response.ok) throw new Error("Calendar subscription request failed");
+      const { path } = await response.json();
+      document.getElementById("calendarSubscriptionUrl").value = `${API_BASE_URL}${path}`;
+      document.getElementById("calendarSubscriptionDetails").hidden = false;
+      button.hidden = true;
+      status.textContent = "";
+    } catch {
+      status.textContent = "Не вдалося отримати посилання. Спробуйте ще раз.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function copyCalendarSubscription() {
+    const input = document.getElementById("calendarSubscriptionUrl");
+    const status = document.getElementById("calendarSubscriptionStatus");
+    try {
+      await copyToClipboard(input.value);
+      status.textContent = "Посилання скопійовано.";
+    } catch {
+      input.focus();
+      input.select();
+      status.textContent = "Скопіюйте виділене посилання вручну.";
+    }
+  }
+
   function changeMonth(delta) {
     viewMonth += delta;
     if (viewMonth > 12) { viewMonth = 1; viewYear += 1; }
     if (viewMonth < 1) { viewMonth = 12; viewYear -= 1; }
-    loadProfile();
-  }
-
-  // ==================== ACHIEVEMENTS ====================
-  function renderAchievements(list) {
-    achievements = list || [];
-    const unlockedCount = achievements.filter((b) => b.unlocked).length;
-    document.getElementById("achCount").textContent = `${unlockedCount} / ${achievements.length} відкрито`;
-    achPercent = achievements.length ? (unlockedCount / achievements.length) * 100 : 0;
-
-    document.getElementById("badgeGrid").innerHTML = achievements.map((b, i) => `
-      <div class="badge-card ${b.unlocked ? "unlocked" : "locked"}" data-index="${i}">
-        <div class="badge-icon">${b.unlocked ? b.icon : "🔒"}</div>
-        <div class="badge-title">${escapeHtml(b.title)}</div>
-        <div class="badge-sub">${b.unlocked ? b.threshold + " " + wordTrainings(b.threshold) : "ще " + b.remaining}</div>
-      </div>`).join("");
-
-    document.querySelectorAll("#badgeGrid .badge-card").forEach((card) => {
-      card.onclick = () => {
-        const badge = achievements[Number(card.dataset.index)];
-        if (badge.unlocked) openModal(badge);
-        else showToast(`${badge.title} — ще ${badge.remaining} ${wordTrainings(badge.remaining)}`);
-      };
-    });
-  }
-
-  function animateAchievements() {
-    const bar = document.getElementById("achBar");
-    bar.style.width = "0%";
-    requestAnimationFrame(() => { bar.style.width = achPercent + "%"; });
-    document.querySelectorAll("#badgeGrid .badge-card").forEach((c, i) => {
-      c.style.animation = "none";
-      void c.offsetWidth;
-      c.style.animation = "popIn .4s cubic-bezier(.34,1.56,.64,1) both";
-      c.style.animationDelay = (i * 0.03) + "s";
-    });
-  }
-
-  // ==================== RATING (lazy-loaded only when tab opens) ====================
-  function rankAvatar(rank) {
-    if (rank === 1) return "🥇";
-    if (rank === 2) return "🥈";
-    if (rank === 3) return "🥉";
-    return "🔥";
-  }
-
-  function rowHtml(r, isMe) {
-    return `<div class="rank-row ${isMe ? "me" : ""}">
-      <div class="rank-num">${r.rank}</div>
-      <div class="rank-avatar">${rankAvatar(r.rank)}</div>
-      <div class="rank-name">${escapeHtml(r.nick)}${isMe ? " (ти)" : ""}</div>
-      <div class="rank-hp">${Number(r.hp).toLocaleString("uk")} HP</div>
-    </div>`;
-  }
-
-  function renderRating(data) {
-    const top = data.top || [];
-    const me = data.me;
-    const meInTop = !!me && top.some((r) => Number(r.telegram_user_id) === Number(me.telegram_user_id));
-
-    let html = top.map((r) => rowHtml(r, !!me && Number(r.telegram_user_id) === Number(me.telegram_user_id))).join("");
-
-    if (me && !meInTop) {
-      html += `<div class="rank-divider">···</div>` + rowHtml(me, true);
-    }
-
-    if (!top.length && !me) {
-      html = `<div class="state-msg">Рейтинг порожній. Стань першим 🚀</div>`;
-    }
-
-    document.getElementById("rankList").innerHTML = html;
-  }
-
-  function animateRanks() {
-    document.querySelectorAll("#rankList .rank-row").forEach((row, i) => {
-      row.style.animation = "none";
-      void row.offsetWidth;
-      row.style.animation = "slideIn .35s ease both";
-      row.style.animationDelay = (i * 0.06) + "s";
-    });
-  }
-
-  const ratingCache = {};
-
-  async function loadRatingPeriod(period) {
-    if (ratingCache[period]) {
-      renderRating(ratingCache[period]);
-      return;
-    }
-    document.getElementById("rankList").innerHTML = `<div class="state-msg">⏳ Завантаження...</div>`;
-    try {
-      const endpoint = period === "week" ? "/api/rating/week" : "/api/rating";
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers: authHeaders() });
-      if (!response.ok) throw new Error("bad status");
-      const data = await response.json();
-      ratingCache[period] = data;
-      renderRating(data);
-    } catch (e) {
-      document.getElementById("rankList").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити рейтинг.</div>`;
-    }
-  }
-
-  function switchRatingPeriod(period) {
-    document.getElementById("ratingTabWeek").classList.toggle("active", period === "week");
-    document.getElementById("ratingTabAll").classList.toggle("active", period === "all");
-    document.getElementById("ratingTitle").textContent = period === "week" ? "Рейтинг тижня" : "Рейтинг місяця";
-    loadRatingPeriod(period).then(animateRanks);
-  }
-
-  async function loadRating() {
-    if (ratingLoaded) return;
-    ratingLoaded = true;
-    await loadRatingPeriod("week");
-  }
-
-  // ==================== SHARE MODAL ====================
-  function openModal(badge) {
-    activeBadge = badge;
-    document.getElementById("shareCanvasImg").src = renderShareCanvas(badge).toDataURL("image/png");
-    document.getElementById("shareModal").classList.add("show");
-  }
-
-  function closeModal() {
-    document.getElementById("shareModal").classList.remove("show");
-  }
-
-  function renderShareCanvas(badge) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 720;
-    canvas.height = 720;
-    const ctx = canvas.getContext("2d");
-
-    const grad = ctx.createLinearGradient(0, 0, 720, 720);
-    grad.addColorStop(0, "#2a1a0c");
-    grad.addColorStop(1, "#120c08");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 720, 720);
-
-    ctx.strokeStyle = "rgba(255,200,40,0.5)";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(20, 20, 680, 680);
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.font = "120px sans-serif";
-    ctx.fillText(badge.icon, 360, 320);
-
-    ctx.font = "bold 40px sans-serif";
-    ctx.fillText(`«${badge.title}» розблоковано!`, 360, 420);
-
-    ctx.font = "26px sans-serif";
-    ctx.fillStyle = "#b9c0cc";
-    ctx.fillText(`${profileData?.nickname || ""} · TurboTeam`, 360, 470);
-
-    ctx.font = "bold 28px sans-serif";
-    ctx.fillStyle = "#ffc828";
-    ctx.fillText(`${badge.threshold} ${wordTrainings(badge.threshold)} пройдено 💪`, 360, 530);
-
-    return canvas;
+    loadCalendar();
   }
 
   function copyToClipboard(text) {
@@ -1157,216 +330,64 @@
     ta.focus();
     ta.select();
     try {
-      document.execCommand("copy");
+      if (!document.execCommand("copy")) return Promise.reject(new Error("Copy failed"));
     } finally {
       ta.remove();
     }
     return Promise.resolve();
   }
 
-  async function shareImage() {
-    if (!activeBadge || !tg?.initData) return;
-    const badge = activeBadge;
-    const imageDataUrl = document.getElementById("shareCanvasImg").src;
+  async function loadCalendar() {
+    calendarRequest?.abort();
+    const request = new AbortController();
+    calendarRequest = request;
 
-    track("share_click", { achievement: badge.code });
-    showToast("Надсилаю картинку...");
+    const year = viewYear;
+    const month = viewMonth;
+    const status = document.getElementById("calendarStatus");
+    const retry = document.getElementById("calendarRetry");
+    const stats = document.getElementById("calStatsText");
+
+    document.getElementById("calMonthLabel").textContent = `${MONTH_NAMES[month - 1]} ${year}`;
+    document.getElementById("calGrid").replaceChildren();
+    stats.hidden = true;
+    retry.hidden = true;
+    status.textContent = "Завантажуємо календар…";
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/share-achievement`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ title: badge.title, image: imageDataUrl }),
+      const response = await fetch(`${API_BASE_URL}/api/training-calendar?year=${year}&month=${month}`, {
+        headers: authHeaders(),
+        signal: request.signal
       });
-      if (!response.ok) throw new Error("share failed");
-      const data = await response.json();
-
-      let pickerOpened = false;
-      if (data.share_token && typeof tg.switchInlineQuery === "function") {
-        try {
-          tg.switchInlineQuery(data.share_token, ["users", "groups", "channels"]);
-          pickerOpened = true;
-        } catch (e) { pickerOpened = false; }
-      }
-
-      showToast(
-        pickerOpened
-          ? "Обери, кому надіслати 👇"
-          : "Готово! Картинку з посиланням надіслав тобі в чат з ботом — перешли її друзям 📤"
-      );
-    } catch (err) {
-      const shareLink = profileData?.referral_link || profileData?.group_link || "";
-      const shareText = shareLink
-        ? `Розблокував «${badge.title}» в TurboTeam 🔥\n${shareLink}`
-        : `Розблокував «${badge.title}» в TurboTeam 🔥`;
-      copyToClipboard(shareText)
-        .then(() => showToast("Не вдалося надіслати картинку. Текст скопійовано — встав у будь-який чат 📋"))
-        .catch(() => showToast("Не вдалося надіслати. Спробуй ще раз 🙏"));
-    }
-  }
-
-  // ==================== ACHIEVEMENT CELEBRATION ====================
-  const SEEN_ACHIEVEMENTS_KEY = "tt_seen_achievements_v1";
-  let celebrationQueue = [];
-  let currentCelebrationBadge = null;
-
-  function checkNewAchievements(list) {
-    let seen = null;
-    try { seen = JSON.parse(localStorage.getItem(SEEN_ACHIEVEMENTS_KEY)); } catch (e) { seen = null; }
-
-    const unlockedCodes = (list || []).filter((b) => b.unlocked).map((b) => b.code);
-
-    if (!Array.isArray(seen)) {
-      localStorage.setItem(SEEN_ACHIEVEMENTS_KEY, JSON.stringify(unlockedCodes));
-      return;
-    }
-
-    const newOnes = (list || []).filter((b) => b.unlocked && !seen.includes(b.code));
-    localStorage.setItem(SEEN_ACHIEVEMENTS_KEY, JSON.stringify(unlockedCodes));
-
-    if (newOnes.length) {
-      celebrationQueue = newOnes.slice(1);
-      celebrateAchievement(newOnes[0]);
-    }
-  }
-
-  function spawnConfetti() {
-    const container = document.getElementById("confettiContainer");
-    container.innerHTML = "";
-    const colors = ["#ff5a1f", "#ffc828", "#4cc9f0", "#34d399", "#f472b6"];
-    for (let i = 0; i < 26; i++) {
-      const piece = document.createElement("span");
-      piece.className = "confetti-piece";
-      piece.style.left = Math.random() * 100 + "%";
-      piece.style.background = colors[i % colors.length];
-      piece.style.animationDelay = (Math.random() * 0.35) + "s";
-      piece.style.transform = `rotate(${Math.random() * 360}deg)`;
-      container.appendChild(piece);
-    }
-  }
-
-  function celebrateAchievement(badge) {
-    currentCelebrationBadge = badge;
-    document.getElementById("toast").classList.remove("show");
-    document.getElementById("celebrateIcon").textContent = badge.icon;
-    document.getElementById("celebrateTitle").textContent = `«${badge.title}» розблоковано!`;
-    spawnConfetti();
-    document.getElementById("celebrateModal").classList.add("show");
-    track("achievement_view", { achievement: badge.code });
-    try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch (e) {}
-  }
-
-  function closeCelebrate() {
-    document.getElementById("celebrateModal").classList.remove("show");
-    if (celebrationQueue.length) {
-      const next = celebrationQueue.shift();
-      setTimeout(() => celebrateAchievement(next), 380);
-    }
-  }
-
-  function celebrateShare() {
-    const badge = currentCelebrationBadge;
-    closeCelebrate();
-    if (badge) setTimeout(() => openModal(badge), 380);
-  }
-
-  // ==================== WEEKLY CHAMPION CELEBRATION ====================
-  let championCelebrationShown = false;
-
-  function spawnChampionConfetti() {
-    const container = document.getElementById("championConfetti");
-    container.innerHTML = "";
-    const colors = ["#ff5a1f", "#ffc828", "#4cc9f0", "#34d399", "#f472b6", "#ffffff"];
-    for (let i = 0; i < 90; i++) {
-      const piece = document.createElement("span");
-      piece.className = "champion-confetti-piece";
-      const size = 6 + Math.random() * 6;
-      piece.style.width = size + "px";
-      piece.style.height = (size * 1.6) + "px";
-      piece.style.left = Math.random() * 100 + "%";
-      piece.style.background = colors[i % colors.length];
-      piece.style.animationDelay = (Math.random() * 0.6) + "s";
-      piece.style.animationDuration = (2 + Math.random() * 1.2) + "s";
-      piece.style.transform = `rotate(${Math.random() * 360}deg)`;
-      container.appendChild(piece);
-    }
-  }
-
-  function celebrateChampion(info) {
-    document.getElementById("championName").textContent = (info && info.nickname) || profileData?.nickname || "Ти";
-    document.getElementById("championHp").textContent = `${Number((info && info.hp) || 0).toLocaleString("uk")} HP за тиждень`;
-    spawnChampionConfetti();
-    document.getElementById("championOverlay").classList.add("show");
-    try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch (e) {}
-  }
-
-  function closeChampionCelebrate() {
-    document.getElementById("championOverlay").classList.remove("show");
-  }
-
-  // ==================== ONBOARDING ====================
-  const ONBOARDING_SEEN_KEY = "tt_onboarding_seen_v1";
-
-  function maybeShowOnboarding() {
-    if (localStorage.getItem(ONBOARDING_SEEN_KEY)) return;
-    document.getElementById("onboardingOverlay").classList.add("show");
-  }
-
-  function closeOnboarding() {
-    localStorage.setItem(ONBOARDING_SEEN_KEY, "1");
-    document.getElementById("onboardingOverlay").classList.remove("show");
-    track("onboarding_complete");
-  }
-
-  // ==================== PROFILE LOAD ====================
-  function renderProfile(data) {
-    profileData = data;
-    renderToday(data);
-    renderCalendar(data.calendar.year, data.calendar.month, data.calendar.days);
-    renderAchievements(data.achievements);
-    checkNewAchievements(data.achievements);
-    animateRing();
-
-    if (data.weekly_champion && !championCelebrationShown) {
-      championCelebrationShown = true;
-      setTimeout(() => celebrateChampion(data.weekly_champion), 450);
-    } else {
-      setTimeout(maybeShowOnboarding, 450);
-    }
-  }
-
-  async function loadProfile() {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/profile?year=${viewYear}&month=${viewMonth}`,
-        { headers: authHeaders() }
-      );
-
-      if (!response.ok) {
-        document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Не вдалося завантажити профіль (код ${response.status}).</div>`;
+      if (request.signal.aborted) return;
+      if (response.status === 401) {
+        status.textContent = "Відкрийте TurboTeam у Telegram ще раз.";
         return;
       }
+      if (!response.ok) throw new Error("Calendar request failed");
 
-      const data = await response.json();
-
-      if (!profileData) {
-        document.getElementById("app").innerHTML = SKELETON;
-        document.getElementById("prevMonth").onclick = () => changeMonth(-1);
-        document.getElementById("nextMonth").onclick = () => changeMonth(1);
-        loadFeed();
-      }
-
-      renderProfile(data);
-    } catch (e) {
-      document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Помилка з'єднання з сервером.</div>`;
+      const { days } = await response.json();
+      if (request.signal.aborted) return;
+      renderCalendar(year, month, days);
+      stats.hidden = false;
+      status.textContent = "";
+    } catch {
+      if (request.signal.aborted) return;
+      status.textContent = "Не вдалося завантажити календар.";
+      retry.hidden = false;
     }
   }
 
-  if (!tg || !tg.initData) {
-    document.getElementById("app").innerHTML = `<div class="state-msg">⚠️ Відкрий цю сторінку через кнопку в Telegram-боті.</div>`;
-  } else {
+  if (tg?.initData) {
+    document.getElementById("prevMonth").onclick = () => changeMonth(-1);
+    document.getElementById("nextMonth").onclick = () => changeMonth(1);
+    document.getElementById("calendarRetry").onclick = loadCalendar;
     track("app_open");
-    loadProfile();
+    loadCalendar();
+  } else {
+    document.getElementById("calendarStatus").textContent = "Відкрийте календар через кнопку в Telegram-боті.";
+    document.getElementById("prevMonth").disabled = true;
+    document.getElementById("nextMonth").disabled = true;
   }
 </script>
 </body>

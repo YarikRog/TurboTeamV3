@@ -329,7 +329,7 @@ async def build_training_action_keyboard(bot) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ],
@@ -442,7 +442,7 @@ async def send_evening_motivation(bot) -> None:
     top3 = await build_top3_text()
     text = build_motivation_text("evening", top3)
 
-    additional_text = "\n\n<b>А поки що можеш перейти по кнопці в Мій профіль і подивитися свої результати 👇</b>"
+    additional_text = "\n\n<b>А поки що можеш переглянути свої тренування в календарі 👇</b>"
     text += additional_text
 
     me = await bot.get_me()
@@ -450,7 +450,7 @@ async def send_evening_motivation(bot) -> None:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]
@@ -845,7 +845,7 @@ async def send_weekly_streak_reminder(bot) -> None:
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="👤 Мій профіль",
+                        text="КАЛЕНДАР ТРЕНУВАНЬ",
                         url=f"https://t.me/{me.username}/{PROFILE_WEB_APP_SHORT_NAME}",
                     ),
                 ]
@@ -1066,7 +1066,7 @@ def build_weekly_personal_report_keyboard(bot_username: str) -> InlineKeyboardMa
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]
@@ -1169,7 +1169,7 @@ def build_monthly_personal_report_keyboard(bot_username: str) -> InlineKeyboardM
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]
@@ -1308,7 +1308,7 @@ def build_weekly_milestone_keyboard(bot_username: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]
@@ -1413,7 +1413,7 @@ def build_rank_overtake_keyboard(bot_username: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="👤 Мій профіль",
+                    text="КАЛЕНДАР ТРЕНУВАНЬ",
                     url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                 ),
             ]

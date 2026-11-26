@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 from aiohttp import web
+from aiohttp.web_log import AccessLogger
 
 from alerts import notify_admins_about_error
 from cache import KeyManager, check_rate_limit, delete_data, get_data, set_data
@@ -24,6 +25,7 @@ from database import (
     get_user_calendar_month,
     get_user_feed,
     get_user_stats,
+    get_user_training_calendar,
 )
 from handlers import get_next_training_goal, get_training_status, word_trainings
 from services import TRAINING_ACHIEVEMENTS, TRAINING_ACHIEVEMENT_ICONS
@@ -36,6 +38,8 @@ from supabase_db import (
     get_weekly_rating,
     log_webapp_event,
 )
+
+from training_calendar import FEED_PATH, calendar_token, calendar_user_id, render_training_calendar
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +128,79 @@ async def _enforce_rate_limit(
         {"error": "rate limited"},
         status=429,
         headers={"Retry-After": str(window_seconds)},
+    )
+
+
+class WebappAccessLogger(AccessLogger):
+    def log(self, request, response, time):
+        # Subscription URLs authenticate calendar clients, so omit them from access logs.
+        if request.path != FEED_PATH:
+            super().log(request, response, time)
+
+
+async def handle_calendar_month(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        raise web.HTTPUnauthorized()
+
+    now = get_kyiv_now()
+    try:
+        year = int(request.query.get("year", now.year))
+        month = int(request.query.get("month", now.month))
+    except ValueError:
+        raise web.HTTPBadRequest(text="Invalid year or month")
+    if not (2 <= year <= 9998 and 1 <= month <= 12):
+        raise web.HTTPBadRequest(text="Invalid year or month")
+
+    telegram_user_id = auth["telegram_user_id"]
+    limited = await _enforce_rate_limit(request, telegram_user_id, "calendar_month", 30, 30)
+    if limited:
+        return limited
+
+    user = await get_user_by_telegram_id(telegram_user_id)
+    if not user or not user.get("id"):
+        raise web.HTTPNotFound()
+
+    days = await get_user_calendar_month(str(user["id"]), year, month)
+    return web.json_response(
+        {"year": year, "month": month, "days": days},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def handle_calendar_subscription(request: web.Request) -> web.Response:
+    auth_header = request.headers.get("Authorization", "")
+    auth = verify_init_data(auth_header[4:], BOT_TOKEN) if auth_header.startswith("tma ") else None
+    if not auth:
+        raise web.HTTPUnauthorized()
+
+    telegram_user_id = auth["telegram_user_id"]
+    limited = await _enforce_rate_limit(request, telegram_user_id, "calendar_subscription", 10, 60)
+    if limited:
+        return limited
+
+    user = await get_user_by_telegram_id(telegram_user_id)
+    if not user or not user.get("id"):
+        raise web.HTTPNotFound()
+
+    token = calendar_token(uuid.UUID(str(user["id"])), BOT_TOKEN)
+    return web.json_response(
+        {"path": f"{FEED_PATH}?token={token}"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def handle_training_calendar(request: web.Request) -> web.Response:
+    user_id = calendar_user_id(request.query.get("token", ""), BOT_TOKEN)
+    if user_id is None:
+        raise web.HTTPNotFound(headers={"Cache-Control": "no-store"})
+
+    trainings = await get_user_training_calendar(str(user_id))
+    return web.Response(
+        text=render_training_calendar(user_id, trainings),
+        content_type="text/calendar",
+        charset="utf-8",
+        headers={"Cache-Control": "private, no-cache"},
     )
 
 
@@ -537,6 +614,9 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
     app["bot"] = bot
     app.router.add_get("/api/profile", handle_profile)
+    app.router.add_get("/api/training-calendar", handle_calendar_month)
+    app.router.add_post("/api/training-calendar/subscription", handle_calendar_subscription)
+    app.router.add_get(FEED_PATH, handle_training_calendar)
     app.router.add_get("/api/rating", handle_rating)
     app.router.add_get("/api/rating/week", handle_weekly_rating)
     app.router.add_get("/api/feed", handle_feed)
@@ -557,7 +637,7 @@ def create_webapp_app(bot: Bot) -> web.Application:
 
 async def run_webapp_server(port: int, bot: Bot) -> web.AppRunner:
     app = create_webapp_app(bot)
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(app, access_log_class=WebappAccessLogger)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
