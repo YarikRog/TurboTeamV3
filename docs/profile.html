@@ -55,7 +55,8 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
-  .cal-subscription, .cal-shortcut { margin-top: 12px; }
+  .cal-subscription { margin-top: 12px; }
+  .cal-shortcut { margin-bottom: 12px; }
   .cal-shortcut .btn { width: 100%; min-height: 44px; }
   .cal-subscription .btn { width: 100%; }
   .cal-subscription [hidden] { display: none; }
@@ -82,6 +83,12 @@
 <body>
 <main>
   <h1>КАЛЕНДАР ТРЕНУВАНЬ</h1>
+  <div class="cal-shortcut">
+    <button type="button" class="btn btn-primary" id="calendarShortcut">
+      Додати на головний екран
+    </button>
+    <p id="calendarShortcutStatus" class="calendar-status" role="status"></p>
+  </div>
   <div class="cal-card">
     <div class="cal-nav">
       <button type="button" id="prevMonth" aria-label="Попередній місяць">←</button>
@@ -95,12 +102,6 @@
       <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
     </div>
     <div class="cal-stats" id="calStatsText" hidden></div>
-    <div class="cal-shortcut">
-      <button type="button" class="btn btn-primary" id="calendarShortcut" hidden>
-        Додати на головний екран
-      </button>
-      <p id="calendarShortcutStatus" class="calendar-status" role="status"></p>
-    </div>
     <div class="cal-subscription">
       <button type="button" class="btn btn-ghost" id="calendarSubscribe" onclick="loadCalendarSubscription()">
         Підписатися на календар iPhone
@@ -274,28 +275,41 @@
   }
 
   function setupCalendarShortcut() {
-    if (!tg.isVersionAtLeast?.("8.0") ||
-        typeof tg.checkHomeScreenStatus !== "function" ||
-        typeof tg.addToHomeScreen !== "function") return;
-
     const button = document.getElementById("calendarShortcut");
     const status = document.getElementById("calendarShortcutStatus");
+    const canAddShortcut = tg?.initData &&
+      tg.isVersionAtLeast?.("8.0") &&
+      typeof tg.addToHomeScreen === "function";
+    let homeScreenState;
 
     button.onclick = () => {
-      status.textContent = "";
+      if (!tg?.initData) {
+        status.textContent = "Відкрийте календар через кнопку в Telegram-боті.";
+        return;
+      }
+      if (homeScreenState === "added") {
+        status.textContent = "Ярлик календаря вже на головному екрані.";
+        return;
+      }
+      if (!canAddShortcut || homeScreenState === "unsupported") {
+        status.textContent = "Щоб додати ярлик, відкрийте календар в оновленому Telegram на iPhone або Android.";
+        return;
+      }
       try {
         tg.addToHomeScreen();
+        status.textContent = "Якщо вікно додавання не відкрилося, оновіть Telegram і спробуйте ще раз.";
       } catch {
         status.textContent = "Не вдалося відкрити додавання ярлика. Спробуйте ще раз.";
       }
     };
 
+    if (!canAddShortcut) return;
     tg.onEvent("homeScreenAdded", () => {
-      button.hidden = true;
+      homeScreenState = "added";
       status.textContent = "Ярлик календаря додано.";
     });
-    tg.checkHomeScreenStatus((state) => {
-      button.hidden = state !== "missed" && state !== "unknown";
+    tg.checkHomeScreenStatus?.((state) => {
+      if (homeScreenState !== "added") homeScreenState = state;
     });
   }
 
@@ -411,13 +425,13 @@
     }
   }
 
+  setupCalendarShortcut();
   if (tg?.initData) {
     document.getElementById("prevMonth").onclick = () => changeMonth(-1);
     document.getElementById("nextMonth").onclick = () => changeMonth(1);
     document.getElementById("calendarRetry").onclick = loadCalendar;
     track("app_open");
     loadCalendar();
-    setupCalendarShortcut();
   } else {
     document.getElementById("calendarStatus").textContent = "Відкрийте календар через кнопку в Telegram-боті.";
     document.getElementById("prevMonth").disabled = true;
