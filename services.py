@@ -1153,7 +1153,7 @@ class ActivityService:
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="👤 Мій профіль",
+                            text="КАЛЕНДАР ТРЕНУВАНЬ",
                             url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
                         ),
                     ]

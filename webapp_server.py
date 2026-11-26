@@ -138,6 +138,36 @@ class WebappAccessLogger(AccessLogger):
             super().log(request, response, time)
 
 
+async def handle_calendar_month(request: web.Request) -> web.Response:
+    auth = verify_init_data(_extract_init_data(request), BOT_TOKEN)
+    if not auth:
+        raise web.HTTPUnauthorized()
+
+    now = get_kyiv_now()
+    try:
+        year = int(request.query.get("year", now.year))
+        month = int(request.query.get("month", now.month))
+    except ValueError:
+        raise web.HTTPBadRequest(text="Invalid year or month")
+    if not (2 <= year <= 9998 and 1 <= month <= 12):
+        raise web.HTTPBadRequest(text="Invalid year or month")
+
+    telegram_user_id = auth["telegram_user_id"]
+    limited = await _enforce_rate_limit(request, telegram_user_id, "calendar_month", 30, 30)
+    if limited:
+        return limited
+
+    user = await get_user_by_telegram_id(telegram_user_id)
+    if not user or not user.get("id"):
+        raise web.HTTPNotFound()
+
+    days = await get_user_calendar_month(str(user["id"]), year, month)
+    return web.json_response(
+        {"year": year, "month": month, "days": days},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 async def handle_calendar_subscription(request: web.Request) -> web.Response:
     auth_header = request.headers.get("Authorization", "")
     auth = verify_init_data(auth_header[4:], BOT_TOKEN) if auth_header.startswith("tma ") else None
@@ -584,6 +614,7 @@ def create_webapp_app(bot: Bot) -> web.Application:
     app = web.Application(middlewares=[cors_middleware], client_max_size=MAX_SHARE_IMAGE_BYTES + 1024)
     app["bot"] = bot
     app.router.add_get("/api/profile", handle_profile)
+    app.router.add_get("/api/training-calendar", handle_calendar_month)
     app.router.add_post("/api/training-calendar/subscription", handle_calendar_subscription)
     app.router.add_get(FEED_PATH, handle_training_calendar)
     app.router.add_get("/api/rating", handle_rating)

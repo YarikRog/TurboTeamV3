@@ -68,7 +68,7 @@ def get_inline_menu(bot_username: str | None = None) -> types.InlineKeyboardMark
         # відкриваємо Mini App через пряме посилання t.me/<bot>/<short_name>.
         rows.append([
             types.InlineKeyboardButton(
-                text="👤 Мій профіль",
+                text="КАЛЕНДАР ТРЕНУВАНЬ",
                 url=f"https://t.me/{bot_username}/{PROFILE_WEB_APP_SHORT_NAME}",
             ),
         ])
