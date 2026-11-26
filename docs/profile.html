@@ -206,6 +206,11 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
+  .cal-subscription { margin-top: 12px; }
+  .cal-subscription .btn { width: 100%; }
+  .cal-subscription [hidden] { display: none; }
+  .cal-subscription p { font-size: 13px; margin: 8px 0; }
+  .cal-subscription input { box-sizing: border-box; width: 100%; padding: 8px; margin-bottom: 8px; }
   .cal-stats { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
   .stats-summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .stats-summary-tile { border-radius: 14px; padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
@@ -602,6 +607,17 @@
           <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
         </div>
         <div class="cal-stats" id="calStatsText"></div>
+        <div class="cal-subscription">
+          <button type="button" class="btn btn-ghost" id="calendarSubscribe" onclick="loadCalendarSubscription()">
+            Підписатися на календар iPhone
+          </button>
+          <div id="calendarSubscriptionDetails" hidden>
+            <p>Відкрийте «Календар» → «Календарі» → «Додати календар» → «Додати підписний календар» і вставте посилання. Воно особисте.</p>
+            <input id="calendarSubscriptionUrl" type="url" aria-label="Посилання на календар" readonly>
+            <button type="button" class="btn btn-ghost" onclick="copyCalendarSubscription()">Скопіювати посилання</button>
+          </div>
+          <p id="calendarSubscriptionStatus" role="status"></p>
+        </div>
       </div>
     </div>
 
@@ -980,6 +996,51 @@
     });
   }
 
+  async function loadCalendarSubscription() {
+    const button = document.getElementById("calendarSubscribe");
+    const status = document.getElementById("calendarSubscriptionStatus");
+    if (!tg?.initData) {
+      status.textContent = "Відкрийте TurboTeam у Telegram, щоб отримати посилання.";
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = "Отримуємо посилання…";
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/training-calendar/subscription`, {
+        method: "POST",
+        headers: authHeaders()
+      });
+      if (response.status === 401) {
+        status.textContent = "Відкрийте TurboTeam у Telegram ще раз.";
+        return;
+      }
+      if (!response.ok) throw new Error("Calendar subscription request failed");
+      const { path } = await response.json();
+      document.getElementById("calendarSubscriptionUrl").value = `${API_BASE_URL}${path}`;
+      document.getElementById("calendarSubscriptionDetails").hidden = false;
+      button.hidden = true;
+      status.textContent = "";
+    } catch {
+      status.textContent = "Не вдалося отримати посилання. Спробуйте ще раз.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function copyCalendarSubscription() {
+    const input = document.getElementById("calendarSubscriptionUrl");
+    const status = document.getElementById("calendarSubscriptionStatus");
+    try {
+      await copyToClipboard(input.value);
+      status.textContent = "Посилання скопійовано.";
+    } catch {
+      input.focus();
+      input.select();
+      status.textContent = "Скопіюйте виділене посилання вручну.";
+    }
+  }
+
   function changeMonth(delta) {
     viewMonth += delta;
     if (viewMonth > 12) { viewMonth = 1; viewYear += 1; }
@@ -1157,7 +1218,7 @@
     ta.focus();
     ta.select();
     try {
-      document.execCommand("copy");
+      if (!document.execCommand("copy")) return Promise.reject(new Error("Copy failed"));
     } finally {
       ta.remove();
     }
