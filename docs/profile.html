@@ -55,7 +55,8 @@
   .cal-day.today { border: 2px solid #fff; box-shadow: 0 0 7px 1px rgba(255,255,255,.65); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 3px; }
-  .cal-subscription { margin-top: 12px; }
+  .cal-subscription, .cal-shortcut { margin-top: 12px; }
+  .cal-shortcut .btn { width: 100%; min-height: 44px; }
   .cal-subscription .btn { width: 100%; }
   .cal-subscription [hidden] { display: none; }
   .cal-subscription p { font-size: 13px; margin: 8px 0; }
@@ -94,6 +95,12 @@
       <span>🏋️ Gym</span><span>🦾 Street</span><span>🧘 Rest</span><span>🚫 Skip</span><span>🔥 Challenge</span>
     </div>
     <div class="cal-stats" id="calStatsText" hidden></div>
+    <div class="cal-shortcut">
+      <button type="button" class="btn btn-primary" id="calendarShortcut" hidden>
+        Додати на головний екран
+      </button>
+      <p id="calendarShortcutStatus" class="calendar-status" role="status"></p>
+    </div>
     <div class="cal-subscription">
       <button type="button" class="btn btn-ghost" id="calendarSubscribe" onclick="loadCalendarSubscription()">
         Підписатися на календар iPhone
@@ -266,6 +273,32 @@
     });
   }
 
+  function setupCalendarShortcut() {
+    if (!tg.isVersionAtLeast?.("8.0") ||
+        typeof tg.checkHomeScreenStatus !== "function" ||
+        typeof tg.addToHomeScreen !== "function") return;
+
+    const button = document.getElementById("calendarShortcut");
+    const status = document.getElementById("calendarShortcutStatus");
+
+    button.onclick = () => {
+      status.textContent = "";
+      try {
+        tg.addToHomeScreen();
+      } catch {
+        status.textContent = "Не вдалося відкрити додавання ярлика. Спробуйте ще раз.";
+      }
+    };
+
+    tg.onEvent("homeScreenAdded", () => {
+      button.hidden = true;
+      status.textContent = "Ярлик календаря додано.";
+    });
+    tg.checkHomeScreenStatus((state) => {
+      button.hidden = state !== "missed" && state !== "unknown";
+    });
+  }
+
   async function loadCalendarSubscription() {
     const button = document.getElementById("calendarSubscribe");
     const status = document.getElementById("calendarSubscriptionStatus");
@@ -384,6 +417,7 @@
     document.getElementById("calendarRetry").onclick = loadCalendar;
     track("app_open");
     loadCalendar();
+    setupCalendarShortcut();
   } else {
     document.getElementById("calendarStatus").textContent = "Відкрийте календар через кнопку в Telegram-боті.";
     document.getElementById("prevMonth").disabled = true;
